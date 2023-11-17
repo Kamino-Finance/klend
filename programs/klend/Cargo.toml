@@ -1,12 +1,15 @@
 [package]
-name = "klend"
+name = "kamino_lending"
 version = "0.1.0"
-description = "Created with Anchor"
+description = "Kamino lending Solana program"
 edition = "2021"
+license = "Apache-2.0"
+publish = false
+
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "klend"
+name = "kamino_lending"
 
 [features]
 no-entrypoint = []
@@ -14,6 +17,34 @@ no-idl = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
 default = []
+serde = ["dep:serde", "fixed/serde-str"]
 
 [dependencies]
-anchor-lang = "0.25.0"
+anchor-lang = { version = "0.28.0" }
+anchor-spl = { version = "0.28.0", features = ["dex", "token"] }
+solana-program = "~1.16.18"
+# Override anchor to use borsh with the const-generics feature
+# Allows to borsh serialize arrays of any length
+borsh = { version = "0.10.3", features = ["const-generics"] }
+bytemuck = { version = "1.4.0", features = ["min_const_generics", "derive"] }
+derivative = "2.2.0"
+switchboard-v2 = "0.4.0"
+num_enum = "0.7.0"
+scope = { git = "https://github.com/hubbleprotocol/scope", package = "scope-types" }
+strum = { git = "https://github.com/hubbleprotocol/strum", features = [
+    "derive",
+], branch = "checked_arithmetics" }
+farms = { git = "https://github.com/Kamino-Finance/kfarms.git", features = [
+    "no-entrypoint",
+], branch = "master" }
+
+static_assertions = "1.1.0"
+pyth-sdk-solana = "0.8.0"
+# Only required when serializing to market config to JSON and in tests
+serde = { version = "1.0.136", features = ["derive"], optional = true }
+derive_builder = "0.12.0"
+fixed = { version = "1.23.1" }
+fixed-macro = "1.1"
+uint = "0.9.5"
+solana-security-txt = "1.1.1"
+
