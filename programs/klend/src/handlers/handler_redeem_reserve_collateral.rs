@@ -68,7 +68,7 @@ pub struct RedeemReserveCollateral<'info> {
         has_one = lending_market
     )]
     pub reserve: AccountLoader<'info, Reserve>,
-       #[account(
+    #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]

@@ -79,7 +79,7 @@ fn validate_switchboard_confidence(
     stdev_scale: u32,
     oracle_confidence_factor: u64,
 ) -> Result<()> {
-       let (scale_op, scale_diff): (&dyn Fn(i128, i128) -> Option<i128>, _) =
+    let (scale_op, scale_diff): (&dyn Fn(i128, i128) -> Option<i128>, _) =
         if price_scale >= stdev_scale {
             (
                 &i128::checked_mul,
@@ -96,7 +96,6 @@ fn validate_switchboard_confidence(
         .checked_pow(scale_diff)
         .ok_or_else(|| error!(LendingError::MathOverflow))?;
 
-   
     let stdev_x_confidence_factor_scaled = stdev_mantissa
         .checked_mul(oracle_confidence_factor.into())
         .and_then(|a| scale_op(a, scaling_factor))
@@ -113,4 +112,3 @@ fn validate_switchboard_confidence(
         Ok(())
     }
 }
-

@@ -12,7 +12,7 @@ use crate::LendingError;
 pub(super) fn get_pyth_price_and_twap(
     pyth_price_info: &AccountInfo,
 ) -> Result<TimestampedPriceWithTwap> {
-       let price_feed = load_price_feed_from_account_info(pyth_price_info).map_err(|e| {
+    let price_feed = load_price_feed_from_account_info(pyth_price_info).map_err(|e| {
         msg!("Error loading price pyth feed: {:?}", e);
         error!(LendingError::PriceNotValid)
     })?;
@@ -20,7 +20,7 @@ pub(super) fn get_pyth_price_and_twap(
     let price = price_feed.get_price_unchecked();
     let twap = price_feed.get_ema_price_unchecked();
 
-       validate_pyth_confidence(&price, super::CONFIDENCE_FACTOR)?;
+    validate_pyth_confidence(&price, super::CONFIDENCE_FACTOR)?;
 
     Ok(TimestampedPriceWithTwap {
         price: price.into(),
@@ -67,4 +67,3 @@ impl From<PythPrice> for TimestampedPrice {
         }
     }
 }
-

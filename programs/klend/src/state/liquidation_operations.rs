@@ -1,4 +1,3 @@
-
 use std::cmp::{max, min, Ordering};
 
 use anchor_lang::{err, prelude::msg, Result};
@@ -24,9 +23,9 @@ pub fn max_liquidatable_borrowed_amount(
     user_ltv: Fraction,
     insolvency_risk_ltv_pct: u8,
 ) -> LendingResult<Fraction> {
-       let obligation_debt_for_liquidity_mv = Fraction::from_bits(liquidity.market_value_sf);
+    let obligation_debt_for_liquidity_mv = Fraction::from_bits(liquidity.market_value_sf);
 
-       let total_obligation_debt_mv = Fraction::from_bits(obligation.borrowed_assets_market_value_sf);
+    let total_obligation_debt_mv = Fraction::from_bits(obligation.borrowed_assets_market_value_sf);
 
     let liquidation_max_debt_close_factor_rate =
         if user_ltv > Fraction::from_percent(insolvency_risk_ltv_pct) {
@@ -38,14 +37,14 @@ pub fn max_liquidatable_borrowed_amount(
     let market_max_liquidatable_debt_value_at_once =
         Fraction::from_num(market_max_liquidatable_debt_value_at_once);
 
-       let calculated_liquidatable_mv =
+    let calculated_liquidatable_mv =
         total_obligation_debt_mv * liquidation_max_debt_close_factor_rate;
 
     let max_liquidatable_mv = calculated_liquidatable_mv
         .min(obligation_debt_for_liquidity_mv)
         .min(market_max_liquidatable_debt_value_at_once);
 
-       let max_liquidation_ratio = max_liquidatable_mv / obligation_debt_for_liquidity_mv;
+    let max_liquidation_ratio = max_liquidatable_mv / obligation_debt_for_liquidity_mv;
 
     let borrowed_amount = Fraction::from_bits(liquidity.borrowed_amount_sf);
     let max_liquidatable_amount = borrowed_amount * max_liquidation_ratio;
@@ -57,7 +56,8 @@ pub fn max_liquidatable_borrowed_amount(
 pub fn calculate_liquidation(
     collateral_reserve: &Reserve,
     debt_reserve: &Reserve,
-    debt_amount_to_liquidate: u64,    lending_market: &LendingMarket,
+    debt_amount_to_liquidate: u64,
+    lending_market: &LendingMarket,
     obligation: &Obligation,
     liquidity: &ObligationLiquidity,
     collateral: &ObligationCollateral,
@@ -65,7 +65,7 @@ pub fn calculate_liquidation(
     max_allowed_ltv_override_pct_opt: Option<u64>,
 ) -> Result<CalculateLiquidationResult> {
     if obligation.deposited_value_sf == 0 {
-               msg!("Deposited value backing a loan cannot be 0");
+        msg!("Deposited value backing a loan cannot be 0");
         return err!(LendingError::InvalidObligationCollateral);
     }
 
@@ -88,7 +88,7 @@ pub fn calculate_liquidation(
     let debt_amount_to_liquidate =
         Fraction::from_num(debt_amount_to_liquidate).min(borrowed_amount_f);
 
-       let debt_liquidation_amount_f = if borrowed_amount_f
+    let debt_liquidation_amount_f = if borrowed_amount_f
         < Fraction::from(lending_market.min_full_liquidation_amount_threshold)
     {
         borrowed_amount_f
@@ -117,7 +117,7 @@ pub fn calculate_liquidation(
     let total_liquidation_value_including_bonus =
         liquidity_market_value_f * liquidation_ratio * bonus_rate;
 
-       let (settle_amount, repay_amount, withdraw_amount) = calculate_liquidation_amounts(
+    let (settle_amount, repay_amount, withdraw_amount) = calculate_liquidation_amounts(
         total_liquidation_value_including_bonus,
         collateral,
         debt_liquidation_amount_f,
@@ -232,11 +232,11 @@ fn get_emode_max_liquidation_bonus(
             .elevation_groups
             .contains(&obligation.elevation_group)
     {
-               let elevation_group = lending_market
+        let elevation_group = lending_market
             .get_elevation_group(obligation.elevation_group)
             .unwrap();
 
-                      if elevation_group.max_liquidation_bonus_bps > collateral_reserve.max_liquidation_bonus_bps
+        if elevation_group.max_liquidation_bonus_bps > collateral_reserve.max_liquidation_bonus_bps
             || elevation_group.max_liquidation_bonus_bps > debt_reserve.max_liquidation_bonus_bps
             || elevation_group.max_liquidation_bonus_bps == 0
         {
@@ -259,7 +259,7 @@ fn calculate_liquidation_amounts(
     let collateral_value = Fraction::from_bits(collateral.market_value_sf);
     match total_liquidation_value_including_bonus.cmp(&collateral_value) {
         Ordering::Greater => {
-                       let repay_ratio = collateral_value / total_liquidation_value_including_bonus;
+            let repay_ratio = collateral_value / total_liquidation_value_including_bonus;
 
             let repay_amount_f = debt_liquidation_amount * repay_ratio;
 
@@ -285,7 +285,7 @@ fn calculate_liquidation_amounts(
             let withdraw_pct = total_liquidation_value_including_bonus / collateral_value;
             let settle_amount = debt_liquidation_amount;
             let repay_amount = settle_amount.to_ceil();
-                       let withdraw_amount_f = Fraction::from_num(collateral.deposited_amount) * withdraw_pct;
+            let withdraw_amount_f = Fraction::from_num(collateral.deposited_amount) * withdraw_pct;
             let withdraw_amount = withdraw_amount_f.to_floor();
             (settle_amount, repay_amount, withdraw_amount)
         }
@@ -302,7 +302,6 @@ fn calculate_liquidation_bonus(
     let bad_debt_ltv = Fraction::ONE;
 
     if user_ltv >= fraction!(0.99) {
-              
         let liquidation_bonus_bad_debt_bps = min(
             collateral_reserve_config.bad_debt_liquidation_bonus_bps,
             debt_reserve_config.bad_debt_liquidation_bonus_bps,
@@ -312,22 +311,22 @@ fn calculate_liquidation_bonus(
 
         let capped_bonus = if user_ltv < bad_debt_ltv {
             let diff_to_bad_debt = bad_debt_ltv - user_ltv;
-            max(liquidation_bonus_bad_debt, diff_to_bad_debt)        } else {
+            max(liquidation_bonus_bad_debt, diff_to_bad_debt)
+        } else {
             liquidation_bonus_bad_debt
         };
 
         return Ok(capped_bonus);
     }
 
-      
     let unhealthy_factor = user_ltv - max_allowed_ltv;
 
-       let max_bonus_bps = max(
+    let max_bonus_bps = max(
         collateral_reserve_config.max_liquidation_bonus_bps,
         debt_reserve_config.max_liquidation_bonus_bps,
     );
 
-       let max_bonus_bps = min(max_bonus_bps, emode_max_liquidation_bonus_bps);
+    let max_bonus_bps = min(max_bonus_bps, emode_max_liquidation_bonus_bps);
     let max_bonus = Fraction::from_bps(max_bonus_bps);
 
     let min_reserve_bonus_bps = max(
@@ -337,11 +336,11 @@ fn calculate_liquidation_bonus(
 
     let min_reserve_bonus = Fraction::from_bps(min_reserve_bonus_bps);
 
-       let min_bonus = max(min_reserve_bonus, unhealthy_factor);
+    let min_bonus = max(min_reserve_bonus, unhealthy_factor);
 
     let collared_bonus = min(min_bonus, max_bonus);
 
-       let diff_to_bad_debt = bad_debt_ltv - user_ltv;
+    let diff_to_bad_debt = bad_debt_ltv - user_ltv;
     let capped_max_liq_bonus_bad_debt = min(collared_bonus, diff_to_bad_debt);
 
     Ok(capped_max_liq_bonus_bad_debt)
@@ -401,13 +400,13 @@ fn get_autodeleverage_liquidation_params(
         )
         .unwrap();
 
-               xmsg!("Auto-deleveraging LTV threshold crossed: {user_ltv}/{autodeleverage_ltv_threshold}, LTV reduction: {ltv_reduction_bps}, slots: {slots_since_deleveraging_started} ({days_since_deleveraging_started} days), liquidation bonus: {liquidation_bonus}", );
+        xmsg!("Auto-deleveraging LTV threshold crossed: {user_ltv}/{autodeleverage_ltv_threshold}, LTV reduction: {ltv_reduction_bps}, slots: {slots_since_deleveraging_started} ({days_since_deleveraging_started} days), liquidation bonus: {liquidation_bonus}", );
         Some(LiquidationParams {
             user_ltv,
             liquidation_bonus_rate: liquidation_bonus,
         })
     } else {
-               xmsg!("LTV is below the current auto-deleverage threshold: {user_ltv}/{autodeleverage_ltv_threshold}, slots since deleveraging started: {slots_since_deleveraging_started}, LTV reduction: {ltv_reduction_bps}", );
+        xmsg!("LTV is below the current auto-deleverage threshold: {user_ltv}/{autodeleverage_ltv_threshold}, slots since deleveraging started: {slots_since_deleveraging_started}, LTV reduction: {ltv_reduction_bps}", );
         None
     }
 }
@@ -503,7 +502,7 @@ fn calculate_autodeleverage_bonus(
 ) -> LendingResult<(Fraction, Fraction)> {
     let days_since_deleveraging_started =
         slots::to_days_fractional(slots_since_deleveraging_started);
-       let ltv_rate = user_ltv / 100;
+    let ltv_rate = user_ltv / 100;
 
     let liquidation_bonus = Fraction::from_bps(MIN_AUTODELEVERAGE_BONUS_BPS)
         + (ltv_rate * days_since_deleveraging_started);
@@ -520,10 +519,9 @@ pub fn calculate_protocol_liquidation_fee(
     liquidation_bonus: Fraction,
     protocol_liquidation_fee_pct: u8,
 ) -> LendingResult<u64> {
-       let protocol_liquidation_fee_rate = Fraction::from_percent(protocol_liquidation_fee_pct);
+    let protocol_liquidation_fee_rate = Fraction::from_percent(protocol_liquidation_fee_pct);
     let amount_liquidated = Fraction::from(amount_liquidated);
 
-                     
     let bonus_rate = liquidation_bonus + Fraction::ONE;
 
     let bonus = amount_liquidated - (amount_liquidated / bonus_rate);
@@ -531,5 +529,5 @@ pub fn calculate_protocol_liquidation_fee(
     let protocol_fee = bonus * protocol_liquidation_fee_rate;
     let protocol_fee: u64 = protocol_fee.to_ceil();
 
-    Ok(max(protocol_fee, 1))}
-
+    Ok(max(protocol_fee, 1))
+}

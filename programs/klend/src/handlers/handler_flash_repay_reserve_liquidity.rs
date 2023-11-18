@@ -84,7 +84,7 @@ pub fn process(
 pub struct FlashRepayReserveLiquidity<'info> {
     pub user_transfer_authority: Signer<'info>,
 
-       #[account(
+    #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -97,12 +97,12 @@ pub struct FlashRepayReserveLiquidity<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
-       #[account(mut,
+    #[account(mut,
         address = reserve.load()?.liquidity.supply_vault
     )]
     pub reserve_destination_liquidity: Box<Account<'info, TokenAccount>>,
 
-       #[account(mut)]
+    #[account(mut)]
     pub user_source_liquidity: Box<Account<'info, TokenAccount>>,
 
     #[account(mut,
@@ -116,7 +116,7 @@ pub struct FlashRepayReserveLiquidity<'info> {
     #[account(mut)]
     pub referrer_account: Option<AccountInfo<'info>>,
 
-       #[account(address = sysvar::instructions::ID)]
+    #[account(address = sysvar::instructions::ID)]
     pub sysvar_info: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }

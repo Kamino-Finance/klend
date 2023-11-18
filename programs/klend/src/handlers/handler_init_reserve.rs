@@ -45,7 +45,7 @@ pub struct InitReserve<'info> {
         has_one = lending_market_owner @ LendingError::InvalidMarketOwner,
     )]
     pub lending_market: AccountLoader<'info, LendingMarket>,
-       #[account(
+    #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]

@@ -29,7 +29,7 @@ pub fn process(
 
     lending_operations::update_reserve_config(reserve, mode, value);
 
-       lending_operations::utils::validate_reserve_config(&reserve.config, &market)?;
+    lending_operations::utils::validate_reserve_config(&reserve.config, &market)?;
 
     Ok(())
 }

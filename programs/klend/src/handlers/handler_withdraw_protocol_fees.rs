@@ -1,4 +1,3 @@
-
 use anchor_lang::{prelude::*, Accounts};
 use anchor_spl::token::{Token, TokenAccount};
 
@@ -44,7 +43,7 @@ pub struct WithdrawProtocolFees<'info> {
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
-       pub lending_market_authority: AccountInfo<'info>,
+    pub lending_market_authority: AccountInfo<'info>,
 
     #[account(mut,
         address = reserve.load()?.liquidity.fee_vault,

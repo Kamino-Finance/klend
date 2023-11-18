@@ -3,7 +3,6 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use super::{obligation::Obligation, LendingMarket, Reserve};
 
-
 #[derive(Accounts)]
 pub struct DepositReserveLiquidityAccounts<'info> {
     pub user_source_liquidity: Box<Account<'info, TokenAccount>>,
@@ -12,7 +11,7 @@ pub struct DepositReserveLiquidityAccounts<'info> {
     pub reserve_liquidity_supply: Box<Account<'info, TokenAccount>>,
     pub reserve_collateral_mint: Box<Account<'info, Mint>>,
     pub lending_market: AccountLoader<'info, LendingMarket>,
-       pub lending_market_authority: AccountInfo<'info>,
+    pub lending_market_authority: AccountInfo<'info>,
     pub owner: Signer<'info>,
     pub token_program: Program<'info, Token>,
 }
@@ -35,7 +34,7 @@ pub struct WithdrawObligationCollateralAccounts<'info> {
     pub withdraw_reserve: AccountLoader<'info, Reserve>,
     pub obligation: AccountLoader<'info, Obligation>,
     pub lending_market: AccountLoader<'info, LendingMarket>,
-       pub lending_market_authority: AccountInfo<'info>,
+    pub lending_market_authority: AccountInfo<'info>,
     pub obligation_owner: Signer<'info>,
     pub token_program: Program<'info, Token>,
 }
@@ -53,7 +52,7 @@ pub struct RedeemReserveCollateralAccounts<'info> {
     #[account(mut)]
     pub reserve_liquidity_supply: Box<Account<'info, TokenAccount>>,
     pub lending_market: AccountLoader<'info, LendingMarket>,
-       pub lending_market_authority: AccountInfo<'info>,
+    pub lending_market_authority: AccountInfo<'info>,
     pub owner: Signer<'info>,
     pub token_program: Program<'info, Token>,
 }

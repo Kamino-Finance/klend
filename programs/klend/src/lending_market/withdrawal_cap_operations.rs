@@ -167,13 +167,13 @@ pub mod utils {
         )
     }
 
-       fn check_and_update_withdrawal_caps(
+    fn check_and_update_withdrawal_caps(
         caps: &mut WithdrawalCaps,
         requested_amount: u64,
         curr_timestamp: u64,
         action: WithdrawalCapAction,
     ) -> Result<(), LendingError> {
-               if caps.config_interval_length_seconds != 0 {
+        if caps.config_interval_length_seconds != 0 {
             if check_last_interval_elapsed(caps, curr_timestamp)? {
                 reset_current_interval_and_counter(caps, curr_timestamp);
             }
@@ -195,5 +195,4 @@ pub mod utils {
             )
         }
     }
-
 }

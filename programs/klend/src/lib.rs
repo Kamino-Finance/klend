@@ -32,7 +32,7 @@ pub mod kamino_lending {
 
     pub fn init_lending_market(
         ctx: Context<InitLendingMarket>,
-               quote_currency: [u8; 32],
+        quote_currency: [u8; 32],
     ) -> Result<()> {
         handler_init_lending_market::process(ctx, quote_currency)
     }

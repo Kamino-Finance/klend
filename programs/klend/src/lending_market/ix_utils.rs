@@ -13,10 +13,10 @@ pub trait InstructionLoader {
     fn load_current_index(&self) -> std::result::Result<u16, ProgramError>;
 
     fn is_cpi_call(&self) -> Result<bool> {
-                                                                       let current_index = self.load_current_index()? as usize;
+        let current_index = self.load_current_index()? as usize;
         let current_ixn = self.load_instruction_at(current_index)?;
 
-                      if crate::ID != current_ixn.program_id {
+        if crate::ID != current_ixn.program_id {
             return Ok(true);
         }
 
@@ -73,7 +73,8 @@ where
                 self.current_ix_index = self.current_ix_index.checked_add(1).unwrap();
                 Some(Ok(ix))
             }
-            Err(ProgramError::InvalidArgument) => None,            Err(e) => Some(Err(e)),
+            Err(ProgramError::InvalidArgument) => None,
+            Err(e) => Some(Err(e)),
         }
     }
 }

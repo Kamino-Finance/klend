@@ -5,7 +5,6 @@ mod switchboard;
 mod types;
 mod utils;
 
-
 use anchor_lang::{prelude::*, solana_program::clock};
 use types::{Price, TimestampedPrice};
 
@@ -45,7 +44,6 @@ fn get_most_recent_price_and_twap(
     switchboard_price_twap_info: Option<&AccountInfo>,
     scope_prices_info: Option<&AccountInfo>,
 ) -> Result<TimestampedPriceWithTwap> {
-   
     let pyth_price = if token_info.pyth_configuration.is_enabled() {
         pyth_price_account_info.and_then(|a| get_pyth_price_and_twap(a).ok())
     } else {

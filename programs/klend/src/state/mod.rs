@@ -280,4 +280,3 @@ pub mod serde_bool_u8 {
         Ok(s as u8)
     }
 }
-

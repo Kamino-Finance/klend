@@ -11,13 +11,13 @@ pub(super) fn get_validated_price(
     token_info: &TokenInfo,
     unix_timestamp: clock::UnixTimestamp,
 ) -> Result<(Fraction, u64)> {
-       let unix_timestamp = u64::try_from(unix_timestamp).unwrap();
+    let unix_timestamp = u64::try_from(unix_timestamp).unwrap();
 
     let TimestampedPriceWithTwap { price, twap } = price_and_twap;
 
     let price_dec = (price.price_load)()?;
 
-       check_price_age(
+    check_price_age(
         price.timestamp,
         token_info.max_age_price_seconds,
         unix_timestamp,
@@ -28,9 +28,9 @@ pub(super) fn get_validated_price(
         e
     })?;
 
-       if token_info.is_twap_enabled() {
+    if token_info.is_twap_enabled() {
         let twap = twap.ok_or_else(|| error!(LendingError::InvalidTwapPrice))?;
-               check_price_age(
+        check_price_age(
             twap.timestamp,
             token_info.max_age_twap_seconds,
             unix_timestamp,
@@ -41,11 +41,11 @@ pub(super) fn get_validated_price(
             e
         })?;
 
-               let twap_dec = (twap.price_load)()?;
-               check_twap_in_tolerance(price_dec, twap_dec, token_info)?;
+        let twap_dec = (twap.price_load)()?;
+        check_twap_in_tolerance(price_dec, twap_dec, token_info)?;
     }
 
-       check_price_heuristics(price_dec, &token_info.heuristic)?;
+    check_price_heuristics(price_dec, &token_info.heuristic)?;
     Ok((price_dec, price.timestamp))
 }
 
@@ -54,7 +54,7 @@ fn check_price_age(
     max_age_seconds: u64,
     current_timestamp: u64,
 ) -> Result<()> {
-       let age_seconds = current_timestamp.saturating_sub(price_timestamp);
+    let age_seconds = current_timestamp.saturating_sub(price_timestamp);
     if age_seconds > max_age_seconds {
         msg!("Price is too old age={age_seconds} max_age={max_age_seconds}",);
         err!(LendingError::PriceTooOld)
@@ -64,7 +64,6 @@ fn check_price_age(
 }
 
 fn is_within_tolerance(px: Fraction, twap: Fraction, acceptable_tolerance_bps: u64) -> bool {
-      
     let abs_diff = Fraction::abs_diff(px, twap);
 
     let diff_bps_scaled = abs_diff * u128::from(FULL_BPS);
@@ -118,5 +117,3 @@ fn check_price_heuristics(token_price: Fraction, heuristic: &PriceHeuristic) -> 
 
     Ok(())
 }
-
-

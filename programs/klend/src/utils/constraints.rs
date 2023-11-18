@@ -14,7 +14,7 @@ pub fn emergency_mode_disabled(lending_market: &AccountLoader<LendingMarket>) ->
 }
 
 pub fn check_remaining_accounts<T>(ctx: &Context<T>) -> Result<()> {
-       if !ctx.remaining_accounts.is_empty() {
+    if !ctx.remaining_accounts.is_empty() {
         return err!(LendingError::InvalidAccountInput);
     }
 
