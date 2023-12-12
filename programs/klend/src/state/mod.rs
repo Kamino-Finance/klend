@@ -20,9 +20,13 @@ use strum::EnumString;
 pub use token_info::*;
 pub use types::*;
 
+#[cfg(feature = "serde")]
+use strum::EnumIter;
+
 use crate::utils::{borrow_rate_curve::BorrowRateCurve, RESERVE_CONFIG_SIZE};
 
 pub const VALUE_BYTE_ARRAY_LEN_RESERVE: usize = RESERVE_CONFIG_SIZE;
+pub const VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE: usize = 32;
 
 pub const VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE: usize = 72;
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -42,7 +46,19 @@ pub enum UpdateReserveConfigValue {
 }
 
 impl UpdateReserveConfigValue {
-    pub fn to_bytes(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_RESERVE] {
+    pub fn to_bytes_single(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE] {
+        let long_bytes = self.to_raw_bytes();
+
+        let mut short_bytes = [0; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE];
+        short_bytes.copy_from_slice(&long_bytes[..VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE]);
+        short_bytes
+    }
+
+    pub fn to_bytes_entire(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_RESERVE] {
+        self.to_raw_bytes()
+    }
+
+    pub fn to_raw_bytes(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_RESERVE] {
         let mut val = [0; VALUE_BYTE_ARRAY_LEN_RESERVE];
         match self {
             UpdateReserveConfigValue::Bool(v) => {
@@ -105,6 +121,7 @@ impl UpdateReserveConfigValue {
 }
 
 #[derive(TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(EnumIter))]
 #[repr(u64)]
 pub enum UpdateConfigMode {
     UpdateLoanToValuePct = 1,

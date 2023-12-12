@@ -38,7 +38,9 @@ pub struct Obligation {
 
     pub elevation_group: u8,
 
-    pub reserved: [u8; 2],
+    pub num_of_obsolete_reserves: u8,
+
+    pub reserved: [u8; 1],
 
     pub referrer: Pubkey,
 
@@ -64,8 +66,9 @@ impl Default for Obligation {
             deposits_asset_tiers: [u8::MAX; 8],
             borrows_asset_tiers: [u8::MAX; 5],
             elevation_group: ELEVATION_GROUP_NONE,
+            num_of_obsolete_reserves: 0,
             padding_3: [0; 128],
-            reserved: [0; 2],
+            reserved: [0; 1],
             referrer: Pubkey::default(),
         }
     }
@@ -173,10 +176,6 @@ impl Obligation {
 
         if withdraw_collateral_ltv_pct == 0 {
             return Ok(Fraction::from_bits(self.deposited_value_sf));
-        }
-
-        if self.lowest_reserve_deposit_ltv == 0 {
-            return Err(LendingError::ObligationCollateralLtvZero);
         }
 
         Ok(

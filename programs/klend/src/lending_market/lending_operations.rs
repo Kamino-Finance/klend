@@ -38,7 +38,6 @@ use crate::{
     xmsg, AssetTier, LendingError, LendingMarket, LiquidateAndRedeemResult,
     LiquidateObligationResult, ReferrerTokenState, RefreshObligationBorrowsResult,
     RefreshObligationDepositsResult, ReserveConfig, ReserveStatus, UpdateConfigMode,
-    VALUE_BYTE_ARRAY_LEN_RESERVE,
 };
 
 pub fn refresh_reserve_interest(
@@ -280,6 +279,12 @@ pub fn withdraw_obligation_collateral(
     }
 
     check_elevation_group_borrowing_enabled(lending_market, obligation)?;
+
+    if obligation.num_of_obsolete_reserves > 0
+        && withdraw_reserve.config.status() == ReserveStatus::Active
+    {
+        return err!(LendingError::ObligationInDeprecatedReserve);
+    }
 
     let withdraw_amount = if obligation.borrows_empty() {
         if collateral_amount == u64::MAX {
@@ -529,6 +534,7 @@ where
     let mut deposited_value = Fraction::ZERO;
     let mut allowed_borrow_value = Fraction::ZERO;
     let mut unhealthy_borrow_value = Fraction::ZERO;
+    let mut num_of_obsolete_reserves = 0;
 
     for (index, deposit) in obligation
         .deposits
@@ -553,6 +559,10 @@ where
                 .contains(&elevation_group)
         {
             return err!(LendingError::InconsistentElevationGroup);
+        }
+
+        if deposit_reserve.config.status() == ReserveStatus::Obsolete {
+            num_of_obsolete_reserves += 1;
         }
 
         check_obligation_collateral_deposit_reserve(
@@ -598,6 +608,7 @@ where
 
     Ok(RefreshObligationDepositsResult {
         lowest_deposit_ltv_accumulator,
+        num_of_obsolete_reserves,
         deposited_value_f: deposited_value,
         allowed_borrow_value_f: allowed_borrow_value,
         unhealthy_borrow_value_f: unhealthy_borrow_value,
@@ -744,6 +755,7 @@ where
 {
     let RefreshObligationDepositsResult {
         lowest_deposit_ltv_accumulator,
+        num_of_obsolete_reserves,
         deposited_value_f,
         allowed_borrow_value_f: allowed_borrow_value,
         unhealthy_borrow_value_f: unhealthy_borrow_value,
@@ -785,6 +797,8 @@ where
     .to_bits();
 
     obligation.lowest_reserve_deposit_ltv = lowest_deposit_ltv_accumulator.into();
+
+    obligation.num_of_obsolete_reserves = num_of_obsolete_reserves;
 
     obligation.last_update.update_slot(slot);
 
@@ -1104,79 +1118,101 @@ pub fn withdraw_referrer_fees(
     Ok(withdraw_amount)
 }
 
-pub fn update_reserve_config(
-    reserve: &mut Reserve,
-    mode: UpdateConfigMode,
-    value: [u8; VALUE_BYTE_ARRAY_LEN_RESERVE],
-) {
+pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, value: &[u8]) {
     match mode {
         UpdateConfigMode::UpdateLoanToValuePct => {
-            let value = value[0];
-            reserve.config.loan_to_value_pct = value;
-            msg!("Value is {:?}", value);
+            let new = value[0];
+            let prv = reserve.config.loan_to_value_pct;
+            reserve.config.loan_to_value_pct = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateMaxLiquidationBonusBps => {
-            let value: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
-            reserve.config.max_liquidation_bonus_bps = value;
-            msg!("Value is {:?}", value);
+            let new: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
+            let prv = reserve.config.max_liquidation_bonus_bps;
+            reserve.config.max_liquidation_bonus_bps = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateLiquidationThresholdPct => {
-            let value = value[0];
-            reserve.config.liquidation_threshold_pct = value;
-            msg!("Value is {:?}", value);
+            let new = value[0];
+            let prv = reserve.config.liquidation_threshold_pct;
+            reserve.config.liquidation_threshold_pct = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateProtocolLiquidationFee => {
-            let value = value[0];
-            reserve.config.protocol_liquidation_fee_pct = value;
-            msg!("Value is {:?}", value);
+            let new = value[0];
+            let prv = reserve.config.protocol_liquidation_fee_pct;
+            reserve.config.protocol_liquidation_fee_pct = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateProtocolTakeRate => {
-            let value = value[0];
-            reserve.config.protocol_take_rate_pct = value;
-            msg!("Value is {:?}", value);
+            let new = value[0];
+            let prv = reserve.config.protocol_take_rate_pct;
+            reserve.config.protocol_take_rate_pct = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateFeesBorrowFee => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.fees.borrow_fee_sf = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.fees.borrow_fee_sf;
+            reserve.config.fees.borrow_fee_sf = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateFeesFlashLoanFee => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.fees.flash_loan_fee_sf = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.fees.flash_loan_fee_sf;
+            reserve.config.fees.flash_loan_fee_sf = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateFeesReferralFeeBps => {
             msg!("ReferralFee moved to lending_market");
         }
         UpdateConfigMode::UpdateDepositLimit => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.deposit_limit = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.deposit_limit;
+            reserve.config.deposit_limit = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateBorrowLimit => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.borrow_limit = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.borrow_limit;
+            reserve.config.borrow_limit = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateTokenInfoLowerHeuristic => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.token_info.heuristic.lower = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.token_info.heuristic.lower;
+            reserve.config.token_info.heuristic.lower = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateTokenInfoUpperHeuristic => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.token_info.heuristic.upper = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.token_info.heuristic.upper;
+            reserve.config.token_info.heuristic.upper = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateTokenInfoExpHeuristic => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.token_info.heuristic.exp = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.token_info.heuristic.exp;
+            reserve.config.token_info.heuristic.exp = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateTokenInfoTwapDivergence => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.token_info.max_twap_divergence_bps = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.token_info.max_twap_divergence_bps;
+            reserve.config.token_info.max_twap_divergence_bps = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateTokenInfoScopeChain => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
@@ -1185,7 +1221,9 @@ pub fn update_reserve_config(
                 .chunks_exact(2)
                 .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
                 .collect::<Vec<u16>>();
+            let cached = reserve.config.token_info.scope_configuration.price_chain;
             reserve.config.token_info.scope_configuration.price_chain = end.try_into().unwrap();
+            msg!("Prev scope chain is {:?}", cached);
             msg!(
                 "Set scope chain to {:?}",
                 reserve.config.token_info.scope_configuration.price_chain
@@ -1198,9 +1236,11 @@ pub fn update_reserve_config(
                 .chunks_exact(2)
                 .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
                 .collect::<Vec<u16>>();
+            let cached = reserve.config.token_info.scope_configuration.twap_chain;
             reserve.config.token_info.scope_configuration.twap_chain = end.try_into().unwrap();
+            msg!("Prev twap scope chain is {:?}", cached);
             msg!(
-                "Set scope chain to {:?}",
+                "Set  twap scope chain to {:?}",
                 reserve.config.token_info.scope_configuration.twap_chain
             );
         }
@@ -1208,160 +1248,226 @@ pub fn update_reserve_config(
             let value: [u8; 32] = value[0..32].try_into().unwrap();
             let name = value.to_vec();
             let str_name = std::str::from_utf8(&name).unwrap();
+            let cached = reserve.config.token_info.name;
+            let cached_name = std::str::from_utf8(&cached).unwrap();
+            msg!("Prev token name was {}", cached_name);
             msg!("Setting token name to {}", str_name);
             reserve.config.token_info.name = name.try_into().unwrap();
         }
         UpdateConfigMode::UpdateTokenInfoPriceMaxAge => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.token_info.max_age_price_seconds = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.token_info.max_age_price_seconds;
+            reserve.config.token_info.max_age_price_seconds = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateTokenInfoTwapMaxAge => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.token_info.max_age_twap_seconds = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.token_info.max_age_twap_seconds;
+            reserve.config.token_info.max_age_twap_seconds = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateScopePriceFeed => {
-            let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let value = Pubkey::new_from_array(value);
-            reserve.config.token_info.scope_configuration.price_feed = value;
-            msg!("Value is {:?}", value);
+            let new: [u8; 32] = value[0..32].try_into().unwrap();
+            let new = Pubkey::new_from_array(new);
+            let prv = reserve.config.token_info.scope_configuration.price_feed;
+            reserve.config.token_info.scope_configuration.price_feed = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
 
         UpdateConfigMode::UpdatePythPrice => {
-            let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let value = Pubkey::new_from_array(value);
-            reserve.config.token_info.pyth_configuration.price = value;
-            msg!("Value is {:?}", value);
+            let new: [u8; 32] = value[0..32].try_into().unwrap();
+            let new = Pubkey::new_from_array(new);
+            let prv = reserve.config.token_info.pyth_configuration.price;
+            reserve.config.token_info.pyth_configuration.price = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateSwitchboardFeed => {
-            let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let value = Pubkey::new_from_array(value);
+            let new: [u8; 32] = value[0..32].try_into().unwrap();
+            let new = Pubkey::new_from_array(new);
+            let prv = reserve
+                .config
+                .token_info
+                .switchboard_configuration
+                .price_aggregator;
             reserve
                 .config
                 .token_info
                 .switchboard_configuration
-                .price_aggregator = value;
-            msg!("Value is {:?}", value);
+                .price_aggregator = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateSwitchboardTwapFeed => {
-            let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let value = Pubkey::new_from_array(value);
+            let new: [u8; 32] = value[0..32].try_into().unwrap();
+            let new = Pubkey::new_from_array(new);
+            let prv = reserve
+                .config
+                .token_info
+                .switchboard_configuration
+                .twap_aggregator;
             reserve
                 .config
                 .token_info
                 .switchboard_configuration
-                .twap_aggregator = value;
-            msg!("Value is {:?}", value);
+                .twap_aggregator = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateBorrowRateCurve => {
-            let value: BorrowRateCurve = BorshDeserialize::deserialize(&mut &value[..]).unwrap();
-            reserve.config.borrow_rate_curve = value;
-            msg!("Value is {:?}", value);
+            let new: BorrowRateCurve = BorshDeserialize::deserialize(&mut &value[..]).unwrap();
+            let prv = reserve.config.borrow_rate_curve;
+            reserve.config.borrow_rate_curve = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateEntireReserveConfig => {
-            let value: ReserveConfig = BorshDeserialize::deserialize(&mut &value[..]).unwrap();
-            reserve.config = value;
-            msg!("Value is {:?}", value);
+            let new: ReserveConfig = BorshDeserialize::deserialize(&mut &value[..]).unwrap();
+            reserve.config = new;
+            msg!("New Value is {:?}", value);
         }
         UpdateConfigMode::UpdateDebtWithdrawalCap => {
             let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
             let interval_length_seconds = u64::from_le_bytes(value[8..16].try_into().unwrap());
+
+            let prev_capacity = reserve.config.debt_withdrawal_cap.config_capacity;
+            let prev_length = reserve
+                .config
+                .debt_withdrawal_cap
+                .config_interval_length_seconds;
+
             reserve.config.debt_withdrawal_cap.config_capacity = capacity.try_into().unwrap();
             reserve
                 .config
                 .debt_withdrawal_cap
                 .config_interval_length_seconds = interval_length_seconds;
+
             msg!(
-                "capacity is {:?}, interval_length_seconds is {:?}",
+                "New capacity is {:?}, interval_length_seconds is {:?}",
                 capacity,
                 interval_length_seconds
+            );
+            msg!(
+                "Prv capacity is {:?}, interval_length_seconds is {:?}",
+                prev_capacity,
+                prev_length
             );
         }
         UpdateConfigMode::UpdateDepositWithdrawalCap => {
             let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
             let interval_length_seconds = u64::from_le_bytes(value[8..16].try_into().unwrap());
+
+            let prev_capacity = reserve.config.deposit_withdrawal_cap.config_capacity;
+            let prev_length = reserve
+                .config
+                .deposit_withdrawal_cap
+                .config_interval_length_seconds;
+
             reserve.config.deposit_withdrawal_cap.config_capacity = capacity.try_into().unwrap();
             reserve
                 .config
                 .deposit_withdrawal_cap
                 .config_interval_length_seconds = interval_length_seconds;
+
             msg!(
-                "capacity is {:?}, interval_length_seconds is {:?}",
+                "Prv capacity is {:?}, interval_length_seconds is {:?}",
+                prev_capacity,
+                prev_length
+            );
+            msg!(
+                "New capacity is {:?}, interval_length_seconds is {:?}",
                 capacity,
                 interval_length_seconds
             );
         }
         UpdateConfigMode::UpdateDebtWithdrawalCapCurrentTotal => {
-            let new_current_total = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!(
-                "old_current_total: {:?}, new_current_total: {:?}",
-                reserve.config.debt_withdrawal_cap.current_total,
-                new_current_total
-            );
-            reserve.config.debt_withdrawal_cap.current_total =
-                new_current_total.try_into().unwrap();
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.debt_withdrawal_cap.current_total;
+            reserve.config.debt_withdrawal_cap.current_total = new.try_into().unwrap();
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateDepositWithdrawalCapCurrentTotal => {
-            let new_current_total = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!(
-                "old_current_total: {:?}, new_current_total: {:?}",
-                reserve.config.deposit_withdrawal_cap.current_total,
-                new_current_total
-            );
-            reserve.config.deposit_withdrawal_cap.current_total =
-                new_current_total.try_into().unwrap();
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.deposit_withdrawal_cap.current_total;
+            reserve.config.deposit_withdrawal_cap.current_total = new.try_into().unwrap();
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateBadDebtLiquidationBonusBps => {
-            let value: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
-            reserve.config.bad_debt_liquidation_bonus_bps = value;
-            msg!("Value is {:?}", value);
+            let new: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
+            let prv = reserve.config.bad_debt_liquidation_bonus_bps;
+            reserve.config.bad_debt_liquidation_bonus_bps = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateMinLiquidationBonusBps => {
-            let value: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
-            reserve.config.min_liquidation_bonus_bps = value;
-            msg!("Value is {:?}", value);
+            let new: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
+            let prv = reserve.config.min_liquidation_bonus_bps;
+            reserve.config.min_liquidation_bonus_bps = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::DeleveragingMarginCallPeriod => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.deleveraging_margin_call_period_secs = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.deleveraging_margin_call_period_secs;
+            reserve.config.deleveraging_margin_call_period_secs = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateBorrowFactor => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.borrow_factor_pct = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.borrow_factor_pct;
+            reserve.config.borrow_factor_pct = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateAssetTier => {
-            let value = value[0];
-            reserve.config.asset_tier = value;
-            msg!("Value is {:?}", value);
+            let new = value[0];
+            let prv = reserve.config.asset_tier;
+            reserve.config.asset_tier = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateElevationGroup => {
-            let elevation_group_categories: [u8; 20] = value[..20].try_into().unwrap();
-            reserve.config.elevation_groups = elevation_group_categories;
+            let new: [u8; 20] = value[..20].try_into().unwrap();
+            let prv = reserve.config.elevation_groups;
+            reserve.config.elevation_groups = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::DeleveragingThresholdSlotsPerBps => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            reserve.config.deleveraging_threshold_slots_per_bps = value;
-            msg!("Value is {:?}", value);
+            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let prv = reserve.config.deleveraging_threshold_slots_per_bps;
+            reserve.config.deleveraging_threshold_slots_per_bps = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateMultiplierTagBoost => {
             let tag: usize = value[0].into();
             let multiplier = value[1];
+            let cached = reserve.config.multiplier_tag_boost[tag];
             reserve.config.multiplier_tag_boost[tag] = multiplier;
-            msg!("Setting multiplier for tag {tag} to {multiplier}",);
+
+            msg!("Prv multiplier for tag {tag} to {cached}",);
+            msg!("New multiplier for tag {tag} to {multiplier}",);
         }
         UpdateConfigMode::UpdateMultiplierSideBoost => {
-            let side: usize = value[0].into();
-            let multiplier = value[1];
-            reserve.config.multiplier_side_boost[side] = multiplier;
-            msg!("Setting multiplier for side {side} to {multiplier}",);
+            let new = [value[0], value[1]];
+            let prv = reserve.config.multiplier_side_boost;
+            reserve.config.multiplier_side_boost = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateReserveStatus => {
-            let status = ReserveStatus::try_from(value[0]).unwrap();
-            msg!("Setting reserve status to {:?}", status);
-            reserve.config.status = status as u8;
+            let new = ReserveStatus::try_from(value[0]).unwrap();
+            let prv = ReserveStatus::try_from(reserve.config.status).unwrap();
+            reserve.config.status = new as u8;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
         }
     }
 

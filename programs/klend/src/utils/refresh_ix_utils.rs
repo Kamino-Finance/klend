@@ -45,6 +45,7 @@ pub fn check_refresh(
         instruction_sysvar_account_info,
     };
 
+    #[cfg(not(feature = "staging"))]
     if ix_loader.is_cpi_call()? {
         msg!("Instruction was called via CPI!");
         return err!(LendingError::CpiDisabled);

@@ -737,7 +737,7 @@ impl ReserveConfig {
 }
 
 #[repr(u8)]
-#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Debug)]
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Debug, Clone, Copy)]
 pub enum ReserveStatus {
     Active = 0,
     Obsolete = 1,

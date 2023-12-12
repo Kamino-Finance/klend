@@ -12,6 +12,11 @@ use utils::constraints::emergency_mode_disabled;
 
 use crate::handlers::*;
 pub use crate::{state::*, utils::fraction};
+
+#[cfg(feature = "staging")]
+declare_id!("SLendK7ySfcEzyaFqy93gDnD3RtrpXJcnRwb6zFHJSh");
+
+#[cfg(not(feature = "staging"))]
 declare_id!("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
 
 #[cfg(not(feature = "no-entrypoint"))]
@@ -57,12 +62,20 @@ pub mod kamino_lending {
         handler_init_farms_for_reserve::process(ctx, mode)
     }
 
-    pub fn update_reserve_config(
+    pub fn update_single_reserve_config(
+        ctx: Context<UpdateReserveConfig>,
+        mode: u64,
+        value: [u8; 32],
+    ) -> Result<()> {
+        handler_update_reserve_config::process(ctx, mode, &value)
+    }
+
+    pub fn update_entire_reserve_config(
         ctx: Context<UpdateReserveConfig>,
         mode: u64,
         value: [u8; VALUE_BYTE_ARRAY_LEN_RESERVE],
     ) -> Result<()> {
-        handler_update_reserve_config::process(ctx, mode, value)
+        handler_update_reserve_config::process(ctx, mode, &value)
     }
 
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
@@ -421,6 +434,8 @@ pub enum LendingError {
     ReserveObsolete,
     #[msg("Obligation already part of the same elevation group")]
     ElevationGroupAlreadyActivated,
+    #[msg("Obligation has a deposit in a deprecated reserve")]
+    ObligationInDeprecatedReserve,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

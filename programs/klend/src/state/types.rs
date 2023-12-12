@@ -44,6 +44,7 @@ pub struct LiquidationParams {
 
 pub struct RefreshObligationDepositsResult {
     pub lowest_deposit_ltv_accumulator: u8,
+    pub num_of_obsolete_reserves: u8,
     pub deposited_value_f: Fraction,
     pub allowed_borrow_value_f: Fraction,
     pub unhealthy_borrow_value_f: Fraction,
