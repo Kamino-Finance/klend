@@ -3,25 +3,21 @@ use anchor_lang::{prelude::*, Accounts};
 use crate::{
     lending_market::lending_operations,
     state::{LendingMarket, Reserve, UpdateConfigMode},
-    VALUE_BYTE_ARRAY_LEN_RESERVE,
 };
 
-pub fn process(
-    ctx: Context<UpdateReserveConfig>,
-    mode: u64,
-    value: [u8; VALUE_BYTE_ARRAY_LEN_RESERVE],
-) -> Result<()> {
+pub fn process(ctx: Context<UpdateReserveConfig>, mode: u64, value: &[u8]) -> Result<()> {
     let mode =
         UpdateConfigMode::try_from(mode).map_err(|_| ProgramError::InvalidInstructionData)?;
 
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let market = ctx.accounts.lending_market.load()?;
+    let name = reserve.config.token_info.symbol();
 
     msg!(
-        "Updating reserve {:?} config with mode {:?} and value {:?}",
+        "Updating reserve {:?} {} config with mode {:?}",
         ctx.accounts.reserve.key(),
+        name,
         mode,
-        &value[0..32]
     );
 
     let clock = Clock::get()?;

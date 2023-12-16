@@ -18,6 +18,7 @@ no-log-ix-name = []
 cpi = ["no-entrypoint"]
 default = []
 serde = ["dep:serde", "fixed/serde-str"]
+staging = []
 
 [dependencies]
 anchor-lang = { version = "0.28.0" }
