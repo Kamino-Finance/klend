@@ -70,7 +70,7 @@ pub fn check_refresh(
                         i,
                         required_ix
                     );
-                    LendingError::IncorrectInstructionInPosition
+                    error!(LendingError::IncorrectInstructionInPosition)
                 })?,
             };
 
