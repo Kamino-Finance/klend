@@ -41,7 +41,6 @@ pub fn process(ctx: Context<InitObligation>, args: InitObligationArgs) -> Result
 #[derive(Accounts)]
 #[instruction(args: InitObligationArgs)]
 pub struct InitObligation<'info> {
-    #[account(mut)]
     pub obligation_owner: Signer<'info>,
 
     #[account(mut)]
