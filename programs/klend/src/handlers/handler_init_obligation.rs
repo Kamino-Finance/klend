@@ -41,13 +41,15 @@ pub fn process(ctx: Context<InitObligation>, args: InitObligationArgs) -> Result
 #[derive(Accounts)]
 #[instruction(args: InitObligationArgs)]
 pub struct InitObligation<'info> {
-    #[account(mut)]
     pub obligation_owner: Signer<'info>,
+
+    #[account(mut)]
+    pub fee_payer: Signer<'info>,
 
     #[account(init,
         seeds = [&[args.tag], &[args.id], obligation_owner.key().as_ref(), lending_market.key().as_ref(), seed1_account.key().as_ref(), seed2_account.key().as_ref()],
         bump,
-        payer = obligation_owner,
+        payer = fee_payer,
         space = OBLIGATION_SIZE + 8,
     )]
     pub obligation: AccountLoader<'info, Obligation>,

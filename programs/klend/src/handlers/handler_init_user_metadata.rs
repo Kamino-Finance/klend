@@ -26,13 +26,15 @@ pub fn process(
 
 #[derive(Accounts)]
 pub struct InitUserMetadata<'info> {
-    #[account(mut)]
     pub owner: Signer<'info>,
+
+    #[account(mut)]
+    pub fee_payer: Signer<'info>,
 
     #[account(init,
         seeds = [BASE_SEED_USER_METADATA, owner.key().as_ref()],
         bump,
-        payer = owner,
+        payer = fee_payer,
         space = USER_METADATA_SIZE + 8,
     )]
     pub user_metadata: AccountLoader<'info, UserMetadata>,
