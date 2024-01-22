@@ -5,11 +5,15 @@ use crate::{
     UserMetadata,
 };
 
-pub fn process(
-    ctx: Context<InitUserMetadata>,
-    referrer: Pubkey,
-    user_lookup_table: Pubkey,
-) -> Result<()> {
+pub fn process(ctx: Context<InitUserMetadata>, user_lookup_table: Pubkey) -> Result<()> {
+    let referrer = match &ctx.accounts.referrer_user_metadata {
+        Some(referrer_user_metadata) => {
+            let referrer_user_metadata = referrer_user_metadata.load()?;
+            referrer_user_metadata.owner
+        }
+        None => Pubkey::default(),
+    };
+
     let mut user_metadata = ctx.accounts.user_metadata.load_init()?;
     let bump = *ctx.bumps.get("user_metadata").unwrap();
 
@@ -17,7 +21,8 @@ pub fn process(
         referrer,
         bump: bump.into(),
         user_lookup_table,
-        padding_1: [0; 55],
+        owner: ctx.accounts.owner.key(),
+        padding_1: [0; 51],
         padding_2: [0; 64],
     };
 
@@ -38,6 +43,8 @@ pub struct InitUserMetadata<'info> {
         space = USER_METADATA_SIZE + 8,
     )]
     pub user_metadata: AccountLoader<'info, UserMetadata>,
+
+    pub referrer_user_metadata: Option<AccountLoader<'info, UserMetadata>>,
 
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,

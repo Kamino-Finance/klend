@@ -40,7 +40,7 @@ pub struct Obligation {
 
     pub num_of_obsolete_reserves: u8,
 
-    pub reserved: [u8; 1],
+    pub has_debt: u8,
 
     pub referrer: Pubkey,
 
@@ -68,7 +68,7 @@ impl Default for Obligation {
             elevation_group: ELEVATION_GROUP_NONE,
             num_of_obsolete_reserves: 0,
             padding_3: [0; 128],
-            reserved: [0; 1],
+            has_debt: 0,
             referrer: Pubkey::default(),
         }
     }
@@ -352,6 +352,14 @@ impl Obligation {
 
     pub fn has_referrer(&self) -> bool {
         self.referrer != Pubkey::default()
+    }
+
+    pub fn update_has_debt(&mut self) {
+        if self.borrows_empty() {
+            self.has_debt = 0;
+        } else {
+            self.has_debt = 1;
+        }
     }
 }
 

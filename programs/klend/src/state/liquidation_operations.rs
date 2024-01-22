@@ -7,8 +7,8 @@ use crate::{
     fraction::FractionExtra,
     lending_market::utils::get_max_ltv_and_liquidation_threshold,
     utils::{
-        bps_u128_to_fraction, fraction::fraction, slots, Fraction, ELEVATION_GROUP_NONE,
-        MIN_AUTODELEVERAGE_BONUS_BPS,
+        bps_u128_to_fraction, fraction::fraction, slots, Fraction, BANKRUPTCY_THRESHOLD,
+        ELEVATION_GROUP_NONE, MIN_AUTODELEVERAGE_BONUS_BPS,
     },
     xmsg, CalculateLiquidationResult, LendingError, LendingMarket, LendingResult,
     LiquidationParams, Obligation, ObligationCollateral, ObligationLiquidity, Reserve,
@@ -85,12 +85,15 @@ pub fn calculate_liquidation(
 
     let borrowed_amount_f = Fraction::from_bits(liquidity.borrowed_amount_sf);
 
+    let borrowed_value_f = Fraction::from_bits(liquidity.market_value_sf);
+
     let debt_amount_to_liquidate =
         Fraction::from_num(debt_amount_to_liquidate).min(borrowed_amount_f);
 
-    let debt_liquidation_amount_f = if borrowed_amount_f
-        < Fraction::from(lending_market.min_full_liquidation_amount_threshold)
-    {
+    let is_below_min_full_liquidation_value_threshold =
+        borrowed_value_f < lending_market.min_full_liquidation_value_threshold;
+
+    let debt_liquidation_amount_f = if is_below_min_full_liquidation_value_threshold {
         borrowed_amount_f
     } else {
         max_liquidatable_borrowed_amount(
@@ -112,17 +115,14 @@ pub fn calculate_liquidation(
     );
 
     let liquidation_ratio = debt_liquidation_amount_f / borrowed_amount_f;
-    let liquidity_market_value_f = Fraction::from_bits(liquidity.market_value_sf);
 
-    let total_liquidation_value_including_bonus =
-        liquidity_market_value_f * liquidation_ratio * bonus_rate;
+    let total_liquidation_value_including_bonus = borrowed_value_f * liquidation_ratio * bonus_rate;
 
     let (settle_amount, repay_amount, withdraw_amount) = calculate_liquidation_amounts(
         total_liquidation_value_including_bonus,
         collateral,
         debt_liquidation_amount_f,
-        borrowed_amount_f,
-        lending_market.min_full_liquidation_amount_threshold,
+        is_below_min_full_liquidation_value_threshold,
     );
 
     Ok(CalculateLiquidationResult {
@@ -161,8 +161,8 @@ pub fn get_liquidation_params(
         slot,
     ) {
         xmsg!(
-            "Obligation is eligible for auto-deleveraging liquidation with liquidation bonus: {}",
-            params.liquidation_bonus_rate
+            "Obligation is eligible for auto-deleveraging liquidation with liquidation bonus: {}bps",
+            params.liquidation_bonus_rate.to_bps::<u64>().unwrap()
         );
         Ok(params)
     } else {
@@ -253,8 +253,7 @@ fn calculate_liquidation_amounts(
     total_liquidation_value_including_bonus: Fraction,
     collateral: &ObligationCollateral,
     debt_liquidation_amount: Fraction,
-    borrowed_amount: Fraction,
-    min_full_liquidation_amount_threshold: u64,
+    is_below_min_full_liquidation_value_threshold: bool,
 ) -> (Fraction, u64, u64) {
     let collateral_value = Fraction::from_bits(collateral.market_value_sf);
     match total_liquidation_value_including_bonus.cmp(&collateral_value) {
@@ -263,12 +262,11 @@ fn calculate_liquidation_amounts(
 
             let repay_amount_f = debt_liquidation_amount * repay_ratio;
 
-            let settle_amount =
-                if borrowed_amount < Fraction::from(min_full_liquidation_amount_threshold) {
-                    debt_liquidation_amount
-                } else {
-                    repay_amount_f
-                };
+            let settle_amount = if is_below_min_full_liquidation_value_threshold {
+                debt_liquidation_amount
+            } else {
+                repay_amount_f
+            };
 
             let repay_amount = repay_amount_f.to_ceil();
 
@@ -282,11 +280,18 @@ fn calculate_liquidation_amounts(
             (settle_amount, repay_amount, withdraw_amount)
         }
         Ordering::Less => {
-            let withdraw_pct = total_liquidation_value_including_bonus / collateral_value;
             let settle_amount = debt_liquidation_amount;
             let repay_amount = settle_amount.to_ceil();
+            let withdraw_pct = total_liquidation_value_including_bonus / collateral_value;
             let withdraw_amount_f = Fraction::from_num(collateral.deposited_amount) * withdraw_pct;
-            let withdraw_amount = withdraw_amount_f.to_floor();
+
+            let withdraw_amount = if is_below_min_full_liquidation_value_threshold
+                && withdraw_amount_f < BANKRUPTCY_THRESHOLD
+            {
+                collateral.deposited_amount
+            } else {
+                withdraw_amount_f.to_floor()
+            };
             (settle_amount, repay_amount, withdraw_amount)
         }
     }
@@ -353,6 +358,9 @@ pub fn check_autodeleverage_obligation(
     obligation: &Obligation,
     slot: Slot,
 ) -> Option<LiquidationParams> {
+    if lending_market.autodeleverage_enabled == 0 {
+        return None;
+    }
     get_slots_since_autodeleverage_obligation_collateral_deposit_limit_crossed(
         collateral_reserve,
         slot,

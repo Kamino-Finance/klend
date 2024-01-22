@@ -257,6 +257,7 @@ pub fn validate_referrer_token_state(
     referrer_token_state_key: Pubkey,
     mint: Pubkey,
     owner_referrer: Pubkey,
+    reserve_key: Pubkey,
 ) -> anchor_lang::Result<()> {
     if referrer_token_state.mint == Pubkey::default()
         || referrer_token_state.referrer == Pubkey::default()
@@ -272,7 +273,7 @@ pub fn validate_referrer_token_state(
         &[
             BASE_SEED_REFERRER_TOKEN_STATE,
             referrer_token_state.referrer.as_ref(),
-            referrer_token_state.mint.as_ref(),
+            reserve_key.as_ref(),
             &[referrer_token_state.bump.try_into().unwrap()],
         ],
         &crate::ID,

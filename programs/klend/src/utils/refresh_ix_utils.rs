@@ -46,7 +46,7 @@ pub fn check_refresh(
     };
 
     #[cfg(not(feature = "staging"))]
-    if ix_loader.is_cpi_call()? {
+    if ix_loader.is_forbidden_cpi_call()? {
         msg!("Instruction was called via CPI!");
         return err!(LendingError::CpiDisabled);
     }

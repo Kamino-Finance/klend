@@ -5,7 +5,7 @@ pub const RESERVE_COLL_MINT: &[u8] = b"reserve_coll_mint";
 pub const RESERVE_COLL_SUPPLY: &[u8] = b"reserve_coll_supply";
 pub const BASE_SEED_REFERRER_TOKEN_STATE: &[u8] = b"referrer_acc";
 pub const BASE_SEED_USER_METADATA: &[u8] = b"user_meta";
-pub const BASE_SEED_REFERRER_STATE: &[u8] = b"referrer_state";
+pub const BASE_SEED_REFERRER_STATE: &[u8] = b"ref_state";
 pub const BASE_SEED_SHORT_URL: &[u8] = b"short_url";
 
 pub mod pda {
@@ -67,12 +67,12 @@ pub mod pda {
         }
     }
 
-    pub fn referrer_token_state(referrer: Pubkey, mint: Pubkey) -> (Pubkey, u8) {
+    pub fn referrer_token_state(referrer: Pubkey, reserve: Pubkey) -> (Pubkey, u8) {
         Pubkey::find_program_address(
             &[
                 BASE_SEED_REFERRER_TOKEN_STATE,
                 referrer.as_ref(),
-                mint.as_ref(),
+                reserve.as_ref(),
             ],
             &crate::ID,
         )

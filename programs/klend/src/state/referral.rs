@@ -58,9 +58,10 @@ pub struct UserMetadata {
     pub referrer: Pubkey,
     pub bump: u64,
     pub user_lookup_table: Pubkey,
+    pub owner: Pubkey,
 
     #[derivative(Debug = "ignore")]
-    pub padding_1: [u64; 55],
+    pub padding_1: [u64; 51],
     #[derivative(Debug = "ignore")]
     pub padding_2: [u64; 64],
 }
@@ -71,7 +72,8 @@ impl Default for UserMetadata {
             referrer: Pubkey::default(),
             bump: 0,
             user_lookup_table: Pubkey::default(),
-            padding_1: [0; 55],
+            owner: Pubkey::default(),
+            padding_1: [0; 51],
             padding_2: [0; 64],
         }
     }
@@ -85,6 +87,7 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<ReferrerState>() % 8)
 #[repr(C)]
 pub struct ReferrerState {
     pub short_url: Pubkey,
+    pub owner: Pubkey,
 }
 
 #[derive(PartialEq, Debug)]

@@ -1,4 +1,6 @@
 use anchor_lang::solana_program;
+use solana_program::pubkey::Pubkey;
+use static_pubkey::static_pubkey;
 
 use crate::utils::fraction::{fraction, Fraction};
 
@@ -19,7 +21,7 @@ pub const INITIAL_COLLATERAL_RATE: Fraction = fraction!(1);
 
 pub const LIQUIDATION_CLOSE_FACTOR: u8 = 20;
 
-pub const LIQUIDATION_CLOSE_AMOUNT: u64 = 2;
+pub const LIQUIDATION_CLOSE_VALUE: u64 = 2;
 
 pub const MAX_LIQUIDATABLE_VALUE_AT_ONCE: u64 = 500_000;
 
@@ -41,7 +43,7 @@ pub const OBLIGATION_SIZE: usize = 3336;
 pub const RESERVE_CONFIG_SIZE: usize = 648;
 pub const REFERRER_TOKEN_STATE_SIZE: usize = 352;
 pub const USER_METADATA_SIZE: usize = 1024;
-pub const REFERRER_STATE_SIZE: usize = 32;
+pub const REFERRER_STATE_SIZE: usize = 64;
 pub const SHORT_URL_SIZE: usize = 68;
 pub const GLOBAL_UNHEALTHY_BORROW_VALUE: u64 = 50_000_000;
 
@@ -52,3 +54,75 @@ pub const DEFAULT_BORROW_FACTOR_PCT: u64 = 100;
 pub const ELEVATION_GROUP_NONE: u8 = 0;
 
 pub const MAX_NUM_ELEVATION_GROUPS: u8 = 10;
+
+pub const USD_DECIMALS: usize = 6;
+
+pub const BANKRUPTCY_THRESHOLD: u64 = 1;
+
+pub fn ten_pow(x: usize) -> u64 {
+    const POWERS_OF_TEN: [u64; 20] = [
+        1,
+        10,
+        100,
+        1_000,
+        10_000,
+        100_000,
+        1_000_000,
+        10_000_000,
+        100_000_000,
+        1_000_000_000,
+        10_000_000_000,
+        100_000_000_000,
+        1_000_000_000_000,
+        10_000_000_000_000,
+        100_000_000_000_000,
+        1_000_000_000_000_000,
+        10_000_000_000_000_000,
+        100_000_000_000_000_000,
+        1_000_000_000_000_000_000,
+        10_000_000_000_000_000_000,
+    ];
+
+    if x > 19 {
+        panic!("The exponent must be between 0 and 19.");
+    }
+
+    POWERS_OF_TEN[x]
+}
+
+pub const SQUADS_PROGRAM_ID_V3_MAINNET_PROD: Pubkey =
+    static_pubkey!("SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu");
+
+pub const SQUADS_PROGRAM_ID_V3_MAINNET_DEV: Pubkey =
+    static_pubkey!("84Ue9gKQUsStFJQCNQpsqvbceo7fKYSSCCMXxMZ5PkiW");
+
+pub const SQUADS_PROGRAM_ID_V4_MAINNET_PROD: Pubkey =
+    static_pubkey!("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf");
+
+pub const SQUADS_PROGRAM_ID_V4_MAINNET_DEV: Pubkey =
+    static_pubkey!("STAG3xkFMyVK3sRtQhipsKuLpRGbgospDpVdNyJqDpS");
+
+pub const FLEX_LEND_ID_MAINNET_PROD: Pubkey =
+    static_pubkey!("FL3X2pRsQ9zHENpZSKDRREtccwJuei8yg9fwDu9UN69Q");
+
+pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 5] = [
+    CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
+    CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
+    CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_DEV, 1),
+    CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V4_MAINNET_PROD, 1),
+    CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V4_MAINNET_DEV, 1),
+];
+
+pub struct CpiWhitelistedAccount {
+    pub program_id: Pubkey,
+    pub whitelist_level: usize,
+}
+
+impl CpiWhitelistedAccount {
+    pub const fn new(program_id: Pubkey, whitelist_level: usize) -> CpiWhitelistedAccount {
+        CpiWhitelistedAccount {
+            program_id,
+            whitelist_level,
+        }
+    }
+}

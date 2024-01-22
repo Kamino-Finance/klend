@@ -7,8 +7,8 @@ use super::{serde_bool_u8, serde_string, serde_utf_string};
 use crate::{
     utils::{
         CLOSE_TO_INSOLVENCY_RISKY_LTV, ELEVATION_GROUP_NONE, GLOBAL_ALLOWED_BORROW_VALUE,
-        GLOBAL_UNHEALTHY_BORROW_VALUE, LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_AMOUNT,
-        LIQUIDATION_CLOSE_FACTOR, MAX_LIQUIDATABLE_VALUE_AT_ONCE, PROGRAM_VERSION,
+        GLOBAL_UNHEALTHY_BORROW_VALUE, LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR,
+        LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE, PROGRAM_VERSION,
     },
     LendingError,
 };
@@ -36,15 +36,18 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub emergency_mode: u8,
 
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub autodeleverage_enabled: u8,
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved: [u8; 2],
+    pub reserved: [u8; 1],
 
     pub price_refresh_trigger_to_max_age_pct: u8,
 
     pub liquidation_max_debt_close_factor_pct: u8,
     pub insolvency_risk_unhealthy_ltv_pct: u8,
-    pub min_full_liquidation_amount_threshold: u64,
+    pub min_full_liquidation_value_threshold: u64,
 
     pub max_liquidatable_debt_market_value_at_once: u64,
     pub global_unhealthy_borrow_value: u64,
@@ -89,19 +92,20 @@ impl Default for LendingMarket {
             quote_currency: [0; 32],
             lending_market_owner_cached: Pubkey::default(),
             emergency_mode: 0,
+            autodeleverage_enabled: 0,
             liquidation_max_debt_close_factor_pct: LIQUIDATION_CLOSE_FACTOR,
             insolvency_risk_unhealthy_ltv_pct: CLOSE_TO_INSOLVENCY_RISKY_LTV,
             max_liquidatable_debt_market_value_at_once: MAX_LIQUIDATABLE_VALUE_AT_ONCE,
             global_allowed_borrow_value: GLOBAL_ALLOWED_BORROW_VALUE,
             global_unhealthy_borrow_value: GLOBAL_UNHEALTHY_BORROW_VALUE,
-            min_full_liquidation_amount_threshold: LIQUIDATION_CLOSE_AMOUNT,
+            min_full_liquidation_value_threshold: LIQUIDATION_CLOSE_VALUE,
             multiplier_points_tag_boost: [1; 8],
             referral_fee_bps: 0,
             price_refresh_trigger_to_max_age_pct: 0,
             elevation_groups: [ElevationGroup::default(); 32],
             elevation_group_padding: [0; 90],
             padding1: [0; 180],
-            reserved: [0; 2],
+            reserved: [0; 1],
         }
     }
 }
