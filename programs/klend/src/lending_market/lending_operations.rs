@@ -204,6 +204,7 @@ pub fn borrow_obligation_liquidity(
     )?;
 
     obligation_liquidity.borrow(borrow_amount_f);
+    obligation.has_debt = 1;
     obligation.last_update.mark_stale();
 
     validate_obligation_asset_tiers(obligation)?;
@@ -449,6 +450,7 @@ pub fn repay_obligation_liquidity(
     repay_reserve.last_update.mark_stale();
 
     obligation.repay(settle_amount, liquidity_index)?;
+    obligation.update_has_debt();
     obligation.last_update.mark_stale();
 
     Ok(repay_amount)
@@ -697,6 +699,7 @@ where
                 referrer_token_state_loader.get_pubkey(),
                 borrow_reserve.liquidity.mint_pubkey,
                 obligation.referrer,
+                borrow_reserve_info_key,
             )?;
 
             add_referrer_fee(
@@ -726,6 +729,8 @@ where
         borrow_factor_adjusted_debt_value += borrow_factor_adjusted_market_value;
 
         obligation.borrows_asset_tiers[index] = borrow_reserve.config.asset_tier;
+
+        obligation.has_debt = 1;
 
         msg!(
             "Borrow: {} amount: {} value: {} value_bf: {}",
@@ -1075,6 +1080,7 @@ pub fn socialize_loss(
     reserve.last_update.mark_stale();
 
     obligation.repay(forgive_amount_f, liquidity_index)?;
+    obligation.update_has_debt();
     obligation.last_update.mark_stale();
 
     Ok(forgive_amount_f)
@@ -1246,13 +1252,12 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
         }
         UpdateConfigMode::UpdateTokenInfoName => {
             let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let name = value.to_vec();
-            let str_name = std::str::from_utf8(&name).unwrap();
+            let str_name = std::str::from_utf8(&value).unwrap();
             let cached = reserve.config.token_info.name;
             let cached_name = std::str::from_utf8(&cached).unwrap();
             msg!("Prev token name was {}", cached_name);
             msg!("Setting token name to {}", str_name);
-            reserve.config.token_info.name = name.try_into().unwrap();
+            reserve.config.token_info.name = value;
         }
         UpdateConfigMode::UpdateTokenInfoPriceMaxAge => {
             let new = u64::from_le_bytes(value[..8].try_into().unwrap());
@@ -1508,6 +1513,7 @@ pub mod utils {
 
         obligation.repay(settle_amount_f, liquidity_index)?;
         obligation.withdraw(withdraw_amount, collateral_index)?;
+        obligation.update_has_debt();
         obligation.last_update.mark_stale();
 
         Ok(())

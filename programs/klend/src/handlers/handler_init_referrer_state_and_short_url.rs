@@ -2,10 +2,10 @@ use anchor_lang::{prelude::*, Accounts};
 
 use crate::{
     utils::{
-        seeds::{BASE_SEED_REFERRER_STATE, BASE_SEED_SHORT_URL},
+        seeds::{BASE_SEED_REFERRER_STATE, BASE_SEED_SHORT_URL, BASE_SEED_USER_METADATA},
         REFERRER_STATE_SIZE, SHORT_URL_SIZE,
     },
-    LendingError, ReferrerState, ShortUrl,
+    LendingError, ReferrerState, ShortUrl, UserMetadata,
 };
 
 pub fn process(ctx: Context<InitReferrerStateAndShortUrl>, short_url: String) -> Result<()> {
@@ -22,6 +22,7 @@ pub fn process(ctx: Context<InitReferrerStateAndShortUrl>, short_url: String) ->
     let referrer_state = &mut ctx.accounts.referrer_state.load_init()?;
 
     referrer_state.short_url = ctx.accounts.referrer_short_url.key();
+    referrer_state.owner = ctx.accounts.referrer.key();
 
     Ok(())
 }
@@ -49,6 +50,13 @@ pub struct InitReferrerStateAndShortUrl<'info> {
         space = SHORT_URL_SIZE + 8
     )]
     pub referrer_short_url: Account<'info, ShortUrl>,
+
+    #[account(
+        seeds = [BASE_SEED_USER_METADATA, referrer.key().as_ref()],
+        bump = referrer_user_metadata.load()?.bump as u8,
+        constraint = referrer_user_metadata.load()?.owner == referrer.key()
+    )]
+    pub referrer_user_metadata: AccountLoader<'info, UserMetadata>,
 
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,

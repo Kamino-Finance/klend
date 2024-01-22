@@ -44,7 +44,7 @@ pub struct WithdrawReferrerFees<'info> {
     pub referrer: Signer<'info>,
 
     #[account(mut,
-        seeds = [BASE_SEED_REFERRER_TOKEN_STATE, referrer.key().as_ref(), reserve.load()?.liquidity.mint_pubkey.as_ref()],
+        seeds = [BASE_SEED_REFERRER_TOKEN_STATE, referrer.key().as_ref(), reserve.key().as_ref()],
         bump = referrer_token_state.load()?.bump.try_into().unwrap()
     )]
     pub referrer_token_state: AccountLoader<'info, ReferrerTokenState>,

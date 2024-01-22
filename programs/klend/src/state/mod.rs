@@ -16,12 +16,11 @@ use num_enum::TryFromPrimitive;
 pub use obligation::*;
 pub use referral::*;
 pub use reserve::*;
+#[cfg(feature = "serde")]
+use strum::EnumIter;
 use strum::EnumString;
 pub use token_info::*;
 pub use types::*;
-
-#[cfg(feature = "serde")]
-use strum::EnumIter;
 
 use crate::utils::{borrow_rate_curve::BorrowRateCurve, RESERVE_CONFIG_SIZE};
 
@@ -228,6 +227,7 @@ pub enum UpdateLendingMarketMode {
     UpdateReferralFeeBps = 10,
     UpdateMultiplierPoints = 11,
     UpdatePriceRefreshTriggerToMaxAgePct = 12,
+    UpdateAutodeleverageEnabled = 13,
 }
 
 #[cfg(feature = "serde")]

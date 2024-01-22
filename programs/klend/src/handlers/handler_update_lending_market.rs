@@ -68,7 +68,7 @@ pub fn process(
         UpdateLendingMarketMode::UpdateMinFullLiquidationThreshold => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
             msg!("Value is {:?}", value);
-            market.min_full_liquidation_amount_threshold = value;
+            market.min_full_liquidation_value_threshold = value;
         }
         UpdateLendingMarketMode::UpdateRiskCouncil => {
             let value: [u8; 32] = value[0..32].try_into().unwrap();
@@ -142,6 +142,22 @@ pub fn process(
                 return err!(LendingError::InvalidConfig);
             }
             market.price_refresh_trigger_to_max_age_pct = value;
+        }
+        UpdateLendingMarketMode::UpdateAutodeleverageEnabled => {
+            let autodeleverage_enabled = value[0];
+            msg!("Prev Value is {:?}", market.autodeleverage_enabled);
+            msg!("New Value is {:?}", autodeleverage_enabled);
+            if autodeleverage_enabled == 0 {
+                market.autodeleverage_enabled = 0
+            } else if autodeleverage_enabled == 1 {
+                market.autodeleverage_enabled = 1;
+            } else {
+                msg!(
+                    "Autodeleverage enabled flag must be 0 or 1, got {:?}",
+                    autodeleverage_enabled
+                );
+                return err!(LendingError::InvalidFlag);
+            }
         }
     }
 

@@ -49,6 +49,7 @@ pub fn process(
                     referrer_token_state_loader.key(),
                     reserve.liquidity.mint_pubkey,
                     referrer_account.as_ref().unwrap().key(),
+                    ctx.accounts.reserve.key(),
                 )?;
 
                 add_referrer_fee(

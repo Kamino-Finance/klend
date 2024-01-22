@@ -234,10 +234,9 @@ pub mod kamino_lending {
 
     pub fn init_user_metadata(
         ctx: Context<InitUserMetadata>,
-        referrer: Pubkey,
         user_lookup_table: Pubkey,
     ) -> Result<()> {
-        handler_init_user_metadata::process(ctx, referrer, user_lookup_table)
+        handler_init_user_metadata::process(ctx, user_lookup_table)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
@@ -260,6 +259,13 @@ pub mod kamino_lending {
         ctx: Context<DeleteReferrerStateAndShortUrl>,
     ) -> Result<()> {
         handler_delete_referrer_state_and_short_url::process(ctx)
+    }
+
+    pub fn update_user_metadata_owner(
+        ctx: Context<UpdateUserMetadataOwner>,
+        owner: Pubkey,
+    ) -> Result<()> {
+        handler_update_user_metadata_owner::process(ctx, owner)
     }
 }
 
@@ -436,6 +442,10 @@ pub enum LendingError {
     ElevationGroupAlreadyActivated,
     #[msg("Obligation has a deposit in a deprecated reserve")]
     ObligationInDeprecatedReserve,
+    #[msg("Referrer state owner does not match the given signer")]
+    ReferrerStateOwnerMismatch,
+    #[msg("User metadata owner is already set")]
+    UserMetadataOwnerAlreadySet,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

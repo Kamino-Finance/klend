@@ -62,6 +62,7 @@ pub fn process<'info>(
                     referrer_token_state_info.key(),
                     borrow_reserve.liquidity.mint_pubkey,
                     obligation.referrer,
+                    ctx.accounts.borrow_reserve.key(),
                 )?;
 
                 add_referrer_fee(

@@ -328,12 +328,15 @@ pub struct FractionDisplay<'a>(&'a Fraction);
 impl Display for FractionDisplay<'_> {
     fn fmt(&self, formater: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let sf = self.0.to_bits();
+
+        const ROUND_COMP: u128 = (1 << Fraction::FRAC_NBITS) / (10_000 * 2);
+        let sf = sf + ROUND_COMP;
+
         let i = sf >> Fraction::FRAC_NBITS;
 
         const FRAC_MASK: u128 = (1 << Fraction::FRAC_NBITS) - 1;
         let f_p = (sf & FRAC_MASK) as u64;
-        const ROUND_COMP: u64 = 1 << 29;
-        let f_p = ((f_p >> 30) * 10_000 + ROUND_COMP) >> 30;
+        let f_p = ((f_p >> 30) * 10_000) >> 30;
         write!(formater, "{i}.{f_p:0>4}")
     }
 }

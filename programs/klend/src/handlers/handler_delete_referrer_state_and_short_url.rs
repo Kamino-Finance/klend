@@ -1,6 +1,6 @@
 use anchor_lang::{prelude::*, Accounts};
 
-use crate::{utils::seeds::BASE_SEED_REFERRER_STATE, ReferrerState, ShortUrl};
+use crate::{utils::seeds::BASE_SEED_REFERRER_STATE, LendingError, ReferrerState, ShortUrl};
 
 pub fn process(_ctx: Context<DeleteReferrerStateAndShortUrl>) -> Result<()> {
     Ok(())
@@ -15,6 +15,7 @@ pub struct DeleteReferrerStateAndShortUrl<'info> {
         seeds = [BASE_SEED_REFERRER_STATE, referrer.key.as_ref()],
         bump,
         has_one = short_url,
+        constraint = referrer_state.load()?.owner == referrer.key() @ LendingError::ReferrerStateOwnerMismatch,
         close = referrer
     )]
     pub referrer_state: AccountLoader<'info, ReferrerState>,

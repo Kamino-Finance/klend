@@ -23,7 +23,7 @@ pub(super) fn get_validated_price(
         unix_timestamp,
     )
     .map_err(|e| {
-        let price_label = std::str::from_utf8(&token_info.name).unwrap_or("CannotDecodeToken");
+        let price_label = token_info.symbol();
         msg!("Price is too old token=[{price_label}]",);
         e
     })?;
@@ -36,7 +36,7 @@ pub(super) fn get_validated_price(
             unix_timestamp,
         )
         .map_err(|e| {
-            let price_label = std::str::from_utf8(&token_info.name).unwrap_or("CannotDecodeToken");
+            let price_label = token_info.symbol();
             msg!("Price twap is too old token=[{price_label}]",);
             e
         })?;
@@ -75,7 +75,7 @@ fn check_twap_in_tolerance(price: Fraction, twap: Fraction, token_info: &TokenIn
     let acceptable_twap_tolerance_bps = token_info.max_twap_divergence_bps;
 
     if !is_within_tolerance(price, twap, acceptable_twap_tolerance_bps) {
-        let token_span = std::str::from_utf8(&token_info.name).unwrap_or("CannotDecodeToken");
+        let token_span = token_info.symbol();
         msg!(
             "Price is too far from TWAP \
               token={token_span} \

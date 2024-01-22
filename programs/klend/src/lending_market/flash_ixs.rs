@@ -24,7 +24,7 @@ pub fn flash_repay_checks(
         instruction_sysvar_account_info: &ctx.accounts.sysvar_info,
     };
     let current_index: usize = instruction_loader.load_current_index()?.into();
-    if instruction_loader.is_cpi_call()? {
+    if instruction_loader.is_flash_forbidden_cpi_call()? {
         msg!("Flash Repay was called via CPI!");
         return err!(LendingError::FlashRepayCpi);
     }
@@ -84,7 +84,7 @@ fn flash_borrow_checks_internal(
     instruction_loader: &impl InstructionLoader,
 ) -> Result<()> {
     let current_index: usize = instruction_loader.load_current_index()?.into();
-    if instruction_loader.is_cpi_call()? {
+    if instruction_loader.is_flash_forbidden_cpi_call()? {
         msg!("Flash Borrow was called via CPI!");
         return err!(LendingError::FlashBorrowCpi);
     }
