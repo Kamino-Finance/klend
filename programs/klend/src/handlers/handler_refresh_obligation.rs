@@ -3,6 +3,7 @@ use anchor_lang::{prelude::*, Accounts};
 use crate::{
     lending_market::lending_operations,
     state::{obligation::Obligation, LendingMarket},
+    utils::FatAccountLoader,
     LendingError, ReferrerTokenState, Reserve,
 };
 
@@ -34,13 +35,15 @@ pub fn process(ctx: Context<RefreshObligation>) -> Result<()> {
         .remaining_accounts
         .iter()
         .take(reserves_count)
-        .map(|account_info| AccountLoader::<Reserve>::try_from(account_info).unwrap());
+        .map(|account_info| FatAccountLoader::<Reserve>::try_from(account_info).unwrap());
 
-    let referrer_token_states_iter = ctx
-        .remaining_accounts
-        .iter()
-        .skip(reserves_count)
-        .map(|account_info| AccountLoader::<ReferrerTokenState>::try_from(account_info).unwrap());
+    let referrer_token_states_iter =
+        ctx.remaining_accounts
+            .iter()
+            .skip(reserves_count)
+            .map(|account_info| {
+                FatAccountLoader::<ReferrerTokenState>::try_from(account_info).unwrap()
+            });
 
     lending_operations::refresh_obligation(
         obligation,

@@ -119,7 +119,17 @@ impl UpdateReserveConfigValue {
     }
 }
 
-#[derive(TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(
+    AnchorSerialize,
+    AnchorDeserialize,
+    TryFromPrimitive,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Debug,
+    EnumString,
+)]
 #[cfg_attr(feature = "serde", derive(EnumIter))]
 #[repr(u64)]
 pub enum UpdateConfigMode {
@@ -164,7 +174,7 @@ pub enum UpdateConfigMode {
     UpdateReserveStatus = 39,
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
 pub enum UpdateLendingMarketConfigValue {
     Bool(bool),
     U8(u8),
@@ -228,6 +238,7 @@ pub enum UpdateLendingMarketMode {
     UpdateMultiplierPoints = 11,
     UpdatePriceRefreshTriggerToMaxAgePct = 12,
     UpdateAutodeleverageEnabled = 13,
+    UpdateBorrowingDisabled = 14,
 }
 
 #[cfg(feature = "serde")]

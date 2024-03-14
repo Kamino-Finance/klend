@@ -1,8 +1,8 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    lending_market::lending_operations, LendingError, LendingMarket, Obligation,
-    ReferrerTokenState, Reserve,
+    lending_market::lending_operations, utils::FatAccountLoader, LendingError, LendingMarket,
+    Obligation, ReferrerTokenState, Reserve,
 };
 
 pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> Result<()> {
@@ -26,13 +26,15 @@ pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> 
         .remaining_accounts
         .iter()
         .take(reserves_count)
-        .map(|account_info| AccountLoader::<Reserve>::try_from(account_info).unwrap());
+        .map(|account_info| FatAccountLoader::<Reserve>::try_from(account_info).unwrap());
 
-    let referrer_token_states_iter = ctx
-        .remaining_accounts
-        .iter()
-        .skip(reserves_count)
-        .map(|account_info| AccountLoader::<ReferrerTokenState>::try_from(account_info).unwrap());
+    let referrer_token_states_iter =
+        ctx.remaining_accounts
+            .iter()
+            .skip(reserves_count)
+            .map(|account_info| {
+                FatAccountLoader::<ReferrerTokenState>::try_from(account_info).unwrap()
+            });
 
     lending_operations::request_elevation_group(
         obligation,

@@ -4,6 +4,7 @@ use anchor_lang::prelude::*;
 
 mod handlers;
 pub mod lending_market;
+
 pub mod state;
 pub mod utils;
 
@@ -78,6 +79,7 @@ pub mod kamino_lending {
         handler_update_reserve_config::process(ctx, mode, &value)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
         handler_refresh_reserve::process(ctx)
     }
@@ -261,11 +263,16 @@ pub mod kamino_lending {
         handler_delete_referrer_state_and_short_url::process(ctx)
     }
 
-    pub fn update_user_metadata_owner(
-        ctx: Context<UpdateUserMetadataOwner>,
-        owner: Pubkey,
+    pub fn idl_missing_types(
+        _ctx: Context<UpdateReserveConfig>,
+        _reserve_farm_kind: ReserveFarmKind,
+        _asset_tier: AssetTier,
+        _fee_calculation: FeeCalculation,
+        _reserve_status: ReserveStatus,
+        _update_config_mode: UpdateConfigMode,
+        _update_lending_market_config_value: UpdateLendingMarketConfigValue,
     ) -> Result<()> {
-        handler_update_user_metadata_owner::process(ctx, owner)
+        unreachable!("This should never be called")
     }
 }
 
@@ -446,6 +453,14 @@ pub enum LendingError {
     ReferrerStateOwnerMismatch,
     #[msg("User metadata owner is already set")]
     UserMetadataOwnerAlreadySet,
+    #[msg("This collateral cannot be liquidated (LTV set to 0)")]
+    CollateralNonLiquidatable,
+    #[msg("Borrowing is disabled")]
+    BorrowingDisabled,
+    #[msg("Cannot borrow above borrow limit")]
+    BorrowLimitExceeded,
+    #[msg("Cannot deposit above deposit limit")]
+    DepositLimitExceeded,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

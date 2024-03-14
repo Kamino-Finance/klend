@@ -26,6 +26,13 @@ macro_rules! try_block {
 }
 
 #[macro_export]
+macro_rules! check_cpi {
+    ($ctx:expr) => {{
+        $crate::utils::check_cpi_call(&$ctx.accounts.instruction_sysvar_account)?;
+    }};
+}
+
+#[macro_export]
 macro_rules! check_refresh_ixs {
     ($ctx:expr, $reserve:ident, $mode:expr) => {{
         let _reserve = $ctx.accounts.$reserve.load()?;

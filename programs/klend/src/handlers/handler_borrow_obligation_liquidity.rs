@@ -11,7 +11,7 @@ use crate::{
     check_refresh_ixs, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{obligation::Obligation, CalculateBorrowResult, LendingMarket, Reserve},
-    utils::{seeds, token_transfer, Fraction},
+    utils::{seeds, token_transfer, FatAccountLoader, Fraction},
     xmsg, LendingError, ReferrerTokenState, ReserveFarmKind,
 };
 
@@ -53,7 +53,7 @@ pub fn process<'info>(
         match &ctx.accounts.referrer_token_state {
             Some(referrer_token_state_info) => {
                 let referrer_token_state_loader =
-                    AccountLoader::<ReferrerTokenState>::try_from(referrer_token_state_info)
+                    FatAccountLoader::<ReferrerTokenState>::try_from(referrer_token_state_info)
                         .unwrap();
                 let referrer_token_state = &mut referrer_token_state_loader.load_mut()?;
 

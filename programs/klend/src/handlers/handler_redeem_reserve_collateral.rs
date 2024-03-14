@@ -1,14 +1,19 @@
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::{
-    gen_signer_seeds,
+    check_cpi, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, RedeemReserveCollateralAccounts, Reserve},
     utils::{seeds, token_transfer},
 };
 
 pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) -> Result<()> {
+    check_cpi!(ctx);
     lending_checks::redeem_reserve_collateral_checks(&RedeemReserveCollateralAccounts {
         user_source_collateral: ctx.accounts.user_source_collateral.clone(),
         user_destination_liquidity: ctx.accounts.user_destination_liquidity.clone(),
@@ -23,19 +28,15 @@ pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) ->
 
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
 
     let lending_market_key = ctx.accounts.lending_market.key();
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
-    lending_operations::refresh_reserve_interest(
-        reserve,
-        clock.slot,
-        lending_market.referral_fee_bps,
-    )?;
+    lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
     let withdraw_liquidity_amount =
-        lending_operations::redeem_reserve_collateral(reserve, collateral_amount, clock, true)?;
+        lending_operations::redeem_reserve_collateral(reserve, collateral_amount, &clock, true)?;
 
     msg!(
         "pnl: Redeeming reserve collateral {}",
@@ -93,4 +94,7 @@ pub struct RedeemReserveCollateral<'info> {
     pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

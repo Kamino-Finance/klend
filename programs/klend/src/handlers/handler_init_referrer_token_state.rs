@@ -8,7 +8,7 @@ use crate::{
 pub fn process(ctx: Context<InitReferrerTokenState>, referrer: Pubkey) -> Result<()> {
     let mut referrer_token_state = ctx.accounts.referrer_token_state.load_init()?;
     let reserve = ctx.accounts.reserve.load()?;
-    let bump = *ctx.bumps.get("referrer_token_state").unwrap();
+    let bump = ctx.bumps.referrer_token_state;
 
     *referrer_token_state = ReferrerTokenState {
         referrer,

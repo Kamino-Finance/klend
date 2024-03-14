@@ -6,7 +6,7 @@ use crate::{
     fraction::FractionExtra,
     lending_market::{farms_ixs, lending_checks},
     state::{obligation::Obligation, LendingMarket},
-    utils::{constraints, seeds, Fraction},
+    utils::{constraints, seeds, FatAccountLoader, Fraction},
     LendingError, Reserve, ReserveFarmKind,
 };
 
@@ -33,8 +33,8 @@ pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Resu
         if ctx.accounts.obligation.data_is_empty() {
             (0, 0, 0, 0)
         } else {
-            let obligation_account: AccountLoader<Obligation> =
-                AccountLoader::try_from(&ctx.accounts.obligation).unwrap();
+            let obligation_account: FatAccountLoader<Obligation> =
+                FatAccountLoader::try_from(&ctx.accounts.obligation).unwrap();
             let obligation = obligation_account.load()?;
 
             let amount = amount_for_obligation(&obligation, &reserve_address, farm_kind);

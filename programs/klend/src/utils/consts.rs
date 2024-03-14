@@ -1,6 +1,5 @@
 use anchor_lang::solana_program;
-use solana_program::pubkey::Pubkey;
-use static_pubkey::static_pubkey;
+use solana_program::{pubkey, pubkey::Pubkey};
 
 use crate::utils::fraction::{fraction, Fraction};
 
@@ -91,19 +90,19 @@ pub fn ten_pow(x: usize) -> u64 {
 }
 
 pub const SQUADS_PROGRAM_ID_V3_MAINNET_PROD: Pubkey =
-    static_pubkey!("SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu");
+    pubkey!("SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu");
 
 pub const SQUADS_PROGRAM_ID_V3_MAINNET_DEV: Pubkey =
-    static_pubkey!("84Ue9gKQUsStFJQCNQpsqvbceo7fKYSSCCMXxMZ5PkiW");
+    pubkey!("84Ue9gKQUsStFJQCNQpsqvbceo7fKYSSCCMXxMZ5PkiW");
 
 pub const SQUADS_PROGRAM_ID_V4_MAINNET_PROD: Pubkey =
-    static_pubkey!("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf");
+    pubkey!("SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf");
 
 pub const SQUADS_PROGRAM_ID_V4_MAINNET_DEV: Pubkey =
-    static_pubkey!("STAG3xkFMyVK3sRtQhipsKuLpRGbgospDpVdNyJqDpS");
+    pubkey!("STAG3xkFMyVK3sRtQhipsKuLpRGbgospDpVdNyJqDpS");
 
 pub const FLEX_LEND_ID_MAINNET_PROD: Pubkey =
-    static_pubkey!("FL3X2pRsQ9zHENpZSKDRREtccwJuei8yg9fwDu9UN69Q");
+    pubkey!("FL3X2pRsQ9zHENpZSKDRREtccwJuei8yg9fwDu9UN69Q");
 
 pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 5] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),

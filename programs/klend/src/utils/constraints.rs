@@ -1,7 +1,7 @@
 use anchor_lang::{
     err,
     prelude::{AccountLoader, Context},
-    Result,
+    Bumps, Result,
 };
 
 use crate::{state::LendingMarket, LendingError};
@@ -13,7 +13,10 @@ pub fn emergency_mode_disabled(lending_market: &AccountLoader<LendingMarket>) ->
     Ok(())
 }
 
-pub fn check_remaining_accounts<T>(ctx: &Context<T>) -> Result<()> {
+pub fn check_remaining_accounts<T>(ctx: &Context<T>) -> Result<()>
+where
+    T: Bumps,
+{
     if !ctx.remaining_accounts.is_empty() {
         return err!(LendingError::InvalidAccountInput);
     }

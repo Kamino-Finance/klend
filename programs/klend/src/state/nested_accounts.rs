@@ -22,7 +22,6 @@ pub struct DepositObligationCollateralAccounts<'info> {
     pub reserve_destination_collateral: Box<Account<'info, TokenAccount>>,
     pub deposit_reserve: AccountLoader<'info, Reserve>,
     pub obligation: AccountLoader<'info, Obligation>,
-    pub lending_market: AccountLoader<'info, LendingMarket>,
     pub obligation_owner: Signer<'info>,
     pub token_program: Program<'info, Token>,
 }

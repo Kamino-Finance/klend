@@ -39,9 +39,8 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub autodeleverage_enabled: u8,
 
-    #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
-    #[derivative(Debug = "ignore")]
-    pub reserved: [u8; 1],
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub borrow_disabled: u8,
 
     pub price_refresh_trigger_to_max_age_pct: u8,
 
@@ -103,9 +102,9 @@ impl Default for LendingMarket {
             referral_fee_bps: 0,
             price_refresh_trigger_to_max_age_pct: 0,
             elevation_groups: [ElevationGroup::default(); 32],
+            borrow_disabled: 0,
             elevation_group_padding: [0; 90],
             padding1: [0; 180],
-            reserved: [0; 1],
         }
     }
 }
@@ -142,6 +141,10 @@ impl LendingMarket {
         self.elevation_groups[elevation_group.id as usize - 1] = elevation_group;
 
         Ok(())
+    }
+
+    pub fn is_borrowing_disabled(&self) -> bool {
+        self.borrow_disabled != false as u8
     }
 }
 

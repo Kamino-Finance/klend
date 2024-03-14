@@ -40,7 +40,6 @@ pub fn process(
         deposit_reserve: ctx.accounts.reserve.clone(),
         reserve_destination_collateral: ctx.accounts.reserve_destination_deposit_collateral.clone(),
         user_source_collateral: ctx.accounts.user_destination_collateral.clone(),
-        lending_market: ctx.accounts.lending_market.clone(),
         obligation_owner: ctx.accounts.owner.clone(),
         token_program: ctx.accounts.token_program.clone(),
     })?;
@@ -50,24 +49,16 @@ pub fn process(
 
     let lending_market = &ctx.accounts.lending_market.load()?;
     let lending_market_key = ctx.accounts.lending_market.key();
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
 
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
 
-    lending_operations::refresh_reserve_interest(
-        reserve,
-        clock.slot,
-        lending_market.referral_fee_bps,
-    )?;
     let collateral_amount =
-        lending_operations::deposit_reserve_liquidity(reserve, clock, liquidity_amount)?;
+        lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
 
-    lending_operations::refresh_reserve_interest(
-        reserve,
-        clock.slot,
-        lending_market.referral_fee_bps,
-    )?;
+    lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
+
     lending_operations::deposit_obligation_collateral(
         reserve,
         obligation,

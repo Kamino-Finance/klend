@@ -1,11 +1,12 @@
-use anchor_lang::{prelude::*, AnchorDeserialize, AnchorSerialize};
+use anchor_lang::prelude::*;
+use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::{FractionExtra, FULL_BPS};
 use crate::{utils::Fraction, LendingError};
 
 pub const MAX_UTILIZATION_RATE_BPS: u32 = FULL_BPS as u32;
 
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq)]
 #[zero_copy]
 #[repr(C)]
 pub struct BorrowRateCurve {
@@ -59,7 +60,7 @@ pub struct CurveSegment {
     pub start_point: CurvePoint,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, Default, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[zero_copy]

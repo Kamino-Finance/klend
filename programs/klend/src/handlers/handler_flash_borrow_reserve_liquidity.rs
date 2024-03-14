@@ -11,20 +11,20 @@ use crate::{
 
 pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64) -> Result<()> {
     lending_checks::flash_borrow_reserve_liquidity_checks(&ctx)?;
-    let clock = Clock::get()?;
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
     let lending_market_key = ctx.accounts.lending_market.key();
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
 
-    lending_operations::refresh_reserve_interest(
+    flash_ixs::flash_borrow_checks(&ctx, liquidity_amount)?;
+
+    lending_operations::refresh_reserve(
         reserve,
-        clock.slot,
+        &Clock::get()?,
+        None,
         lending_market.referral_fee_bps,
     )?;
-
-    flash_ixs::flash_borrow_checks(&ctx, liquidity_amount)?;
 
     lending_operations::flash_borrow_reserve_liquidity(reserve, liquidity_amount)?;
 
