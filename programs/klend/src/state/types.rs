@@ -1,4 +1,4 @@
-use crate::utils::Fraction;
+use crate::{utils::Fraction, PriceStatusFlags};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalculateBorrowResult {
     pub borrow_amount_f: Fraction,
@@ -48,9 +48,11 @@ pub struct RefreshObligationDepositsResult {
     pub deposited_value_f: Fraction,
     pub allowed_borrow_value_f: Fraction,
     pub unhealthy_borrow_value_f: Fraction,
+    pub prices_state: PriceStatusFlags,
 }
 
 pub struct RefreshObligationBorrowsResult {
     pub borrow_factor_adjusted_debt_value_f: Fraction,
     pub borrowed_assets_market_value_f: Fraction,
+    pub prices_state: PriceStatusFlags,
 }

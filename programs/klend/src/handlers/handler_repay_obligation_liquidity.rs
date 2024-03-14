@@ -7,7 +7,7 @@ use anchor_spl::token::{Token, TokenAccount};
 
 use crate::{
     check_refresh_ixs,
-    lending_market::{lending_checks, refresh_reserve_interest, repay_obligation_liquidity},
+    lending_market::{lending_checks, repay_obligation_liquidity},
     state::{obligation::Obligation, LendingMarket, Reserve},
     utils::repay_obligation_liquidity_transfer,
     xmsg, ReserveFarmKind,
@@ -17,17 +17,15 @@ pub fn process(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) ->
     check_refresh_ixs!(ctx, repay_reserve, ReserveFarmKind::Debt);
     lending_checks::repay_obligation_liquidity_checks(&ctx)?;
 
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
 
     let repay_reserve = &mut ctx.accounts.repay_reserve.load_mut()?;
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
-    let lending_market = &ctx.accounts.lending_market.load()?;
 
-    refresh_reserve_interest(repay_reserve, clock.slot, lending_market.referral_fee_bps)?;
     let repay_amount = repay_obligation_liquidity(
         repay_reserve,
         obligation,
-        clock,
+        &clock,
         liquidity_amount,
         ctx.accounts.repay_reserve.key(),
     )?;
@@ -54,7 +52,8 @@ pub struct RepayObligationLiquidity<'info> {
     pub owner: Signer<'info>,
 
     #[account(mut,
-        has_one = lending_market
+        has_one = lending_market,
+        constraint = obligation.load()?.lending_market == repay_reserve.load()?.lending_market
     )]
     pub obligation: AccountLoader<'info, Obligation>,
 

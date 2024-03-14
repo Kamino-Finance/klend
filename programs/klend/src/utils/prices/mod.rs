@@ -12,11 +12,18 @@ use self::{
     checks::get_validated_price, pyth::get_pyth_price_and_twap, scope::get_scope_price_and_twap,
     switchboard::get_switchboard_price_and_twap, types::TimestampedPriceWithTwap,
 };
-use crate::{utils::Fraction, LendingError, TokenInfo};
+use crate::{utils::Fraction, LendingError, PriceStatusFlags, TokenInfo};
 
 const MAX_CONFIDENCE_PERCENTAGE: u64 = 2u64;
 
 const CONFIDENCE_FACTOR: u64 = 100 / MAX_CONFIDENCE_PERCENTAGE;
+
+#[derive(Debug, Clone)]
+pub struct GetPriceResult {
+    pub price: Fraction,
+    pub timestamp: u64,
+    pub status: PriceStatusFlags,
+}
 
 pub fn get_price(
     token_info: &TokenInfo,
@@ -25,7 +32,7 @@ pub fn get_price(
     switchboard_price_twap_info: Option<&AccountInfo>,
     scope_prices_info: Option<&AccountInfo>,
     unix_timestamp: clock::UnixTimestamp,
-) -> Result<(Fraction, u64)> {
+) -> Result<Option<GetPriceResult>> {
     let price = get_most_recent_price_and_twap(
         token_info,
         pyth_price_account_info,
@@ -34,7 +41,7 @@ pub fn get_price(
         scope_prices_info,
     )?;
 
-    get_validated_price(price, token_info, unix_timestamp)
+    Ok(get_validated_price(price, token_info, unix_timestamp))
 }
 
 fn get_most_recent_price_and_twap(

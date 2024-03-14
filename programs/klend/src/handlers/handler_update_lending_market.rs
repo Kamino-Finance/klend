@@ -4,7 +4,9 @@ use crate::{
     borsh::BorshDeserialize,
     fraction::FractionExtra,
     state::{lending_market::ElevationGroup, LendingMarket, UpdateLendingMarketMode},
-    utils::{Fraction, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
+    utils::{
+        validate_numerical_bool, Fraction, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS,
+    },
     LendingError, VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE,
 };
 
@@ -158,6 +160,13 @@ pub fn process(
                 );
                 return err!(LendingError::InvalidFlag);
             }
+        }
+        UpdateLendingMarketMode::UpdateBorrowingDisabled => {
+            let borrow_disabled = value[0];
+            msg!("Prev Value is {:?}", market.borrow_disabled);
+            msg!("New Value is {:?}", borrow_disabled);
+            validate_numerical_bool(borrow_disabled)?;
+            market.borrow_disabled = borrow_disabled;
         }
     }
 

@@ -3,13 +3,13 @@ use anchor_lang::{
     prelude::{msg, AccountInfo},
     Result,
 };
-use switchboard_v2::AggregatorAccountData;
+use switchboard_itf::accounts::AggregatorAccountData;
 
 use super::{utils::price_to_fraction, CONFIDENCE_FACTOR};
 use crate::{
     utils::{
         prices::types::{TimestampedPrice, TimestampedPriceWithTwap},
-        NULL_PUBKEY,
+        FatAccountLoader, NULL_PUBKEY,
     },
     LendingError,
 };
@@ -30,11 +30,14 @@ fn get_switchboard_price(switchboard_feed_info: &AccountInfo) -> Result<Timestam
     if *switchboard_feed_info.key == NULL_PUBKEY {
         return err!(LendingError::NoPriceFound);
     }
-    let switchboard_data = &switchboard_feed_info.try_borrow_data()?;
-    let feed = AggregatorAccountData::new_from_bytes(switchboard_data)?;
+    let feed_acc: FatAccountLoader<'_, AggregatorAccountData> =
+        FatAccountLoader::try_from(switchboard_feed_info)?;
+    let feed = feed_acc.load()?;
     let timestamp = u64::try_from(feed.latest_confirmed_round.round_open_timestamp).unwrap();
 
-    let price_switchboard_desc = feed.get_result()?;
+    let price_switchboard_desc = feed
+        .get_result()
+        .ok_or(error!(LendingError::SwitchboardV2Error))?;
 
     if price_switchboard_desc.mantissa <= 0 {
         msg!("Switchboard oracle price is negative which is not allowed");

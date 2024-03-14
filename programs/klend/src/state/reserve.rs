@@ -7,8 +7,9 @@ use anchor_lang::{
     account, err,
     prelude::{msg, Pubkey, *},
     solana_program::clock::Slot,
-    AnchorDeserialize, AnchorSerialize, Result,
+    Result,
 };
+use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "serde")]
@@ -101,7 +102,17 @@ impl Default for Reserve {
     }
 }
 
-#[derive(TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug, strum::EnumIter)]
+#[derive(
+    AnchorSerialize,
+    AnchorDeserialize,
+    TryFromPrimitive,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Debug,
+    strum::EnumIter,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[repr(u8)]
 pub enum ReserveFarmKind {
@@ -679,7 +690,7 @@ pub struct NewReserveCollateralParams {
 
 static_assertions::const_assert_eq!(RESERVE_CONFIG_SIZE, std::mem::size_of::<ReserveConfig>());
 static_assertions::const_assert_eq!(0, std::mem::size_of::<ReserveConfig>() % 8);
-#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Derivative, Default)]
+#[derive(BorshDeserialize, BorshSerialize, PartialEq, Eq, Derivative, Default)]
 #[derivative(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -737,14 +748,24 @@ impl ReserveConfig {
 }
 
 #[repr(u8)]
-#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(
+    AnchorSerialize,
+    AnchorDeserialize,
+    TryFromPrimitive,
+    IntoPrimitive,
+    PartialEq,
+    Eq,
+    Debug,
+    Clone,
+    Copy,
+)]
 pub enum ReserveStatus {
     Active = 0,
     Obsolete = 1,
     Hidden = 2,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Default, Debug)]
+#[derive(BorshDeserialize, BorshSerialize, PartialEq, Eq, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[zero_copy]
@@ -756,7 +777,7 @@ pub struct WithdrawalCaps {
     pub config_interval_length_seconds: u64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Default, PartialEq, Eq, Derivative)]
+#[derive(BorshDeserialize, BorshSerialize, Default, PartialEq, Eq, Derivative)]
 #[derivative(Debug)]
 #[zero_copy]
 #[repr(C)]
@@ -833,14 +854,34 @@ mod serde_reserve_fees {
                                 if flash_loan_fee_f.is_some() {
                                     return Err(de::Error::duplicate_field("flash_loan_fee"));
                                 }
-                                flash_loan_fee_f = Some(map.next_value()?);
+
+                                let flash_loan_fee_str: Option<String> = map.next_value()?;
+                                match flash_loan_fee_str.as_deref() {
+                                    Some("disabled") => {
+                                        flash_loan_fee_f = None;
+                                    }
+                                    Some(x) => {
+                                        flash_loan_fee_f =
+                                            Some(Fraction::from_str(x).map_err(|_| {
+                                                de::Error::custom(
+                                                    "flash_loan_fee must be a fraction",
+                                                )
+                                            })?);
+                                    }
+                                    None => {
+                                        return Err(de::Error::custom(
+                                            "flash_loan_fee must be a fraction or 'disabled'",
+                                        ));
+                                    }
+                                }
                             }
                         }
                     }
+
                     let borrow_fee_f =
                         borrow_fee_f.ok_or_else(|| de::Error::missing_field("borrow_fee"))?;
-                    let flash_loan_fee_f = flash_loan_fee_f
-                        .ok_or_else(|| de::Error::missing_field("flash_loan_fee"))?;
+                    let flash_loan_fee_f =
+                        flash_loan_fee_f.unwrap_or(Fraction::from_bits(u64::MAX.into()));
                     Ok(ReserveFees {
                         borrow_fee_sf: u64::try_from(borrow_fee_f.to_bits())
                             .map_err(|_| de::Error::custom("borrow_fee does not fit in u64"))?,
@@ -864,15 +905,20 @@ mod serde_reserve_fees {
             #[derive(serde::Serialize)]
             struct ReserveFeesSerde {
                 borrow_fee: Fraction,
-                flash_loan_fee: Fraction,
+                flash_loan_fee: String,
             }
 
             let borrow_fee_f = Fraction::from_bits(self.borrow_fee_sf.into());
-            let flash_loan_fee_f = Fraction::from_bits(self.flash_loan_fee_sf.into());
+
+            let flash_loan_fee = if self.flash_loan_fee_sf == u64::MAX {
+                "disabled".to_string()
+            } else {
+                Fraction::from_bits(self.flash_loan_fee_sf.into()).to_string()
+            };
 
             let fees = ReserveFeesSerde {
                 borrow_fee: borrow_fee_f,
-                flash_loan_fee: flash_loan_fee_f,
+                flash_loan_fee,
             };
             fees.serialize(serializer)
         }
@@ -955,12 +1001,21 @@ impl ReserveFees {
     }
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq)]
 pub enum FeeCalculation {
     Exclusive,
     Inclusive,
 }
 
-#[derive(Debug, PartialEq, Eq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
+#[derive(
+    AnchorSerialize,
+    AnchorDeserialize,
+    Debug,
+    PartialEq,
+    Eq,
+    num_enum::IntoPrimitive,
+    num_enum::TryFromPrimitive,
+)]
 #[repr(u8)]
 pub enum AssetTier {
     Regular = 0,

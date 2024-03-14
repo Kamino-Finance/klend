@@ -21,7 +21,7 @@ pub fn process(ctx: Context<UpdateReserveConfig>, mode: u64, value: &[u8]) -> Re
     );
 
     let clock = Clock::get()?;
-    lending_operations::refresh_reserve_interest(reserve, clock.slot, market.referral_fee_bps)?;
+    lending_operations::refresh_reserve(reserve, &clock, None, market.referral_fee_bps)?;
 
     lending_operations::update_reserve_config(reserve, mode, value);
 

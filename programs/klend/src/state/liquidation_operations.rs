@@ -288,7 +288,7 @@ fn calculate_liquidation_amounts(
             let withdraw_amount = if is_below_min_full_liquidation_value_threshold
                 && withdraw_amount_f < BANKRUPTCY_THRESHOLD
             {
-                collateral.deposited_amount
+                BANKRUPTCY_THRESHOLD
             } else {
                 withdraw_amount_f.to_floor()
             };

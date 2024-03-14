@@ -1,6 +1,7 @@
 use std::fmt::Formatter;
 
-use anchor_lang::{prelude::*, AnchorDeserialize, AnchorSerialize};
+use anchor_lang::prelude::*;
+use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "serde")]
 use serde;
 
@@ -8,7 +9,7 @@ use serde;
 use super::serde_string;
 use crate::{utils::NULL_PUBKEY, LendingError};
 
-#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Default)]
+#[derive(BorshDeserialize, BorshSerialize, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[zero_copy]
@@ -158,7 +159,7 @@ impl TokenInfo {
     }
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq, Default)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[zero_copy]
@@ -169,7 +170,7 @@ pub struct PriceHeuristic {
     pub exp: u64,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[zero_copy]
@@ -208,7 +209,7 @@ impl ScopeConfiguration {
     }
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq, Default)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[zero_copy]
@@ -230,7 +231,7 @@ impl SwitchboardConfiguration {
     }
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq, Default)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[zero_copy]
 #[repr(transparent)]

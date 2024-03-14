@@ -10,7 +10,7 @@ use crate::{
         LendingMarket, Reserve, ReserveConfig,
     },
     utils::seeds,
-    LendingError,
+    LendingError, ReserveStatus,
 };
 
 pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Result<()> {
@@ -31,7 +31,10 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
             mint_pubkey: ctx.accounts.reserve_collateral_mint.key(),
             supply_vault: ctx.accounts.reserve_collateral_supply.key(),
         })),
-        config: Box::<ReserveConfig>::default(),
+        config: Box::new(ReserveConfig {
+            status: ReserveStatus::Hidden.into(),
+            ..Default::default()
+        }),
     });
 
     Ok(())

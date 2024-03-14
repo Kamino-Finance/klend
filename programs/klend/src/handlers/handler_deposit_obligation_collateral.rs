@@ -20,22 +20,23 @@ pub fn process(ctx: Context<DepositObligationCollateral>, collateral_amount: u64
         deposit_reserve: ctx.accounts.deposit_reserve.clone(),
         reserve_destination_collateral: ctx.accounts.reserve_destination_collateral.clone(),
         user_source_collateral: ctx.accounts.user_source_collateral.clone(),
-        lending_market: ctx.accounts.lending_market.clone(),
         obligation_owner: ctx.accounts.owner.clone(),
         token_program: ctx.accounts.token_program.clone(),
     })?;
 
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
 
+    let lending_market = &ctx.accounts.lending_market.load()?;
     let deposit_reserve = &mut ctx.accounts.deposit_reserve.load_mut()?;
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
-    let lending_market = &ctx.accounts.lending_market.load()?;
 
-    lending_operations::refresh_reserve_interest(
+    lending_operations::refresh_reserve(
         deposit_reserve,
-        clock.slot,
+        &clock,
+        None,
         lending_market.referral_fee_bps,
     )?;
+
     lending_operations::deposit_obligation_collateral(
         deposit_reserve,
         obligation,
@@ -67,8 +68,8 @@ pub struct DepositObligationCollateral<'info> {
     pub owner: Signer<'info>,
 
     #[account(mut,
+        has_one = owner,
         has_one = lending_market,
-        has_one = owner
     )]
     pub obligation: AccountLoader<'info, Obligation>,
 

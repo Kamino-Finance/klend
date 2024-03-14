@@ -20,7 +20,11 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
         LendingError::ReserveDeprecated
     );
 
-    if lending_operations::is_price_refresh_needed(reserve, lending_market, clock.unix_timestamp) {
+    let price_res = if lending_operations::is_price_refresh_needed(
+        reserve,
+        lending_market,
+        clock.unix_timestamp,
+    ) {
         reserve.config.token_info.validate_token_info_config(
             &ctx.accounts.pyth_oracle,
             &ctx.accounts.switchboard_price_oracle,
@@ -28,21 +32,22 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
             &ctx.accounts.scope_prices,
         )?;
 
-        let (price, price_timestamp) = get_price(
+        get_price(
             &reserve.config.token_info,
             ctx.accounts.pyth_oracle.as_ref(),
             ctx.accounts.switchboard_price_oracle.as_ref(),
             ctx.accounts.switchboard_twap_oracle.as_ref(),
             ctx.accounts.scope_prices.as_ref(),
             clock.unix_timestamp,
-        )?;
+        )?
+    } else {
+        None
+    };
 
-        lending_operations::refresh_reserve_price(reserve, price, price_timestamp)?;
-    }
-
-    lending_operations::refresh_reserve_interest(
+    lending_operations::refresh_reserve(
         reserve,
-        clock.slot,
+        clock,
+        price_res,
         lending_market.referral_fee_bps,
     )?;
     lending_operations::refresh_reserve_limit_timestamps(reserve, clock.slot)?;

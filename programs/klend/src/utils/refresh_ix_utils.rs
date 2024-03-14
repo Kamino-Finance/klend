@@ -32,6 +32,20 @@ impl RequiredIx {
     }
 }
 
+pub fn check_cpi_call(instruction_sysvar_account_info: &AccountInfo) -> Result<()> {
+    let ix_loader = BpfInstructionLoader {
+        instruction_sysvar_account_info,
+    };
+
+    #[cfg(not(feature = "staging"))]
+    if ix_loader.is_forbidden_cpi_call()? {
+        msg!("Instruction was called via CPI!");
+        return err!(LendingError::CpiDisabled);
+    }
+
+    Ok(())
+}
+
 pub fn check_refresh(
     instruction_sysvar_account_info: &AccountInfo,
     reserves: &[(Pubkey, &Reserve)],
@@ -70,7 +84,7 @@ pub fn check_refresh(
                         i,
                         required_ix
                     );
-                    LendingError::IncorrectInstructionInPosition
+                    error!(LendingError::IncorrectInstructionInPosition)
                 })?,
             };
 

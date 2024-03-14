@@ -14,14 +14,12 @@ use crate::{
 pub fn process(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
     check_refresh_ixs!(ctx, reserve, ReserveFarmKind::Debt);
 
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
 
     let repay_reserve = &mut ctx.accounts.reserve.load_mut()?;
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
-    let lending_market = &ctx.accounts.lending_market.load()?;
 
     lending_operations::socialize_loss(
-        lending_market,
         repay_reserve,
         &ctx.accounts.reserve.key(),
         obligation,

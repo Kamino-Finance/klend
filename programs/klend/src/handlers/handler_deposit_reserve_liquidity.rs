@@ -1,14 +1,20 @@
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 use anchor_spl::token::{Mint, Token, TokenAccount};
+use lending_operations::refresh_reserve;
 
 use crate::{
-    gen_signer_seeds,
+    check_cpi, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{seeds, token_transfer},
 };
 
 pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> Result<()> {
+    check_cpi!(ctx);
     lending_checks::deposit_reserve_liquidity_checks(
         &crate::state::nested_accounts::DepositReserveLiquidityAccounts {
             lending_market: ctx.accounts.lending_market.clone(),
@@ -23,7 +29,7 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
         },
     )?;
 
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
 
@@ -31,13 +37,10 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
-    lending_operations::refresh_reserve_interest(
-        reserve,
-        clock.slot,
-        lending_market.referral_fee_bps,
-    )?;
+    refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
+
     let collateral_amount =
-        lending_operations::deposit_reserve_liquidity(reserve, clock, liquidity_amount)?;
+        lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
 
     msg!(
         "pnl: Depositing in reserve {:?} liquidity {}",
@@ -93,4 +96,7 @@ pub struct DepositReserveLiquidity<'info> {
     pub user_destination_collateral: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

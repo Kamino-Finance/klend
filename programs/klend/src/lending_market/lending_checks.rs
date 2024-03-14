@@ -1,6 +1,6 @@
 use anchor_lang::{
     err,
-    prelude::{msg, AccountLoader, Context, Pubkey},
+    prelude::{msg, Context, Pubkey},
     Key, Result,
 };
 
@@ -10,7 +10,7 @@ use crate::{
         DepositObligationCollateralAccounts, RedeemReserveCollateralAccounts,
         WithdrawObligationCollateralAccounts,
     },
-    utils::{seeds::BASE_SEED_REFERRER_TOKEN_STATE, PROGRAM_VERSION},
+    utils::{seeds::BASE_SEED_REFERRER_TOKEN_STATE, FatAccountLoader, PROGRAM_VERSION},
     LendingError, Obligation, ReferrerTokenState, ReserveStatus,
 };
 
@@ -227,8 +227,8 @@ pub fn refresh_obligation_farms_for_reserve_checks(
     ctx: &Context<RefreshObligationFarmsForReserve>,
 ) -> Result<()> {
     if !ctx.accounts.obligation.data_is_empty() {
-        let obligation_account: AccountLoader<Obligation> =
-            AccountLoader::try_from(&ctx.accounts.obligation).unwrap();
+        let obligation_account: FatAccountLoader<Obligation> =
+            FatAccountLoader::try_from(&ctx.accounts.obligation).unwrap();
         let obligation = obligation_account.load()?;
 
         if obligation.lending_market != ctx.accounts.lending_market.key() {

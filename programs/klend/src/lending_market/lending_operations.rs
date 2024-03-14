@@ -16,7 +16,7 @@ use solana_program::clock::{self, Clock};
 use self::utils::{
     calculate_obligation_collateral_market_value, calculate_obligation_liquidity_market_value,
     check_elevation_group_borrowing_enabled, check_obligation_collateral_deposit_reserve,
-    check_obligation_liquidity_borrow_reserve, check_obligation_refreshed_and_not_null,
+    check_obligation_fully_refreshed_and_not_null, check_obligation_liquidity_borrow_reserve,
     check_same_elevation_group, get_elevation_group, get_max_ltv_and_liquidation_threshold,
     validate_obligation_asset_tiers,
 };
@@ -33,29 +33,51 @@ use crate::{
     },
     utils::{
         borrow_rate_curve::BorrowRateCurve, AnyAccountLoader, BigFraction, Fraction,
-        ELEVATION_GROUP_NONE, PROGRAM_VERSION,
+        GetPriceResult, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
     xmsg, AssetTier, LendingError, LendingMarket, LiquidateAndRedeemResult,
-    LiquidateObligationResult, ReferrerTokenState, RefreshObligationBorrowsResult,
-    RefreshObligationDepositsResult, ReserveConfig, ReserveStatus, UpdateConfigMode,
+    LiquidateObligationResult, PriceStatusFlags, ReferrerTokenState,
+    RefreshObligationBorrowsResult, RefreshObligationDepositsResult, ReserveConfig, ReserveStatus,
+    UpdateConfigMode,
 };
 
-pub fn refresh_reserve_interest(
+pub fn refresh_reserve(
     reserve: &mut Reserve,
-    slot: Slot,
+    clock: &Clock,
+    price: Option<GetPriceResult>,
     referral_fee_bps: u16,
 ) -> Result<()> {
+    let slot = clock.slot;
+
     reserve.accrue_interest(slot, referral_fee_bps)?;
-    reserve.last_update.update_slot(slot);
+
+    let price_status = if let Some(GetPriceResult {
+        price,
+        status,
+        timestamp,
+    }) = price
+    {
+        reserve.liquidity.market_price_sf = price.to_bits();
+        reserve.liquidity.market_price_last_updated_ts = timestamp;
+
+        Some(status)
+    } else if !is_saved_price_age_valid(reserve, clock.unix_timestamp) {
+        Some(PriceStatusFlags::empty())
+    } else {
+        None
+    };
+
+    reserve.last_update.update_slot(slot, price_status);
 
     Ok(())
 }
 
-pub fn refresh_reserve_price(reserve: &mut Reserve, price: Fraction, timestamp: u64) -> Result<()> {
-    reserve.liquidity.market_price_sf = price.to_bits();
-    reserve.liquidity.market_price_last_updated_ts = timestamp;
+pub fn is_saved_price_age_valid(reserve: &Reserve, current_ts: clock::UnixTimestamp) -> bool {
+    let current_ts: u64 = current_ts.try_into().expect("Negative timestamp");
+    let price_last_updated_ts = reserve.liquidity.market_price_last_updated_ts;
+    let price_max_age = reserve.config.token_info.max_age_price_seconds;
 
-    Ok(())
+    current_ts.saturating_sub(price_last_updated_ts) < price_max_age
 }
 
 pub fn is_price_refresh_needed(
@@ -90,7 +112,10 @@ pub fn deposit_reserve_liquidity(
         return err!(LendingError::InvalidAmount);
     }
 
-    if reserve.last_update.is_stale(clock.slot)? {
+    if reserve
+        .last_update
+        .is_stale(clock.slot, PriceStatusFlags::NONE)?
+    {
         msg!("Reserve is stale and must be refreshed in the current slot");
         return err!(LendingError::ReserveStale);
     }
@@ -107,7 +132,7 @@ pub fn deposit_reserve_liquidity(
             new_reserve_liquidity_supply_f,
             reserve.config.deposit_limit
         );
-        return err!(LendingError::InvalidAmount);
+        return err!(LendingError::DepositLimitExceeded);
     }
 
     sub_from_withdrawal_accum(
@@ -117,6 +142,7 @@ pub fn deposit_reserve_liquidity(
     )?;
 
     let collateral_amount = reserve.deposit_liquidity(liquidity_amount)?;
+
     reserve.last_update.mark_stale();
 
     Ok(collateral_amount)
@@ -135,9 +161,20 @@ pub fn borrow_obligation_liquidity(
         return err!(LendingError::InvalidAmount);
     }
 
-    if borrow_reserve.last_update.is_stale(clock.slot)? {
-        msg!("Borrow reserve is stale and must be refreshed in the current slot");
+    if borrow_reserve
+        .last_update
+        .is_stale(clock.slot, PriceStatusFlags::ALL_CHECKS)?
+    {
+        msg!(
+            "Borrow reserve is stale and must be refreshed in the current slot, price_status: {:08b}",
+            borrow_reserve.last_update.get_price_status().0
+        );
         return err!(LendingError::ReserveStale);
+    }
+
+    if lending_market.is_borrowing_disabled() {
+        msg!("Borrowing is disabled");
+        return err!(LendingError::BorrowingDisabled);
     }
 
     let reserve_liquidity_borrowed_f = borrow_reserve.liquidity.total_borrow();
@@ -151,9 +188,9 @@ pub fn borrow_obligation_liquidity(
             new_borrowed_amount_f.to_display(),
             borrow_reserve.config.borrow_limit
         );
-        return err!(LendingError::InvalidAmount);
+        return err!(LendingError::BorrowLimitExceeded);
     }
-    check_obligation_refreshed_and_not_null(obligation, clock.slot)?;
+    check_obligation_fully_refreshed_and_not_null(obligation, clock.slot)?;
 
     let remaining_borrow_value = obligation.remaining_borrow_value();
     if remaining_borrow_value == Fraction::ZERO {
@@ -229,7 +266,10 @@ pub fn deposit_obligation_collateral(
         return err!(LendingError::InvalidAmount);
     }
 
-    if deposit_reserve.last_update.is_stale(slot)? {
+    if deposit_reserve
+        .last_update
+        .is_stale(slot, PriceStatusFlags::NONE)?
+    {
         msg!("Deposit reserve is stale and must be refreshed in the current slot");
         return err!(LendingError::ReserveStale);
     }
@@ -263,13 +303,33 @@ pub fn withdraw_obligation_collateral(
         return err!(LendingError::InvalidAmount);
     }
 
-    if withdraw_reserve.last_update.is_stale(slot)? {
-        msg!("Withdraw reserve is stale and must be refreshed in the current slot");
+    let is_borrows_empty = obligation.borrows_empty();
+
+    let required_price_status = if is_borrows_empty {
+        PriceStatusFlags::NONE
+    } else {
+        PriceStatusFlags::ALL_CHECKS
+    };
+
+    if withdraw_reserve
+        .last_update
+        .is_stale(slot, required_price_status)?
+    {
+        msg!(
+            "Withdraw reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+            withdraw_reserve.last_update.get_price_status().0
+        );
         return err!(LendingError::ReserveStale);
     }
 
-    if obligation.last_update.is_stale(slot)? {
-        msg!("Obligation is stale and must be refreshed in the current slot");
+    if obligation
+        .last_update
+        .is_stale(slot, required_price_status)?
+    {
+        msg!(
+            "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
+            obligation.last_update.get_price_status().0
+        );
         return err!(LendingError::ObligationStale);
     }
 
@@ -287,7 +347,7 @@ pub fn withdraw_obligation_collateral(
         return err!(LendingError::ObligationInDeprecatedReserve);
     }
 
-    let withdraw_amount = if obligation.borrows_empty() {
+    let withdraw_amount = if is_borrows_empty {
         if collateral_amount == u64::MAX {
             collateral.deposited_amount
         } else {
@@ -361,7 +421,10 @@ pub fn redeem_reserve_collateral(
         return err!(LendingError::InvalidAmount);
     }
 
-    if reserve.last_update.is_stale(clock.slot)? {
+    if reserve
+        .last_update
+        .is_stale(clock.slot, PriceStatusFlags::NONE)?
+    {
         msg!("Reserve is stale and must be refreshed in the current slot");
         return err!(LendingError::ReserveStale);
     }
@@ -382,8 +445,14 @@ pub fn redeem_reserve_collateral(
 }
 
 pub fn redeem_fees(reserve: &mut Reserve, slot: Slot) -> Result<u64> {
-    if reserve.last_update.is_stale(slot)? {
-        msg!("reserve is stale and must be refreshed in the current slot");
+    if reserve
+        .last_update
+        .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+    {
+        msg!(
+            "reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+            reserve.last_update.get_price_status().0
+        );
         return err!(LendingError::ReserveStale);
     }
 
@@ -411,7 +480,10 @@ pub fn repay_obligation_liquidity(
         return err!(LendingError::InvalidAmount);
     }
 
-    if repay_reserve.last_update.is_stale(clock.slot)? {
+    if repay_reserve
+        .last_update
+        .is_stale(clock.slot, PriceStatusFlags::NONE)?
+    {
         msg!("Repay reserve is stale and must be refreshed in the current slot");
         return err!(LendingError::ReserveStale);
     }
@@ -468,7 +540,7 @@ where
     T: AnyAccountLoader<'info, Reserve>,
     U: AnyAccountLoader<'info, ReferrerTokenState>,
 {
-    check_obligation_refreshed_and_not_null(obligation, slot)?;
+    check_obligation_fully_refreshed_and_not_null(obligation, slot)?;
 
     require!(
         obligation.elevation_group != new_elevation_group,
@@ -537,6 +609,7 @@ where
     let mut allowed_borrow_value = Fraction::ZERO;
     let mut unhealthy_borrow_value = Fraction::ZERO;
     let mut num_of_obsolete_reserves = 0;
+    let mut prices_state = PriceStatusFlags::all();
 
     for (index, deposit) in obligation
         .deposits
@@ -597,6 +670,8 @@ where
 
         obligation.deposits_asset_tiers[index] = deposit_reserve.config.asset_tier;
 
+        prices_state &= deposit_reserve.last_update.get_price_status();
+
         msg!(
             "Deposit: {} amount: {} value: {}",
             &deposit_reserve.config.token_info.symbol(),
@@ -614,6 +689,7 @@ where
         deposited_value_f: deposited_value,
         allowed_borrow_value_f: allowed_borrow_value,
         unhealthy_borrow_value_f: unhealthy_borrow_value,
+        prices_state,
     })
 }
 
@@ -630,6 +706,7 @@ where
 {
     let mut borrowed_assets_market_value = Fraction::ZERO;
     let mut borrow_factor_adjusted_debt_value = Fraction::ZERO;
+    let mut prices_state = PriceStatusFlags::all();
 
     let obligation_has_referrer = obligation.has_referrer();
 
@@ -732,6 +809,8 @@ where
 
         obligation.has_debt = 1;
 
+        prices_state &= borrow_reserve.last_update.get_price_status();
+
         msg!(
             "Borrow: {} amount: {} value: {} value_bf: {}",
             &borrow_reserve.config.token_info.symbol(),
@@ -744,6 +823,7 @@ where
     Ok(RefreshObligationBorrowsResult {
         borrowed_assets_market_value_f: borrowed_assets_market_value,
         borrow_factor_adjusted_debt_value_f: borrow_factor_adjusted_debt_value,
+        prices_state,
     })
 }
 
@@ -764,6 +844,7 @@ where
         deposited_value_f,
         allowed_borrow_value_f: allowed_borrow_value,
         unhealthy_borrow_value_f: unhealthy_borrow_value,
+        prices_state: deposits_prices_state,
     } = refresh_obligation_deposits(
         obligation,
         lending_market,
@@ -775,6 +856,7 @@ where
     let RefreshObligationBorrowsResult {
         borrow_factor_adjusted_debt_value_f,
         borrowed_assets_market_value_f,
+        prices_state: borrows_prices_state,
     } = refresh_obligation_borrows(
         obligation,
         slot,
@@ -805,7 +887,8 @@ where
 
     obligation.num_of_obsolete_reserves = num_of_obsolete_reserves;
 
-    obligation.last_update.update_slot(slot);
+    let prices_state = deposits_prices_state.intersection(borrows_prices_state);
+    obligation.last_update.update_slot(slot, Some(prices_state));
 
     Ok(())
 }
@@ -832,7 +915,7 @@ pub fn liquidate_and_redeem(
         repay_reserve,
         withdraw_reserve,
         obligation,
-        clock.slot,
+        clock,
         liquidity_amount,
         min_acceptable_received_collateral_amount,
         max_allowed_ltv_override_pct_opt,
@@ -862,7 +945,7 @@ pub fn liquidate_obligation(
     repay_reserve: &dyn AnyAccountLoader<Reserve>,
     withdraw_reserve: &dyn AnyAccountLoader<Reserve>,
     obligation: &mut Obligation,
-    slot: Slot,
+    clock: &Clock,
     liquidity_amount: u64,
     min_acceptable_received_collateral_amount: u64,
     max_allowed_ltv_override_pct_opt: Option<u64>,
@@ -874,6 +957,15 @@ pub fn liquidate_obligation(
     );
     let repay_reserve_ref = repay_reserve.get()?;
     let withdraw_reserve_ref = withdraw_reserve.get()?;
+
+    let slot = clock.slot;
+
+    if withdraw_reserve_ref.config.loan_to_value_pct == 0
+        || withdraw_reserve_ref.config.liquidation_threshold_pct == 0
+    {
+        xmsg!("Max LTV of the withdraw reserve is 0 and can't be used for liquidation");
+        return err!(LendingError::CollateralNonLiquidatable);
+    }
 
     utils::assert_obligation_liquidatable(
         &repay_reserve_ref,
@@ -933,9 +1025,10 @@ pub fn liquidate_obligation(
 
     let withdraw_collateral_amount = {
         let mut withdraw_reserve_ref_mut = withdraw_reserve.get_mut()?;
-        refresh_reserve_interest(
+        refresh_reserve(
             &mut withdraw_reserve_ref_mut,
-            slot,
+            clock,
+            None,
             lending_market.referral_fee_bps,
         )?;
         let collateral_exchange_rate = withdraw_reserve_ref_mut.collateral_exchange_rate()?;
@@ -991,18 +1084,7 @@ pub fn flash_borrow_reserve_liquidity(reserve: &mut Reserve, liquidity_amount: u
         return err!(LendingError::FlashLoansDisabled);
     }
 
-    let borrowed_amount_f = reserve.liquidity.total_borrow();
     let liquidity_amount_f = Fraction::from(liquidity_amount);
-    let borrow_limit_f = Fraction::from(reserve.config.borrow_limit);
-    let new_total_borrow_f = borrowed_amount_f + liquidity_amount_f;
-    if new_total_borrow_f > borrow_limit_f {
-        msg!(
-            "Cannot borrow above the borrow limit. New total borrow: {} > limit: {}",
-            new_total_borrow_f,
-            reserve.config.borrow_limit
-        );
-        return err!(LendingError::InvalidAmount);
-    }
 
     reserve.liquidity.borrow(liquidity_amount_f)?;
     reserve.last_update.mark_stale();
@@ -1034,22 +1116,31 @@ pub fn flash_repay_reserve_liquidity(
 }
 
 pub fn socialize_loss(
-    lending_market: &LendingMarket,
     reserve: &mut Reserve,
     reserve_pk: &Pubkey,
     obligation: &mut Obligation,
     liquidity_amount: u64,
     slot: u64,
 ) -> Result<Fraction> {
-    refresh_reserve_interest(reserve, slot, lending_market.referral_fee_bps)?;
-
-    if reserve.last_update.is_stale(slot)? {
-        msg!("Reserve is stale and must be refreshed in the current slot");
+    if reserve
+        .last_update
+        .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+    {
+        msg!(
+            "Reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+            reserve.last_update.get_price_status().0
+        );
         return Err(LendingError::ReserveStale.into());
     }
 
-    if obligation.last_update.is_stale(slot)? {
-        msg!("Obligation is stale and must be refreshed in the current slot");
+    if obligation
+        .last_update
+        .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+    {
+        msg!(
+            "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
+            obligation.last_update.get_price_status().0
+        );
         return Err(LendingError::ObligationStale.into());
     }
 
@@ -1105,8 +1196,14 @@ pub fn withdraw_referrer_fees(
     slot: Slot,
     referrer_token_state: &mut ReferrerTokenState,
 ) -> Result<u64> {
-    if reserve.last_update.is_stale(slot)? {
-        msg!("reserve is stale and must be refreshed in the current slot");
+    if reserve
+        .last_update
+        .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+    {
+        msg!(
+            "reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+            reserve.last_update.get_price_status().0
+        );
         return err!(LendingError::ReserveStale);
     }
 
@@ -1566,7 +1663,10 @@ pub mod utils {
             return err!(LendingError::InvalidAccountInput);
         }
 
-        if deposit_reserve.last_update.is_stale(slot)? {
+        if deposit_reserve
+            .last_update
+            .is_stale(slot, PriceStatusFlags::NONE)?
+        {
             msg!(
                 "Deposit reserve {} provided for collateral {} is stale
                 and must be refreshed in the current slot. Last Update {:?}",
@@ -1604,7 +1704,10 @@ pub mod utils {
             return err!(LendingError::InvalidAccountInput);
         }
 
-        if borrow_reserve.last_update.is_stale(slot)? {
+        if borrow_reserve
+            .last_update
+            .is_stale(slot, PriceStatusFlags::NONE)?
+        {
             msg!(
                 "Borrow reserve {} provided for liquidity {} is stale
                 and must be refreshed in the current slot. Last Update {:?}",
@@ -1693,12 +1796,18 @@ pub mod utils {
         }
     }
 
-    pub fn check_obligation_refreshed_and_not_null(
+    pub fn check_obligation_fully_refreshed_and_not_null(
         obligation: &Obligation,
         slot: Slot,
     ) -> Result<()> {
-        if obligation.last_update.is_stale(slot)? {
-            msg!("Obligation is stale and must be refreshed in the current slot");
+        if obligation
+            .last_update
+            .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+        {
+            msg!(
+                "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
+                obligation.last_update.get_price_status().0
+            );
             return err!(LendingError::ObligationStale);
         }
         if obligation.deposits_empty() {
@@ -1725,18 +1834,36 @@ pub mod utils {
             return err!(LendingError::InvalidAmount);
         }
 
-        if repay_reserve.last_update.is_stale(slot)? {
-            msg!("Repay reserve is stale and must be refreshed in the current slot");
+        if repay_reserve
+            .last_update
+            .is_stale(slot, PriceStatusFlags::LIQUIDATION_CHECKS)?
+        {
+            msg!(
+                "Repay reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+                repay_reserve.last_update.get_price_status().0
+            );
             return err!(LendingError::ReserveStale);
         }
 
-        if withdraw_reserve.last_update.is_stale(slot)? {
-            msg!("Withdraw reserve is stale and must be refreshed in the current slot");
+        if withdraw_reserve
+            .last_update
+            .is_stale(slot, PriceStatusFlags::LIQUIDATION_CHECKS)?
+        {
+            msg!(
+                "Withdraw reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+                withdraw_reserve.last_update.get_price_status().0
+            );
             return err!(LendingError::ReserveStale);
         }
 
-        if obligation.last_update.is_stale(slot)? {
-            msg!("Obligation is stale and must be refreshed in the current slot");
+        if obligation
+            .last_update
+            .is_stale(slot, PriceStatusFlags::LIQUIDATION_CHECKS)?
+        {
+            msg!(
+                "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
+                obligation.last_update.get_price_status().0
+            );
             return err!(LendingError::ObligationStale);
         }
 
