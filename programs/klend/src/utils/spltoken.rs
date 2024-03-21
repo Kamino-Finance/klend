@@ -48,3 +48,27 @@ pub fn burn<'info>(
 
     Ok(())
 }
+
+pub fn burn_with_signer<'info>(
+    token_mint: AccountInfo<'info>,
+    token_ata: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
+    burn_amount: u64,
+    authority_signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    anchor_spl::token::burn(
+        CpiContext::new_with_signer(
+            token_program,
+            anchor_spl::token::Burn {
+                mint: token_mint,
+                from: token_ata,
+                authority,
+            },
+            authority_signer_seeds,
+        ),
+        burn_amount,
+    )?;
+
+    Ok(())
+}

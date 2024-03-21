@@ -137,7 +137,8 @@ pub struct BorrowObligationLiquidity<'info> {
     pub borrow_reserve_liquidity_fee_receiver: Box<Account<'info, TokenAccount>>,
 
     #[account(mut,
-        token::mint = reserve_source_liquidity.mint
+        token::mint = reserve_source_liquidity.mint,
+        token::authority = owner
     )]
     pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
 

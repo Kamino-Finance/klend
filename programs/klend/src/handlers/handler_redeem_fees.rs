@@ -20,6 +20,8 @@ pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
 
     let withdraw_amount = lending_operations::redeem_fees(reserve, clock.slot)?;
 
+    msg!("Redeeming fees: {}", withdraw_amount);
+
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.reserve_supply_liquidity.to_account_info(),

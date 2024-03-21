@@ -65,6 +65,33 @@ pub fn deposit_reserve_liquidity_transfer<'a>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn deposit_reserve_liquidity_and_obligation_collateral_transfer<'a>(
+    source_liquidity_deposit: AccountInfo<'a>,
+    destination_liquidity_deposit: AccountInfo<'a>,
+    user_authority: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+    collateral_mint: AccountInfo<'a>,
+    collateral_supply_vault: AccountInfo<'a>,
+    mint_authority: AccountInfo<'a>,
+    authority_signer_seeds: &[&[u8]],
+    liquidity_deposit_amount: u64,
+    collateral_mint_amount: u64,
+) -> Result<()> {
+    deposit_reserve_liquidity_transfer(
+        source_liquidity_deposit,
+        destination_liquidity_deposit,
+        user_authority,
+        token_program,
+        collateral_mint,
+        collateral_supply_vault,
+        mint_authority,
+        authority_signer_seeds,
+        liquidity_deposit_amount,
+        collateral_mint_amount,
+    )
+}
+
 pub fn withdraw_obligation_collateral_transfer<'a>(
     token_program: AccountInfo<'a>,
     destination_collateral: AccountInfo<'a>,
@@ -116,6 +143,42 @@ pub fn redeem_reserve_collateral_transfer<'a>(
             anchor_spl::token::Transfer {
                 from: reserve_liquidity_supply,
                 to: destination_liquidity,
+                authority: lending_market_authority,
+            },
+            &[authority_signer_seeds],
+        ),
+        liquidity_amount,
+    )?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn withdraw_and_redeem_reserve_collateral_transfer<'a>(
+    token_program: AccountInfo<'a>,
+    reserve_collateral_mint: AccountInfo<'a>,
+    burn_reserve_source_collateral: AccountInfo<'a>,
+    reserve_liquidity_supply: AccountInfo<'a>,
+    user_destination_liquidity: AccountInfo<'a>,
+    lending_market_authority: AccountInfo<'a>,
+    authority_signer_seeds: &[&[u8]],
+    collateral_amount: u64,
+    liquidity_amount: u64,
+) -> Result<()> {
+    spltoken::burn_with_signer(
+        reserve_collateral_mint,
+        burn_reserve_source_collateral,
+        lending_market_authority.clone(),
+        token_program.clone(),
+        collateral_amount,
+        &[authority_signer_seeds],
+    )?;
+
+    token::transfer(
+        CpiContext::new_with_signer(
+            token_program,
+            anchor_spl::token::Transfer {
+                from: reserve_liquidity_supply,
+                to: user_destination_liquidity,
                 authority: lending_market_authority,
             },
             &[authority_signer_seeds],

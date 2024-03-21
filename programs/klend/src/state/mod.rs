@@ -172,6 +172,8 @@ pub enum UpdateConfigMode {
     UpdateMultiplierSideBoost = 37,
     UpdateMultiplierTagBoost = 38,
     UpdateReserveStatus = 39,
+    UpdateFarmCollateral = 40,
+    UpdateFarmDebt = 41,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -221,7 +223,17 @@ impl UpdateLendingMarketConfigValue {
     }
 }
 
-#[derive(TryFromPrimitive, EnumString, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(
+    TryFromPrimitive,
+    AnchorSerialize,
+    AnchorDeserialize,
+    EnumString,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Debug,
+)]
 #[repr(u64)]
 pub enum UpdateLendingMarketMode {
     UpdateOwner = 0,
