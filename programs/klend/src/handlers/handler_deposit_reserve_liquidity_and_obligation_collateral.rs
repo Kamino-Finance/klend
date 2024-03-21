@@ -114,6 +114,8 @@ pub struct DepositReserveLiquidityAndObligationCollateral<'info> {
     )]
     pub user_source_liquidity: Box<Account<'info, TokenAccount>>,
 
+    pub placeholder_user_destination_collateral: Option<AccountInfo<'info>>,
+
     pub token_program: Program<'info, Token>,
 
     #[account(address = SysInstructions::id())]
