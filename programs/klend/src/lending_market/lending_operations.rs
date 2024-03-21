@@ -1571,6 +1571,22 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
+        UpdateConfigMode::UpdateFarmCollateral => {
+            let new: [u8; 32] = value[0..32].try_into().unwrap();
+            let new = Pubkey::new_from_array(new);
+            let prv = reserve.farm_collateral;
+            reserve.farm_collateral = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
+        }
+        UpdateConfigMode::UpdateFarmDebt => {
+            let new: [u8; 32] = value[0..32].try_into().unwrap();
+            let new = Pubkey::new_from_array(new);
+            let prv = reserve.farm_debt;
+            reserve.farm_debt = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
+        }
     }
 
     reserve.last_update.mark_stale();

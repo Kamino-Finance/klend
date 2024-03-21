@@ -57,7 +57,12 @@ pub fn process(
     let max_allowed_ltv_override_pct_opt = if ctx.accounts.liquidator.key() == obligation.owner
         && max_allowed_ltv_override_percent > 0
     {
-        Some(max_allowed_ltv_override_percent)
+        if cfg!(feature = "staging") {
+            Some(max_allowed_ltv_override_percent)
+        } else {
+            msg!("Warning! Attempting to set an ltv override outside the staging program");
+            None
+        }
     } else {
         None
     };

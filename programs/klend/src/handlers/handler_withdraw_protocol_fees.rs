@@ -15,6 +15,8 @@ pub fn process(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
 
     let authority_signer_seeds = gen_signer_seeds!(lending_market_key, market.bump_seed as u8);
 
+    msg!("Withdrawing fees: {}", amount);
+
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.fee_vault.to_account_info(),

@@ -6,12 +6,10 @@ use anchor_lang::{
 
 use crate::{
     handlers::*,
-    state::{
-        DepositObligationCollateralAccounts, RedeemReserveCollateralAccounts,
-        WithdrawObligationCollateralAccounts,
-    },
+    state::{RedeemReserveCollateralAccounts, WithdrawObligationCollateralAccounts},
     utils::{seeds::BASE_SEED_REFERRER_TOKEN_STATE, FatAccountLoader, PROGRAM_VERSION},
-    LendingError, Obligation, ReferrerTokenState, ReserveStatus,
+    DepositObligationCollateralAccounts, LendingError, Obligation, ReferrerTokenState,
+    ReserveStatus, WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
 };
 
 pub fn borrow_obligation_liquidity_checks(ctx: &Context<BorrowObligationLiquidity>) -> Result<()> {
@@ -87,6 +85,29 @@ pub fn deposit_reserve_liquidity_checks(
     Ok(())
 }
 
+pub fn deposit_reserve_liquidity_and_obligation_collateral_checks(
+    accounts: &crate::state::nested_accounts::DepositReserveLiquidityAndObligationCollateralAccounts,
+) -> Result<()> {
+    let reserve = accounts.reserve.load()?;
+
+    if reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
+        msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
+        return err!(LendingError::InvalidAccountInput);
+    }
+
+    if reserve.config.status() == ReserveStatus::Obsolete {
+        msg!("Reserve is not active");
+        return err!(LendingError::ReserveObsolete);
+    }
+
+    if reserve.version != PROGRAM_VERSION as u64 {
+        msg!("Reserve version does not match the program version");
+        return err!(LendingError::ReserveDeprecated);
+    }
+
+    Ok(())
+}
+
 pub fn liquidate_obligation_checks(
     ctx: &Context<LiquidateObligationAndRedeemReserveCollateral>,
 ) -> Result<()> {
@@ -141,6 +162,24 @@ pub fn redeem_reserve_collateral_checks(accounts: &RedeemReserveCollateralAccoun
     if reserve.version != PROGRAM_VERSION as u64 {
         msg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
+    }
+
+    Ok(())
+}
+
+pub fn withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
+    accounts: &WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
+) -> Result<()> {
+    let withdraw_reserve = accounts.withdraw_reserve.load()?;
+
+    if withdraw_reserve.version != PROGRAM_VERSION as u64 {
+        msg!("Reserve version does not match the program version");
+        return err!(LendingError::ReserveDeprecated);
+    }
+
+    if withdraw_reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
+        msg!("Reserve liquidity supply cannot be used as the destination liquidity provided");
+        return err!(LendingError::InvalidAccountInput);
     }
 
     Ok(())

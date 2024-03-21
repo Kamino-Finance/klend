@@ -8,12 +8,9 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
-    state::{
-        obligation::Obligation, LendingMarket, RedeemReserveCollateralAccounts, Reserve,
-        WithdrawObligationCollateralAccounts,
-    },
+    state::{obligation::Obligation, LendingMarket, Reserve},
     utils::{close_account_loader, seeds, token_transfer},
-    ReserveFarmKind,
+    ReserveFarmKind, WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
 };
 
 pub fn process(
@@ -22,30 +19,13 @@ pub fn process(
 ) -> Result<()> {
     let close_obligation = {
         check_refresh_ixs!(ctx, withdraw_reserve, ReserveFarmKind::Collateral);
-        lending_checks::withdraw_obligation_collateral_checks(
-            &WithdrawObligationCollateralAccounts {
-                lending_market: ctx.accounts.lending_market.clone(),
-                lending_market_authority: ctx.accounts.lending_market_authority.clone(),
+
+        lending_checks::withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
+            &WithdrawObligationCollateralAndRedeemReserveCollateralAccounts {
+                user_destination_liquidity: ctx.accounts.user_destination_liquidity.clone(),
                 withdraw_reserve: ctx.accounts.withdraw_reserve.clone(),
-                obligation: ctx.accounts.obligation.clone(),
-                reserve_source_collateral: ctx.accounts.reserve_source_collateral.clone(),
-                user_destination_collateral: ctx.accounts.user_destination_collateral.clone(),
-                obligation_owner: ctx.accounts.owner.clone(),
-                token_program: ctx.accounts.token_program.clone(),
             },
         )?;
-
-        lending_checks::redeem_reserve_collateral_checks(&RedeemReserveCollateralAccounts {
-            lending_market: ctx.accounts.lending_market.clone(),
-            lending_market_authority: ctx.accounts.lending_market_authority.clone(),
-            user_source_collateral: ctx.accounts.user_destination_collateral.clone(),
-            user_destination_liquidity: ctx.accounts.user_destination_liquidity.clone(),
-            reserve: ctx.accounts.withdraw_reserve.clone(),
-            reserve_collateral_mint: ctx.accounts.reserve_collateral_mint.clone(),
-            reserve_liquidity_supply: ctx.accounts.reserve_liquidity_supply.clone(),
-            owner: ctx.accounts.owner.clone(),
-            token_program: ctx.accounts.token_program.clone(),
-        })?;
 
         let reserve = &mut ctx.accounts.withdraw_reserve.load_mut()?;
         let obligation = &mut ctx.accounts.obligation.load_mut()?;
@@ -76,20 +56,10 @@ pub fn process(
             withdraw_liquidity_amount
         );
 
-        token_transfer::withdraw_obligation_collateral_transfer(
-            ctx.accounts.token_program.to_account_info(),
-            ctx.accounts.user_destination_collateral.to_account_info(),
-            ctx.accounts.reserve_source_collateral.to_account_info(),
-            ctx.accounts.lending_market_authority.clone(),
-            authority_signer_seeds,
-            withdraw_obligation_amount,
-        )?;
-
-        token_transfer::redeem_reserve_collateral_transfer(
+        token_transfer::withdraw_and_redeem_reserve_collateral_transfer(
             ctx.accounts.token_program.to_account_info(),
             ctx.accounts.reserve_collateral_mint.to_account_info(),
-            ctx.accounts.user_destination_collateral.to_account_info(),
-            ctx.accounts.owner.to_account_info(),
+            ctx.accounts.reserve_source_collateral.to_account_info(),
             ctx.accounts.reserve_liquidity_supply.to_account_info(),
             ctx.accounts.user_destination_liquidity.to_account_info(),
             ctx.accounts.lending_market_authority.clone(),
@@ -128,26 +98,25 @@ pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
     )]
     pub lending_market_authority: AccountInfo<'info>,
 
-    #[account(mut,
-        has_one = lending_market
-    )]
+    #[account(mut, has_one = lending_market)]
     pub withdraw_reserve: AccountLoader<'info, Reserve>,
 
     #[account(mut, address = withdraw_reserve.load()?.collateral.supply_vault)]
     pub reserve_source_collateral: Box<Account<'info, TokenAccount>>,
+
     #[account(mut, address = withdraw_reserve.load()?.collateral.mint_pubkey)]
     pub reserve_collateral_mint: Box<Account<'info, Mint>>,
+
     #[account(mut, address = withdraw_reserve.load()?.liquidity.supply_vault)]
     pub reserve_liquidity_supply: Box<Account<'info, TokenAccount>>,
 
     #[account(mut,
-        token::mint = withdraw_reserve.load()?.liquidity.mint_pubkey
+        token::mint = withdraw_reserve.load()?.liquidity.mint_pubkey,
+        token::authority = owner,
     )]
     pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
-    #[account(mut,
-        token::mint = reserve_collateral_mint.key()
-    )]
-    pub user_destination_collateral: Box<Account<'info, TokenAccount>>,
+
+    pub placeholder_user_destination_collateral: Option<AccountInfo<'info>>,
 
     pub token_program: Program<'info, Token>,
 

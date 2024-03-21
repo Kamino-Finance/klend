@@ -4,7 +4,6 @@ use anchor_lang::prelude::*;
 
 mod handlers;
 pub mod lending_market;
-
 pub mod state;
 pub mod utils;
 
@@ -263,6 +262,7 @@ pub mod kamino_lending {
         handler_delete_referrer_state_and_short_url::process(ctx)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn idl_missing_types(
         _ctx: Context<UpdateReserveConfig>,
         _reserve_farm_kind: ReserveFarmKind,
@@ -271,6 +271,7 @@ pub mod kamino_lending {
         _reserve_status: ReserveStatus,
         _update_config_mode: UpdateConfigMode,
         _update_lending_market_config_value: UpdateLendingMarketConfigValue,
+        _update_lending_market_config_mode: UpdateLendingMarketMode,
     ) -> Result<()> {
         unreachable!("This should never be called")
     }
