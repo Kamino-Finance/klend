@@ -12,13 +12,6 @@ crate-type = ["cdylib", "lib"]
 name = "kamino_lending"
 
 [features]
-program-test = [
-    "dep:solana-program-test",
-    "dep:spl-associated-token-account",
-    "dep:solana-sdk",
-    "dep:arrayref",
-    "serde",
-]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
