@@ -303,17 +303,11 @@ macro_rules! prop_assert_fuzzy_eq_percentage {
         let percentage = $percentage as f64;
         let diff = (act - exp).abs();
         let diff_percentage = match exp {
-            0 => f64::MAX,
-            _ => (100.0 * diff as f64) / (exp as f64),
+            0 => f64::MAX,            _ => (100.0 * diff as f64) / (exp as f64),
         };
-        ::proptest::prop_assert!(
-            !(diff > eps && diff_percentage > percentage),
+        ::proptest::prop_assert!(!(diff > eps && diff_percentage > percentage),
             "Actual {} Expected {} diff {} and percentage_diff > percentage ({}% > {}%)",
-            $actual,
-            $expected,
-            diff,
-            diff_percentage,
-            percentage
+            $actual, $expected, diff, diff_percentage, percentage
         );
     };
 }

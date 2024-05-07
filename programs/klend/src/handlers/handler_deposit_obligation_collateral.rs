@@ -43,6 +43,7 @@ pub fn process(ctx: Context<DepositObligationCollateral>, collateral_amount: u64
         clock.slot,
         collateral_amount,
         ctx.accounts.deposit_reserve.key(),
+        lending_market,
     )?;
 
     msg!(
@@ -92,6 +93,6 @@ pub struct DepositObligationCollateral<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    #[account(address = SysInstructions::id())]
+       #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

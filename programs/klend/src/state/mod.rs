@@ -48,7 +48,7 @@ impl UpdateReserveConfigValue {
     pub fn to_bytes_single(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE] {
         let long_bytes = self.to_raw_bytes();
 
-        let mut short_bytes = [0; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE];
+               let mut short_bytes = [0; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE];
         short_bytes.copy_from_slice(&long_bytes[..VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE]);
         short_bytes
     }
@@ -174,6 +174,7 @@ pub enum UpdateConfigMode {
     UpdateReserveStatus = 39,
     UpdateFarmCollateral = 40,
     UpdateFarmDebt = 41,
+    UpdateDisableUsageAsCollateralOutsideEmode = 42,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -183,6 +184,7 @@ pub enum UpdateLendingMarketConfigValue {
     U8Array([u8; 8]),
     U16(u16),
     U64(u64),
+    U128(u128),
     Pubkey(Pubkey),
     ElevationGroup(ElevationGroup),
 }
@@ -205,6 +207,10 @@ impl UpdateLendingMarketConfigValue {
             }
             UpdateLendingMarketConfigValue::U64(v) => {
                 val[..8].copy_from_slice(&v.to_le_bytes());
+                val
+            }
+            UpdateLendingMarketConfigValue::U128(v) => {
+                val[..16].copy_from_slice(&v.to_le_bytes());
                 val
             }
             UpdateLendingMarketConfigValue::Pubkey(v) => {
@@ -251,6 +257,7 @@ pub enum UpdateLendingMarketMode {
     UpdatePriceRefreshTriggerToMaxAgePct = 12,
     UpdateAutodeleverageEnabled = 13,
     UpdateBorrowingDisabled = 14,
+    UpdateMinNetValueObligationPostAction = 15,
 }
 
 #[cfg(feature = "serde")]
@@ -320,3 +327,4 @@ pub mod serde_bool_u8 {
         Ok(s as u8)
     }
 }
+

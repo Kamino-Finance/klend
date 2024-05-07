@@ -55,26 +55,26 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<Reserve>() % 8);
 #[account(zero_copy)]
 #[repr(C)]
 pub struct Reserve {
-    pub version: u64,
+       pub version: u64,
 
-    pub last_update: LastUpdate,
+       pub last_update: LastUpdate,
 
-    pub lending_market: Pubkey,
+       pub lending_market: Pubkey,
 
     pub farm_collateral: Pubkey,
     pub farm_debt: Pubkey,
 
-    pub liquidity: ReserveLiquidity,
+       pub liquidity: ReserveLiquidity,
 
     #[derivative(Debug = "ignore")]
     pub reserve_liquidity_padding: [u64; 150],
 
-    pub collateral: ReserveCollateral,
+       pub collateral: ReserveCollateral,
 
     #[derivative(Debug = "ignore")]
     pub reserve_collateral_padding: [u64; 150],
 
-    pub config: ReserveConfig,
+       pub config: ReserveConfig,
 
     #[derivative(Debug = "ignore")]
     pub config_padding: [u64; 150],
@@ -121,7 +121,7 @@ pub enum ReserveFarmKind {
 }
 
 impl Reserve {
-    pub fn init(&mut self, params: InitReserveParams) {
+       pub fn init(&mut self, params: InitReserveParams) {
         *self = Self::default();
         self.version = PROGRAM_VERSION as u64;
         self.last_update = LastUpdate::new(params.current_slot);
@@ -131,10 +131,20 @@ impl Reserve {
         self.config = *params.config;
     }
 
-    pub fn add_farm(&mut self, farm_state: &Pubkey, mode: ReserveFarmKind) {
-        match mode {
-            ReserveFarmKind::Collateral => self.farm_collateral = *farm_state,
-            ReserveFarmKind::Debt => self.farm_debt = *farm_state,
+   
+       pub fn current_borrow_rate(&self) -> Result<Fraction> {
+        let utilization_rate = self.liquidity.utilization_rate()?;
+
+        self.config
+            .borrow_rate_curve
+            .get_borrow_rate(utilization_rate)
+    }
+
+       pub fn borrow_factor_f(&self, elevation_group: u8) -> Fraction {
+        if elevation_group == 0 {
+                       Fraction::from_percent(self.config.borrow_factor_pct)
+        } else {
+                       Fraction::ONE
         }
     }
 
@@ -145,7 +155,18 @@ impl Reserve {
         }
     }
 
-    pub fn deposit_liquidity(&mut self, liquidity_amount: u64) -> Result<u64> {
+    pub fn token_symbol(&self) -> &str {
+        self.config.token_info.symbol()
+    }
+
+    pub fn add_farm(&mut self, farm_state: &Pubkey, mode: ReserveFarmKind) {
+        match mode {
+            ReserveFarmKind::Collateral => self.farm_collateral = *farm_state,
+            ReserveFarmKind::Debt => self.farm_debt = *farm_state,
+        }
+    }
+
+       pub fn deposit_liquidity(&mut self, liquidity_amount: u64) -> Result<u64> {
         let collateral_amount = self
             .collateral_exchange_rate()?
             .liquidity_to_collateral(liquidity_amount);
@@ -156,7 +177,7 @@ impl Reserve {
         Ok(collateral_amount)
     }
 
-    pub fn redeem_collateral(&mut self, collateral_amount: u64) -> Result<u64> {
+       pub fn redeem_collateral(&mut self, collateral_amount: u64) -> Result<u64> {
         let collateral_exchange_rate = self.collateral_exchange_rate()?;
 
         let liquidity_amount =
@@ -168,28 +189,12 @@ impl Reserve {
         Ok(liquidity_amount)
     }
 
-    pub fn current_borrow_rate(&self) -> Result<Fraction> {
-        let utilization_rate = self.liquidity.utilization_rate()?;
-
-        self.config
-            .borrow_rate_curve
-            .get_borrow_rate(utilization_rate)
-    }
-
-    pub fn borrow_factor_f(&self, elevation_group: u8) -> Fraction {
-        if elevation_group == 0 {
-            Fraction::from_percent(self.config.borrow_factor_pct)
-        } else {
-            Fraction::ONE
-        }
-    }
-
-    pub fn collateral_exchange_rate(&self) -> LendingResult<CollateralExchangeRate> {
+       pub fn collateral_exchange_rate(&self) -> LendingResult<CollateralExchangeRate> {
         let total_liquidity = self.liquidity.total_supply()?;
         self.collateral.exchange_rate(total_liquidity)
     }
 
-    pub fn accrue_interest(&mut self, current_slot: Slot, referral_fee_bps: u16) -> Result<()> {
+       pub fn accrue_interest(&mut self, current_slot: Slot, referral_fee_bps: u16) -> Result<()> {
         let slots_elapsed = self.last_update.slots_elapsed(current_slot)?;
         if slots_elapsed > 0 {
             let current_borrow_rate = self.current_borrow_rate()?;
@@ -207,35 +212,36 @@ impl Reserve {
         Ok(())
     }
 
-    pub fn update_deposit_limit_crossed_slot(&mut self, current_slot: Slot) -> Result<()> {
+       pub fn update_deposit_limit_crossed_slot(&mut self, current_slot: Slot) -> Result<()> {
         if self.deposit_limit_crossed()? {
             if self.liquidity.deposit_limit_crossed_slot == 0 {
                 self.liquidity.deposit_limit_crossed_slot = current_slot;
             }
-        } else {
+                   } else {
             self.liquidity.deposit_limit_crossed_slot = 0;
         }
         Ok(())
     }
 
-    pub fn update_borrow_limit_crossed_slot(&mut self, current_slot: Slot) -> Result<()> {
+       pub fn update_borrow_limit_crossed_slot(&mut self, current_slot: Slot) -> Result<()> {
         if self.borrow_limit_crossed()? {
             if self.liquidity.borrow_limit_crossed_slot == 0 {
                 self.liquidity.borrow_limit_crossed_slot = current_slot;
             }
-        } else {
+                   } else {
             self.liquidity.borrow_limit_crossed_slot = 0;
         }
         Ok(())
     }
 
-    pub fn calculate_borrow(
+       pub fn calculate_borrow(
         &self,
         amount_to_borrow: u64,
         max_borrow_factor_adjusted_debt_value: Fraction,
         remaining_reserve_borrow: Fraction,
         referral_fee_bps: u16,
         elevation_group: u8,
+        has_referrer: bool,
     ) -> Result<CalculateBorrowResult> {
         let decimals = 10u64
             .checked_pow(self.liquidity.mint_decimals as u32)
@@ -252,9 +258,10 @@ impl Reserve {
                 borrow_amount_f,
                 FeeCalculation::Inclusive,
                 referral_fee_bps,
+                has_referrer,
             )?;
             let borrow_amount: u64 = borrow_amount_f.to_floor();
-            let receive_amount = borrow_amount - borrow_fee;
+            let receive_amount = borrow_amount - borrow_fee - referrer_fee;
 
             Ok(CalculateBorrowResult {
                 borrow_amount_f,
@@ -269,9 +276,10 @@ impl Reserve {
                 borrow_amount_f,
                 FeeCalculation::Exclusive,
                 referral_fee_bps,
+                has_referrer,
             )?;
 
-            borrow_amount_f += Fraction::from_num(borrow_fee);
+            borrow_amount_f += Fraction::from_num(borrow_fee + referrer_fee);
             let borrow_factor_adjusted_debt_value = borrow_amount_f
                 .mul(market_price_f)
                 .div(u128::from(decimals))
@@ -291,7 +299,7 @@ impl Reserve {
         }
     }
 
-    pub fn calculate_repay(
+       pub fn calculate_repay(
         &self,
         amount_to_repay: u64,
         borrowed_amount: Fraction,
@@ -310,24 +318,24 @@ impl Reserve {
         })
     }
 
-    pub fn calculate_redeem_fees(&self) -> Result<u64> {
+       pub fn calculate_redeem_fees(&self) -> Result<u64> {
         Ok(min(
             self.liquidity.available_amount,
             Fraction::from_bits(self.liquidity.accumulated_protocol_fees_sf).to_floor(),
         ))
     }
 
-    pub fn deposit_limit_crossed(&self) -> Result<bool> {
+       pub fn deposit_limit_crossed(&self) -> Result<bool> {
         let crossed = self.liquidity.total_supply()? > Fraction::from(self.config.deposit_limit);
         Ok(crossed)
     }
 
-    pub fn borrow_limit_crossed(&self) -> Result<bool> {
+       pub fn borrow_limit_crossed(&self) -> Result<bool> {
         let crossed = self.liquidity.total_borrow() > Fraction::from(self.config.borrow_limit);
         Ok(crossed)
     }
 
-    pub fn get_withdraw_referrer_fees(
+       pub fn get_withdraw_referrer_fees(
         &self,
         referrer_token_state: &ReferrerTokenState,
     ) -> Result<u64> {
@@ -341,34 +349,34 @@ impl Reserve {
 }
 
 pub struct InitReserveParams {
-    pub current_slot: Slot,
-    pub lending_market: Pubkey,
-    pub liquidity: Box<ReserveLiquidity>,
-    pub collateral: Box<ReserveCollateral>,
-    pub config: Box<ReserveConfig>,
+       pub current_slot: Slot,
+       pub lending_market: Pubkey,
+       pub liquidity: Box<ReserveLiquidity>,
+       pub collateral: Box<ReserveCollateral>,
+       pub config: Box<ReserveConfig>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 #[zero_copy]
 #[repr(C)]
 pub struct ReserveLiquidity {
-    pub mint_pubkey: Pubkey,
-    pub supply_vault: Pubkey,
-    pub fee_vault: Pubkey,
-    pub available_amount: u64,
-    pub borrowed_amount_sf: u128,
-    pub market_price_sf: u128,
-    pub market_price_last_updated_ts: u64,
-    pub mint_decimals: u64,
+       pub mint_pubkey: Pubkey,
+       pub supply_vault: Pubkey,
+       pub fee_vault: Pubkey,
+       pub available_amount: u64,
+       pub borrowed_amount_sf: u128,
+       pub market_price_sf: u128,
+       pub market_price_last_updated_ts: u64,
+       pub mint_decimals: u64,
 
-    pub deposit_limit_crossed_slot: u64,
-    pub borrow_limit_crossed_slot: u64,
+          pub deposit_limit_crossed_slot: u64,
+          pub borrow_limit_crossed_slot: u64,
 
-    pub cumulative_borrow_rate_bsf: BigFractionBytes,
-    pub accumulated_protocol_fees_sf: u128,
-    pub accumulated_referrer_fees_sf: u128,
-    pub pending_referrer_fees_sf: u128,
-    pub absolute_referral_rate_sf: u128,
+       pub cumulative_borrow_rate_bsf: BigFractionBytes,
+       pub accumulated_protocol_fees_sf: u128,
+       pub accumulated_referrer_fees_sf: u128,
+       pub pending_referrer_fees_sf: u128,
+       pub absolute_referral_rate_sf: u128,
 
     pub padding2: [u64; 55],
     pub padding3: [u128; 32],
@@ -399,7 +407,7 @@ impl Default for ReserveLiquidity {
 }
 
 impl ReserveLiquidity {
-    pub fn new(params: NewReserveLiquidityParams) -> Self {
+       pub fn new(params: NewReserveLiquidityParams) -> Self {
         Self {
             mint_pubkey: params.mint_pubkey,
             mint_decimals: params.mint_decimals as u64,
@@ -421,7 +429,7 @@ impl ReserveLiquidity {
         }
     }
 
-    pub fn total_supply(&self) -> LendingResult<Fraction> {
+       pub fn total_supply(&self) -> LendingResult<Fraction> {
         Ok(
             Fraction::from(self.available_amount) + Fraction::from_bits(self.borrowed_amount_sf)
                 - Fraction::from_bits(self.accumulated_protocol_fees_sf)
@@ -430,11 +438,11 @@ impl ReserveLiquidity {
         )
     }
 
-    pub fn total_borrow(&self) -> Fraction {
+       pub fn total_borrow(&self) -> Fraction {
         Fraction::from_bits(self.borrowed_amount_sf)
     }
 
-    pub fn deposit(&mut self, liquidity_amount: u64) -> Result<()> {
+       pub fn deposit(&mut self, liquidity_amount: u64) -> Result<()> {
         self.available_amount = self
             .available_amount
             .checked_add(liquidity_amount)
@@ -442,7 +450,7 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn withdraw(&mut self, liquidity_amount: u64) -> Result<()> {
+       pub fn withdraw(&mut self, liquidity_amount: u64) -> Result<()> {
         if liquidity_amount > self.available_amount {
             msg!("Withdraw amount cannot exceed available amount");
             return err!(LendingError::InsufficientLiquidity);
@@ -454,7 +462,7 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn borrow(&mut self, borrow_f: Fraction) -> Result<()> {
+       pub fn borrow(&mut self, borrow_f: Fraction) -> Result<()> {
         let borrow_amount: u64 = borrow_f.to_floor();
 
         if borrow_amount > self.available_amount {
@@ -470,7 +478,7 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn repay(&mut self, repay_amount: u64, settle_amount: Fraction) -> LendingResult<()> {
+       pub fn repay(&mut self, repay_amount: u64, settle_amount: Fraction) -> LendingResult<()> {
         self.available_amount = self
             .available_amount
             .checked_add(repay_amount)
@@ -488,7 +496,7 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn redeem_fees(&mut self, withdraw_amount: u64) -> Result<()> {
+       pub fn redeem_fees(&mut self, withdraw_amount: u64) -> Result<()> {
         self.available_amount = self
             .available_amount
             .checked_sub(withdraw_amount)
@@ -506,26 +514,26 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn utilization_rate(&self) -> LendingResult<Fraction> {
+       pub fn utilization_rate(&self) -> LendingResult<Fraction> {
         let total_supply = self.total_supply()?;
         if total_supply == Fraction::ZERO {
-            return Ok(Fraction::ZERO);
+                       return Ok(Fraction::ZERO);
         }
         Ok(Fraction::from_bits(self.borrowed_amount_sf) / total_supply)
     }
 
-    fn compound_interest(
+                         fn compound_interest(
         &mut self,
         current_borrow_rate: Fraction,
         slots_elapsed: u64,
         protocol_take_rate: Fraction,
         referral_rate: Fraction,
     ) -> LendingResult<()> {
-        let previous_cumulative_borrow_rate = BigFraction::from(self.cumulative_borrow_rate_bsf);
+               let previous_cumulative_borrow_rate = BigFraction::from(self.cumulative_borrow_rate_bsf);
         let previous_debt_f = Fraction::from_bits(self.borrowed_amount_sf);
         let acc_protocol_fees_f = Fraction::from_bits(self.accumulated_protocol_fees_sf);
 
-        let compounded_interest_rate =
+               let compounded_interest_rate =
             approximate_compounded_interest(current_borrow_rate, slots_elapsed);
 
         let new_cumulative_borrow_rate: BigFraction =
@@ -541,7 +549,7 @@ impl ReserveLiquidity {
         let new_acc_protocol_fees_f =
             total_protocol_fee_f - max_referrers_fees_f + acc_protocol_fees_f;
 
-        self.cumulative_borrow_rate_bsf = new_cumulative_borrow_rate.into();
+               self.cumulative_borrow_rate_bsf = new_cumulative_borrow_rate.into();
         self.pending_referrer_fees_sf += max_referrers_fees_f.to_bits();
         self.accumulated_protocol_fees_sf = new_acc_protocol_fees_f.to_bits();
         self.borrowed_amount_sf = new_debt_f.to_bits();
@@ -550,7 +558,7 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn forgive_debt(&mut self, liquidity_amount: Fraction) -> LendingResult<()> {
+          pub fn forgive_debt(&mut self, liquidity_amount: Fraction) -> LendingResult<()> {
         let amt = Fraction::from_bits(self.borrowed_amount_sf);
         let new_amt = amt - liquidity_amount;
         self.borrowed_amount_sf = new_amt.to_bits();
@@ -558,7 +566,7 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn withdraw_referrer_fees(
+       pub fn withdraw_referrer_fees(
         &mut self,
         withdraw_amount: u64,
         referrer_token_state: &mut ReferrerTokenState,
@@ -602,26 +610,26 @@ impl ReserveLiquidity {
 }
 
 pub struct NewReserveLiquidityParams {
-    pub mint_pubkey: Pubkey,
-    pub mint_decimals: u8,
-    pub supply_vault: Pubkey,
-    pub fee_vault: Pubkey,
-    pub market_price_sf: u128,
+       pub mint_pubkey: Pubkey,
+       pub mint_decimals: u8,
+       pub supply_vault: Pubkey,
+       pub fee_vault: Pubkey,
+       pub market_price_sf: u128,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
 #[zero_copy]
 #[repr(C)]
 pub struct ReserveCollateral {
-    pub mint_pubkey: Pubkey,
-    pub mint_total_supply: u64,
-    pub supply_vault: Pubkey,
+       pub mint_pubkey: Pubkey,
+       pub mint_total_supply: u64,
+       pub supply_vault: Pubkey,
     pub padding1: [u128; 32],
     pub padding2: [u128; 32],
 }
 
 impl ReserveCollateral {
-    pub fn new(params: NewReserveCollateralParams) -> Self {
+       pub fn new(params: NewReserveCollateralParams) -> Self {
         Self {
             mint_pubkey: params.mint_pubkey,
             mint_total_supply: 0,
@@ -631,7 +639,7 @@ impl ReserveCollateral {
         }
     }
 
-    pub fn mint(&mut self, collateral_amount: u64) -> Result<()> {
+       pub fn mint(&mut self, collateral_amount: u64) -> Result<()> {
         self.mint_total_supply = self
             .mint_total_supply
             .checked_add(collateral_amount)
@@ -639,7 +647,7 @@ impl ReserveCollateral {
         Ok(())
     }
 
-    pub fn burn(&mut self, collateral_amount: u64) -> Result<()> {
+       pub fn burn(&mut self, collateral_amount: u64) -> Result<()> {
         self.mint_total_supply = self
             .mint_total_supply
             .checked_sub(collateral_amount)
@@ -647,7 +655,7 @@ impl ReserveCollateral {
         Ok(())
     }
 
-    fn exchange_rate(&self, total_liquidity: Fraction) -> LendingResult<CollateralExchangeRate> {
+       fn exchange_rate(&self, total_liquidity: Fraction) -> LendingResult<CollateralExchangeRate> {
         let rate = if self.mint_total_supply == 0 || total_liquidity == Fraction::ZERO {
             INITIAL_COLLATERAL_RATE
         } else {
@@ -658,21 +666,21 @@ impl ReserveCollateral {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CollateralExchangeRate(Fraction);
 
 impl CollateralExchangeRate {
-    pub fn collateral_to_liquidity(&self, collateral_amount: u64) -> LendingResult<u64> {
+       pub fn collateral_to_liquidity(&self, collateral_amount: u64) -> LendingResult<u64> {
         Ok(self
             .fraction_collateral_to_liquidity(collateral_amount.into())
             .to_floor())
     }
 
-    pub fn fraction_collateral_to_liquidity(&self, collateral_amount: Fraction) -> Fraction {
+       pub fn fraction_collateral_to_liquidity(&self, collateral_amount: Fraction) -> Fraction {
         collateral_amount / self.0
     }
 
-    pub fn liquidity_to_collateral(&self, liquidity_amount: u64) -> u64 {
+       pub fn liquidity_to_collateral(&self, liquidity_amount: u64) -> u64 {
         (self.0 * u128::from(liquidity_amount)).to_floor()
     }
 }
@@ -683,9 +691,15 @@ impl From<CollateralExchangeRate> for Fraction {
     }
 }
 
+impl From<Fraction> for CollateralExchangeRate {
+    fn from(fraction: Fraction) -> Self {
+        Self(fraction)
+    }
+}
+
 pub struct NewReserveCollateralParams {
-    pub mint_pubkey: Pubkey,
-    pub supply_vault: Pubkey,
+       pub mint_pubkey: Pubkey,
+       pub supply_vault: Pubkey,
 }
 
 static_assertions::const_assert_eq!(RESERVE_CONFIG_SIZE, std::mem::size_of::<ReserveConfig>());
@@ -697,52 +711,54 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<ReserveConfig>() % 8)
 #[zero_copy]
 #[repr(C)]
 pub struct ReserveConfig {
-    pub status: u8,
-    pub asset_tier: u8,
+       pub status: u8,
+       pub asset_tier: u8,
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
     pub reserved_0: [u8; 2],
-    pub multiplier_side_boost: [u8; 2],
-    pub multiplier_tag_boost: [u8; 8],
-    pub protocol_take_rate_pct: u8,
-    pub protocol_liquidation_fee_pct: u8,
-    pub loan_to_value_pct: u8,
-    pub liquidation_threshold_pct: u8,
-    pub min_liquidation_bonus_bps: u16,
-    pub max_liquidation_bonus_bps: u16,
-    pub bad_debt_liquidation_bonus_bps: u16,
-    pub deleveraging_margin_call_period_secs: u64,
-    pub deleveraging_threshold_slots_per_bps: u64,
-    pub fees: ReserveFees,
-    pub borrow_rate_curve: BorrowRateCurve,
-    pub borrow_factor_pct: u64,
+       pub multiplier_side_boost: [u8; 2],
+       pub multiplier_tag_boost: [u8; 8],
+       pub protocol_take_rate_pct: u8,
+       pub protocol_liquidation_fee_pct: u8,
+          pub loan_to_value_pct: u8,
+       pub liquidation_threshold_pct: u8,
+       pub min_liquidation_bonus_bps: u16,
+       pub max_liquidation_bonus_bps: u16,
+       pub bad_debt_liquidation_bonus_bps: u16,
+       pub deleveraging_margin_call_period_secs: u64,
+          pub deleveraging_threshold_slots_per_bps: u64,
+       pub fees: ReserveFees,
+       pub borrow_rate_curve: BorrowRateCurve,
+       pub borrow_factor_pct: u64,
 
-    pub deposit_limit: u64,
-    pub borrow_limit: u64,
-    pub token_info: TokenInfo,
+       pub deposit_limit: u64,
+       pub borrow_limit: u64,
+       pub token_info: TokenInfo,
 
-    pub deposit_withdrawal_cap: WithdrawalCaps,
-    pub debt_withdrawal_cap: WithdrawalCaps,
+       pub deposit_withdrawal_cap: WithdrawalCaps,
+       pub debt_withdrawal_cap: WithdrawalCaps,
 
     pub elevation_groups: [u8; 20],
+    pub disable_usage_as_coll_outside_emode: u8,
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 4],
+    pub reserved_1: [u8; 3],
 }
 
 impl ReserveConfig {
-    pub fn get_asset_tier(&self) -> AssetTier {
+       pub fn get_asset_tier(&self) -> AssetTier {
         AssetTier::try_from(self.asset_tier).unwrap()
     }
 
-    pub fn get_borrow_factor(&self) -> Fraction {
+       pub fn get_borrow_factor(&self) -> Fraction {
         max(
             Fraction::ONE,
             Fraction::from_percent(self.borrow_factor_pct),
         )
     }
 
-    pub fn status(&self) -> ReserveStatus {
+       pub fn status(&self) -> ReserveStatus {
         ReserveStatus::try_from(self.status).unwrap()
     }
 }
@@ -782,9 +798,9 @@ pub struct WithdrawalCaps {
 #[zero_copy]
 #[repr(C)]
 pub struct ReserveFees {
-    pub borrow_fee_sf: u64,
-    pub flash_loan_fee_sf: u64,
-    #[derivative(Debug = "ignore")]
+                      pub borrow_fee_sf: u64,
+          pub flash_loan_fee_sf: u64,
+       #[derivative(Debug = "ignore")]
     pub padding: [u8; 8],
 }
 
@@ -855,6 +871,7 @@ mod serde_reserve_fees {
                                     return Err(de::Error::duplicate_field("flash_loan_fee"));
                                 }
 
+                               
                                 let flash_loan_fee_str: Option<String> = map.next_value()?;
                                 match flash_loan_fee_str.as_deref() {
                                     Some("disabled") => {
@@ -926,55 +943,58 @@ mod serde_reserve_fees {
 }
 
 impl ReserveFees {
-    pub fn calculate_borrow_fees(
+       pub fn calculate_borrow_fees(
         &self,
         borrow_amount: Fraction,
         fee_calculation: FeeCalculation,
         referral_fee_bps: u16,
+        has_referrer: bool,
     ) -> Result<(u64, u64)> {
         self.calculate_fees(
             borrow_amount,
             self.borrow_fee_sf,
             fee_calculation,
             referral_fee_bps,
+            has_referrer,
         )
     }
 
-    pub fn calculate_flash_loan_fees(
+       pub fn calculate_flash_loan_fees(
         &self,
         flash_loan_amount_f: Fraction,
         referral_fee_bps: u16,
+        has_referrer: bool,
     ) -> Result<(u64, u64)> {
-        let (total_fees, referral_fee) = self.calculate_fees(
+        let (protocol_fee, referral_fee) = self.calculate_fees(
             flash_loan_amount_f,
             self.flash_loan_fee_sf,
             FeeCalculation::Exclusive,
             referral_fee_bps,
+            has_referrer,
         )?;
 
-        Ok((total_fees, referral_fee))
+        Ok((protocol_fee, referral_fee))
     }
 
-    fn calculate_fees(
+          fn calculate_fees(
         &self,
         amount: Fraction,
         fee_sf: u64,
         fee_calculation: FeeCalculation,
         referral_fee_bps: u16,
+        has_referrer: bool,
     ) -> Result<(u64, u64)> {
         let borrow_fee_rate = Fraction::from_bits(fee_sf.into());
         let referral_fee_rate = Fraction::from_bps(referral_fee_bps);
         if borrow_fee_rate > Fraction::ZERO && amount > Fraction::ZERO {
-            let need_to_assess_referral_fee = referral_fee_rate > Fraction::ZERO;
+            let need_to_assess_referral_fee = referral_fee_rate > Fraction::ZERO && has_referrer;
             let minimum_fee = if need_to_assess_referral_fee {
-                2u64
-            } else {
-                1u64
-            };
+                2u64            } else {
+                1u64            };
 
             let borrow_fee_amount = match fee_calculation {
-                FeeCalculation::Exclusive => amount.mul(borrow_fee_rate),
-                FeeCalculation::Inclusive => {
+                               FeeCalculation::Exclusive => amount.mul(borrow_fee_rate),
+                               FeeCalculation::Inclusive => {
                     let borrow_fee_rate = borrow_fee_rate.div(borrow_fee_rate.add(Fraction::ONE));
                     amount.mul(borrow_fee_rate)
                 }
@@ -986,15 +1006,17 @@ impl ReserveFees {
                 return err!(LendingError::BorrowTooSmall);
             }
 
-            let borrow_fee = borrow_fee_f.to_round();
+            let borrow_fee: u64 = borrow_fee_f.to_round();
             let referral_fee = if need_to_assess_referral_fee {
                 let referal_fee_f = borrow_fee_f * referral_fee_rate;
-                referal_fee_f.to_round::<u64>().max(1u64)
+                referal_fee_f.to_floor::<u64>().max(1u64)
             } else {
                 0
             };
 
-            Ok((borrow_fee, referral_fee))
+            let protocol_fee = borrow_fee - referral_fee;
+
+            Ok((protocol_fee, referral_fee))
         } else {
             Ok((0, 0))
         }
@@ -1003,8 +1025,8 @@ impl ReserveFees {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq)]
 pub enum FeeCalculation {
-    Exclusive,
-    Inclusive,
+       Exclusive,
+       Inclusive,
 }
 
 #[derive(
@@ -1023,7 +1045,7 @@ pub enum AssetTier {
     IsolatedDebt = 2,
 }
 
-fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fraction {
+pub fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fraction {
     let base = rate / u128::from(SLOTS_PER_YEAR);
     match elapsed_slots {
         0 => return Fraction::ONE,
@@ -1034,11 +1056,10 @@ fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fracti
             let pow_two = (Fraction::ONE + base) * (Fraction::ONE + base);
             return pow_two * pow_two;
         }
-        _ => (),
-    }
+        _ => (),    }
 
     let exp: u128 = elapsed_slots.into();
-    let exp_minus_one = exp.wrapping_sub(1);
+       let exp_minus_one = exp.wrapping_sub(1);
     let exp_minus_two = exp.wrapping_sub(2);
 
     let base_power_two = base * base;
@@ -1052,3 +1073,4 @@ fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fracti
 
     Fraction::ONE + first_term + second_term + third_term
 }
+

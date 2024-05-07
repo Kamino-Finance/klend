@@ -15,23 +15,23 @@ use crate::{utils::NULL_PUBKEY, LendingError};
 #[zero_copy]
 #[repr(C)]
 pub struct TokenInfo {
-    #[cfg_attr(feature = "serde", serde(with = "serde_name"))]
+       #[cfg_attr(feature = "serde", serde(with = "serde_name"))]
     pub name: [u8; 32],
 
-    pub heuristic: PriceHeuristic,
+       pub heuristic: PriceHeuristic,
 
-    pub max_twap_divergence_bps: u64,
+       pub max_twap_divergence_bps: u64,
 
     pub max_age_price_seconds: u64,
     pub max_age_twap_seconds: u64,
 
-    #[cfg_attr(feature = "serde", serde(default))]
+       #[cfg_attr(feature = "serde", serde(default))]
     pub scope_configuration: ScopeConfiguration,
 
-    #[cfg_attr(feature = "serde", serde(default))]
+       #[cfg_attr(feature = "serde", serde(default))]
     pub switchboard_configuration: SwitchboardConfiguration,
 
-    #[cfg_attr(feature = "serde", serde(default))]
+       #[cfg_attr(feature = "serde", serde(default))]
     pub pyth_configuration: PythConfiguration,
 
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
@@ -55,7 +55,7 @@ impl std::fmt::Debug for TokenInfo {
 }
 
 impl TokenInfo {
-    pub fn validate_token_info_config(
+       pub fn validate_token_info_config(
         &self,
         pyth_info: &Option<AccountInfo>,
         switchboard_price_info: &Option<AccountInfo>,
@@ -79,7 +79,7 @@ impl TokenInfo {
         Ok(())
     }
 
-    #[inline]
+             #[inline]
     pub fn is_valid(&self) -> bool {
         self.scope_configuration.is_valid()
             && (self.scope_configuration.is_enabled()
@@ -87,12 +87,12 @@ impl TokenInfo {
                 || self.pyth_configuration.is_enabled())
     }
 
-    #[inline]
+       #[inline]
     pub fn is_twap_enabled(&self) -> bool {
         self.max_twap_divergence_bps > 0
     }
 
-    #[inline]
+                #[inline]
     pub fn is_twap_config_valid(&self) -> bool {
         if !self.is_twap_enabled() {
             return true;
@@ -102,6 +102,7 @@ impl TokenInfo {
             return false;
         }
 
+       
         if self.scope_configuration.is_enabled() && !self.scope_configuration.has_twap() {
             return false;
         }
@@ -133,11 +134,11 @@ impl TokenInfo {
             matches!(
                 switchboard_price_info,
                 Some(a) if *a.key == self.switchboard_configuration.price_aggregator)
-                && (!self.is_twap_enabled()
-                    || matches!(
-                        switchboard_twap_info,
-                        Some(a) if *a.key == self.switchboard_configuration.twap_aggregator
-                    ))
+             &&            (!self.is_twap_enabled()
+                || matches!(
+                    switchboard_twap_info,
+                    Some(a) if *a.key == self.switchboard_configuration.twap_aggregator
+                ))
         } else {
             switchboard_price_info.is_none() && switchboard_twap_info.is_none()
         }
@@ -165,9 +166,9 @@ impl TokenInfo {
 #[zero_copy]
 #[repr(C)]
 pub struct PriceHeuristic {
-    pub lower: u64,
-    pub upper: u64,
-    pub exp: u64,
+       pub lower: u64,
+       pub upper: u64,
+       pub exp: u64,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq)]
@@ -176,11 +177,11 @@ pub struct PriceHeuristic {
 #[zero_copy]
 #[repr(C)]
 pub struct ScopeConfiguration {
-    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+       #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub price_feed: Pubkey,
-    #[cfg_attr(feature = "serde", serde(with = "serde_scope_chain"))]
+       #[cfg_attr(feature = "serde", serde(with = "serde_scope_chain"))]
     pub price_chain: [u16; 4],
-    #[cfg_attr(feature = "serde", serde(with = "serde_scope_chain"))]
+       #[cfg_attr(feature = "serde", serde(with = "serde_scope_chain"))]
     pub twap_chain: [u16; 4],
 }
 
@@ -201,7 +202,7 @@ impl ScopeConfiguration {
     }
 
     pub fn is_valid(&self) -> bool {
-        !self.is_enabled() || (self.price_chain != [u16::MAX; 4] && self.price_chain != [0; 4])
+               !self.is_enabled() || (self.price_chain != [u16::MAX; 4] && self.price_chain != [0; 4])
     }
 
     pub fn has_twap(&self) -> bool {
@@ -215,7 +216,7 @@ impl ScopeConfiguration {
 #[zero_copy]
 #[repr(C)]
 pub struct SwitchboardConfiguration {
-    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+       #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub price_aggregator: Pubkey,
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub twap_aggregator: Pubkey,
@@ -236,7 +237,7 @@ impl SwitchboardConfiguration {
 #[zero_copy]
 #[repr(transparent)]
 pub struct PythConfiguration {
-    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+       #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub price: Pubkey,
 }
 

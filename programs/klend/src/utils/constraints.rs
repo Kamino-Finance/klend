@@ -17,7 +17,7 @@ pub fn check_remaining_accounts<T>(ctx: &Context<T>) -> Result<()>
 where
     T: Bumps,
 {
-    if !ctx.remaining_accounts.is_empty() {
+       if !ctx.remaining_accounts.is_empty() {
         return err!(LendingError::InvalidAccountInput);
     }
 

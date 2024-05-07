@@ -39,7 +39,7 @@ impl PriceStatusFlags {
 
     pub const NONE: PriceStatusFlags = PriceStatusFlags::empty();
 
-    pub const LIQUIDATION_CHECKS: PriceStatusFlags =
+          pub const LIQUIDATION_CHECKS: PriceStatusFlags =
         PriceStatusFlags::PRICE_LOADED.union(PriceStatusFlags::PRICE_AGE_CHECKED);
 }
 
@@ -47,9 +47,9 @@ impl PriceStatusFlags {
 #[zero_copy]
 #[repr(C)]
 pub struct LastUpdate {
-    slot: u64,
-    stale: u8,
-    price_status: u8,
+       slot: u64,
+       stale: u8,
+       price_status: u8,
 
     placeholder: [u8; 6],
 }
@@ -61,7 +61,7 @@ impl Default for LastUpdate {
 }
 
 impl LastUpdate {
-    pub fn new(slot: Slot) -> Self {
+       pub fn new(slot: Slot) -> Self {
         Self {
             slot,
             stale: true as u8,
@@ -70,14 +70,14 @@ impl LastUpdate {
         }
     }
 
-    pub fn slots_elapsed(&self, slot: Slot) -> Result<u64> {
+       pub fn slots_elapsed(&self, slot: Slot) -> Result<u64> {
         let slots_elapsed = slot
             .checked_sub(self.slot)
             .ok_or_else(|| error!(LendingError::MathOverflow))?;
         Ok(slots_elapsed)
     }
 
-    pub fn update_slot(&mut self, slot: Slot, price_status: impl Into<Option<PriceStatusFlags>>) {
+       pub fn update_slot(&mut self, slot: Slot, price_status: impl Into<Option<PriceStatusFlags>>) {
         let price_status: Option<PriceStatusFlags> = price_status.into();
         self.slot = slot;
         self.stale = false as u8;
@@ -86,19 +86,19 @@ impl LastUpdate {
         }
     }
 
-    pub fn mark_stale(&mut self) {
+       pub fn mark_stale(&mut self) {
         self.stale = true as u8;
     }
 
-    pub fn is_stale(&self, slot: Slot, min_price_status: PriceStatusFlags) -> Result<bool> {
-        let is_price_status_ok = self.get_price_status().contains(min_price_status);
+       pub fn is_stale(&self, slot: Slot, min_price_status: PriceStatusFlags) -> Result<bool> {
+               let is_price_status_ok = self.get_price_status().contains(min_price_status);
         Ok(self.stale != (false as u8)
             || self.slots_elapsed(slot)? >= STALE_AFTER_SLOTS_ELAPSED
             || !is_price_status_ok)
     }
 
     #[cfg(feature = "program-test")]
-    pub fn is_marked_stale(&self) -> bool {
+       pub fn is_marked_stale(&self) -> bool {
         self.stale != (false as u8)
     }
 
@@ -118,3 +118,4 @@ impl PartialOrd for LastUpdate {
         self.slot.partial_cmp(&other.slot)
     }
 }
+

@@ -14,7 +14,7 @@ where
 
     let value_bf = BigFraction::from_num(value);
     let price_bf = value_bf / decimal;
-    price_bf
+             price_bf
         .try_into()
         .expect("Failed to convert Price stored on BigFraction to Fraction")
 }
@@ -57,3 +57,4 @@ fn ten_pow(exponent: u32) -> U128 {
 
     U128::from(value)
 }
+

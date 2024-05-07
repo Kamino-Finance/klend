@@ -3,13 +3,14 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::{Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
 use crate::{
     check_cpi, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, RedeemReserveCollateralAccounts, Reserve},
     utils::{seeds, token_transfer},
+    LendingAction,
 };
 
 pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) -> Result<()> {
@@ -34,6 +35,10 @@ pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) ->
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
+    let initial_reserve_token_balance =
+        token::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())?;
+    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
+
     lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
     let withdraw_liquidity_amount =
         lending_operations::redeem_reserve_collateral(reserve, collateral_amount, &clock, true)?;
@@ -56,6 +61,14 @@ pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) ->
         withdraw_liquidity_amount,
     )?;
 
+    lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+        token::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info()).unwrap(),
+        reserve.liquidity.available_amount,
+        initial_reserve_token_balance,
+        initial_reserve_available_liquidity,
+        LendingAction::Subtractive(withdraw_liquidity_amount),
+    )?;
+
     Ok(())
 }
 
@@ -69,7 +82,7 @@ pub struct RedeemReserveCollateral<'info> {
         has_one = lending_market
     )]
     pub reserve: AccountLoader<'info, Reserve>,
-    #[account(
+       #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -95,6 +108,6 @@ pub struct RedeemReserveCollateral<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    #[account(address = SysInstructions::id())]
+       #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

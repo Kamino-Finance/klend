@@ -4,6 +4,8 @@ use anchor_lang::prelude::*;
 
 mod handlers;
 pub mod lending_market;
+#[cfg(feature = "program-test")]
+pub mod program_test;
 pub mod state;
 pub mod utils;
 
@@ -35,9 +37,9 @@ pub mod kamino_lending {
 
     use super::*;
 
-    pub fn init_lending_market(
+       pub fn init_lending_market(
         ctx: Context<InitLendingMarket>,
-        quote_currency: [u8; 32],
+               quote_currency: [u8; 32],
     ) -> Result<()> {
         handler_init_lending_market::process(ctx, quote_currency)
     }
@@ -66,8 +68,9 @@ pub mod kamino_lending {
         ctx: Context<UpdateReserveConfig>,
         mode: u64,
         value: [u8; 32],
+        skip_validation: bool,
     ) -> Result<()> {
-        handler_update_reserve_config::process(ctx, mode, &value)
+        handler_update_reserve_config::process(ctx, mode, &value, skip_validation)
     }
 
     pub fn update_entire_reserve_config(
@@ -75,10 +78,22 @@ pub mod kamino_lending {
         mode: u64,
         value: [u8; VALUE_BYTE_ARRAY_LEN_RESERVE],
     ) -> Result<()> {
-        handler_update_reserve_config::process(ctx, mode, &value)
+        handler_update_reserve_config::process(ctx, mode, &value, false)
     }
 
-    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn redeem_fees(ctx: Context<RedeemFees>) -> Result<()> {
+        handler_redeem_fees::process(ctx)
+    }
+
+    pub fn socialize_loss(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
+        handler_socialize_loss::process(ctx, liquidity_amount)
+    }
+
+    pub fn withdraw_protocol_fee(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
+        handler_withdraw_protocol_fees::process(ctx, amount)
+    }
+
+       #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
         handler_refresh_reserve::process(ctx)
     }
@@ -189,10 +204,6 @@ pub mod kamino_lending {
         )
     }
 
-    pub fn redeem_fees(ctx: Context<RedeemFees>) -> Result<()> {
-        handler_redeem_fees::process(ctx)
-    }
-
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn flash_repay_reserve_liquidity(
         ctx: Context<FlashRepayReserveLiquidity>,
@@ -212,10 +223,6 @@ pub mod kamino_lending {
         liquidity_amount: u64,
     ) -> Result<()> {
         handler_flash_borrow_reserve_liquidity::process(ctx, liquidity_amount)
-    }
-
-    pub fn socialize_loss(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
-        handler_socialize_loss::process(ctx, liquidity_amount)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
@@ -243,10 +250,6 @@ pub mod kamino_lending {
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn withdraw_referrer_fees(ctx: Context<WithdrawReferrerFees>) -> Result<()> {
         handler_withdraw_referrer_fees::process(ctx)
-    }
-
-    pub fn withdraw_protocol_fee(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
-        handler_withdraw_protocol_fees::process(ctx, amount)
     }
 
     pub fn init_referrer_state_and_short_url(
@@ -462,6 +465,20 @@ pub enum LendingError {
     BorrowLimitExceeded,
     #[msg("Cannot deposit above deposit limit")]
     DepositLimitExceeded,
+    #[msg("Reserve does not accept any new borrows outside elevation group")]
+    BorrowingDisabledOutsideElevationGroup,
+    #[msg("Net value remaining too small")]
+    NetValueRemainingTooSmall,
+    #[msg("Cannot get the obligation in a worse position")]
+    WorseLTVBlocked,
+    #[msg("Cannot have more liabilities than assets in a position")]
+    LiabilitiesBiggerThanAssets,
+    #[msg("Reserve state and token account cannot drift")]
+    ReserveTokenBalanceMismatch,
+    #[msg("Reserve token account has been unexpectedly modified")]
+    ReserveVaultBalanceMismatch,
+    #[msg("Reserve internal state accounting has been unexpectedly modified")]
+    ReserveAccountingMismatch,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

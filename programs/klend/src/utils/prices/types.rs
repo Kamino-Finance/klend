@@ -7,10 +7,12 @@ pub(crate) struct Price<T>
 where
     T: Into<U128>,
 {
-    pub value: T,
+       pub value: T,
 
-    pub exp: u32,
+       pub exp: u32,
 }
+
+
 
 pub(super) struct TimestampedPrice {
     pub price_load: Box<dyn FnOnce() -> Result<Fraction>>,

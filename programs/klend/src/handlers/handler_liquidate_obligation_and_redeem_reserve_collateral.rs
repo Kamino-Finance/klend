@@ -13,7 +13,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     state::{obligation::Obligation, LendingMarket, RedeemReserveCollateralAccounts, Reserve},
     utils::{seeds, token_transfer},
-    xmsg, LiquidateAndRedeemResult, ReserveFarmKind,
+    xmsg, LendingAction, LiquidateAndRedeemResult, ReserveFarmKind,
 };
 
 pub fn process(
@@ -54,6 +54,7 @@ pub fn process(
     let lending_market_key = ctx.accounts.lending_market.key();
     let clock = &Clock::get()?;
 
+   
     let max_allowed_ltv_override_pct_opt = if ctx.accounts.liquidator.key() == obligation.owner
         && max_allowed_ltv_override_percent > 0
     {
@@ -66,6 +67,24 @@ pub fn process(
     } else {
         None
     };
+
+    let initial_withdraw_reserve_token_balance = token::accessor::amount(
+        &ctx.accounts
+            .withdraw_reserve_liquidity_supply
+            .to_account_info(),
+    )?;
+
+    let initial_repay_reserve_token_balance = token::accessor::amount(
+        &ctx.accounts
+            .repay_reserve_liquidity_supply
+            .to_account_info(),
+    )?;
+
+    let (initial_repay_reserve_available_amount, initial_withdraw_reserve_available_amount) =
+        lending_checks::initial_liquidation_reserve_liquidity_available_amount(
+            &ctx.accounts.repay_reserve,
+            &ctx.accounts.withdraw_reserve,
+        );
 
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
@@ -126,7 +145,7 @@ pub fn process(
             withdraw_liquidity_amount,
         )?;
 
-        token::transfer(
+               token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 anchor_spl::token::Transfer {
@@ -139,6 +158,63 @@ pub fn process(
                 },
             ),
             protocol_fee,
+        )?;
+        let withdraw_reserve = &ctx.accounts.withdraw_reserve.load()?;
+
+        let net_withdrawal_amount = if ctx
+            .accounts
+            .withdraw_reserve_liquidity_supply
+            .to_account_info()
+            .key
+            == ctx
+                .accounts
+                .repay_reserve_liquidity_supply
+                .to_account_info()
+                .key
+        {
+            withdraw_liquidity_amount - repay_amount
+        } else {
+            withdraw_liquidity_amount
+        };
+
+        lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+            token::accessor::amount(
+                &ctx.accounts
+                    .withdraw_reserve_liquidity_supply
+                    .to_account_info(),
+            )
+            .unwrap(),
+            withdraw_reserve.liquidity.available_amount,
+            initial_withdraw_reserve_token_balance,
+            initial_withdraw_reserve_available_amount,
+            LendingAction::Subtractive(net_withdrawal_amount),
+        )?;
+    }
+    let repay_reserve = &ctx.accounts.repay_reserve.load()?;
+
+    if ctx
+        .accounts
+        .withdraw_reserve_liquidity_supply
+        .to_account_info()
+        .key
+        != ctx
+            .accounts
+            .repay_reserve_liquidity_supply
+            .to_account_info()
+            .key
+        || total_withdraw_liquidity_amount.is_none()
+    {
+        lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+            token::accessor::amount(
+                &ctx.accounts
+                    .repay_reserve_liquidity_supply
+                    .to_account_info(),
+            )
+            .unwrap(),
+            repay_reserve.liquidity.available_amount,
+            initial_repay_reserve_token_balance,
+            initial_repay_reserve_available_amount,
+            LendingAction::Additive(repay_amount),
         )?;
     }
 
@@ -155,7 +231,7 @@ pub struct LiquidateObligationAndRedeemReserveCollateral<'info> {
     pub obligation: AccountLoader<'info, Obligation>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
-    #[account(
+       #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -200,6 +276,6 @@ pub struct LiquidateObligationAndRedeemReserveCollateral<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    #[account(address = SysInstructions::id())]
+       #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

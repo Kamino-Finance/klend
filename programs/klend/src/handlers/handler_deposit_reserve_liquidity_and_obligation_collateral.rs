@@ -3,14 +3,14 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::{Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{nested_accounts::*, obligation::Obligation, LendingMarket, Reserve},
     utils::{seeds, token_transfer},
-    ReserveFarmKind,
+    LendingAction, ReserveFarmKind,
 };
 
 pub fn process(
@@ -41,6 +41,9 @@ pub fn process(
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
 
+    let initial_reserve_token_balance =
+        token::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())?;
+    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
     let collateral_amount =
         lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
 
@@ -52,6 +55,7 @@ pub fn process(
         clock.slot,
         collateral_amount,
         ctx.accounts.reserve.key(),
+        lending_market,
     )?;
 
     msg!(
@@ -75,6 +79,14 @@ pub fn process(
         collateral_amount,
     )?;
 
+    lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+        token::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info()).unwrap(),
+        reserve.liquidity.available_amount,
+        initial_reserve_token_balance,
+        initial_reserve_available_liquidity,
+        LendingAction::Additive(liquidity_amount),
+    )?;
+
     Ok(())
 }
 
@@ -90,7 +102,7 @@ pub struct DepositReserveLiquidityAndObligationCollateral<'info> {
     pub obligation: AccountLoader<'info, Obligation>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
-    #[account(
+       #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -118,6 +130,6 @@ pub struct DepositReserveLiquidityAndObligationCollateral<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    #[account(address = SysInstructions::id())]
+       #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

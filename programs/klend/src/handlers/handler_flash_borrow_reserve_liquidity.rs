@@ -1,12 +1,12 @@
 use anchor_lang::{prelude::*, solana_program::sysvar, Accounts};
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token::{self, Token, TokenAccount};
 
 use crate::{
     gen_signer_seeds,
     lending_market::{flash_ixs, lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{seeds, token_transfer},
-    ReferrerTokenState,
+    LendingAction, ReferrerTokenState,
 };
 
 pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64) -> Result<()> {
@@ -16,6 +16,10 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
     let lending_market_key = ctx.accounts.lending_market.key();
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
+
+    let initial_reserve_token_balance =
+        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info())?;
+    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
 
     flash_ixs::flash_borrow_checks(&ctx, liquidity_amount)?;
 
@@ -37,14 +41,22 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
         liquidity_amount,
     )?;
 
+    lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info()).unwrap(),
+        reserve.liquidity.available_amount,
+        initial_reserve_token_balance,
+        initial_reserve_available_liquidity,
+        LendingAction::Subtractive(liquidity_amount),
+    )?;
+
     Ok(())
 }
 
 #[derive(Accounts)]
 pub struct FlashBorrowReserveLiquidity<'info> {
-    pub user_transfer_authority: Signer<'info>,
+       pub user_transfer_authority: Signer<'info>,
 
-    #[account(
+       #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -57,26 +69,26 @@ pub struct FlashBorrowReserveLiquidity<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
-    #[account(mut,
+       #[account(mut,
         address = reserve.load()?.liquidity.supply_vault
     )]
     pub reserve_source_liquidity: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
+       #[account(mut)]
     pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut,
+       #[account(mut,
         address = reserve.load()?.liquidity.fee_vault
     )]
     pub reserve_liquidity_fee_receiver: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
+       #[account(mut)]
     pub referrer_token_state: Option<AccountLoader<'info, ReferrerTokenState>>,
 
-    #[account(mut)]
+       #[account(mut)]
     pub referrer_account: Option<AccountInfo<'info>>,
 
-    #[account(address = sysvar::instructions::ID)]
+       #[account(address = sysvar::instructions::ID)]
     pub sysvar_info: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }

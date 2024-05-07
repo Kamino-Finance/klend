@@ -20,12 +20,13 @@ pub use uint_types::{U128, U256};
 
 pub const FRACTION_ONE_SCALED: u128 = Fraction::ONE.to_bits();
 
+
 pub fn pow_fraction(fraction: Fraction, power: u32) -> Option<Fraction> {
     if power == 0 {
         return Some(Fraction::ONE);
     }
 
-    let mut x = fraction;
+          let mut x = fraction;
     let mut y = Fraction::ONE;
     let mut n = power;
 
@@ -45,7 +46,7 @@ pub const fn bps_u128_to_fraction(bps: u128) -> Fraction {
     if bps == 10_000 {
         return Fraction::ONE;
     }
-    Fraction::const_from_int(bps).unwrapped_div_int(10_000)
+       Fraction::const_from_int(bps).unwrapped_div_int(10_000)
 }
 
 #[inline]
@@ -53,7 +54,7 @@ pub const fn pct_u128_to_fraction(percent: u128) -> Fraction {
     if percent == 100 {
         return Fraction::ONE;
     }
-    Fraction::const_from_int(percent).unwrapped_div_int(100)
+       Fraction::const_from_int(percent).unwrapped_div_int(100)
 }
 
 pub trait FractionExtra {
@@ -197,6 +198,7 @@ impl BigFraction {
     }
 }
 
+
 use std::{
     fmt::Display,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
@@ -329,14 +331,15 @@ impl Display for FractionDisplay<'_> {
     fn fmt(&self, formater: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let sf = self.0.to_bits();
 
-        const ROUND_COMP: u128 = (1 << Fraction::FRAC_NBITS) / (10_000 * 2);
+               const ROUND_COMP: u128 = (1 << Fraction::FRAC_NBITS) / (10_000 * 2);
         let sf = sf + ROUND_COMP;
 
-        let i = sf >> Fraction::FRAC_NBITS;
+               let i = sf >> Fraction::FRAC_NBITS;
 
-        const FRAC_MASK: u128 = (1 << Fraction::FRAC_NBITS) - 1;
+               const FRAC_MASK: u128 = (1 << Fraction::FRAC_NBITS) - 1;
         let f_p = (sf & FRAC_MASK) as u64;
-        let f_p = ((f_p >> 30) * 10_000) >> 30;
+               let f_p = ((f_p >> 30) * 10_000) >> 30;
         write!(formater, "{i}.{f_p:0>4}")
     }
 }
+

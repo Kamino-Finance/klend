@@ -70,10 +70,10 @@ pub struct RefreshReserve<'info> {
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
 
-    pub pyth_oracle: Option<AccountInfo<'info>>,
+       pub pyth_oracle: Option<AccountInfo<'info>>,
 
-    pub switchboard_price_oracle: Option<AccountInfo<'info>>,
-    pub switchboard_twap_oracle: Option<AccountInfo<'info>>,
+       pub switchboard_price_oracle: Option<AccountInfo<'info>>,
+       pub switchboard_twap_oracle: Option<AccountInfo<'info>>,
 
-    pub scope_prices: Option<AccountInfo<'info>>,
+       pub scope_prices: Option<AccountInfo<'info>>,
 }

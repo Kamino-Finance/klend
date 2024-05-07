@@ -15,10 +15,11 @@ pub trait InstructionLoader {
     fn load_current_index(&self) -> std::result::Result<u16, ProgramError>;
 
     fn is_flash_forbidden_cpi_call(&self) -> Result<bool> {
+                                                               
         let current_index = self.load_current_index()? as usize;
         let current_ixn = self.load_instruction_at(current_index)?;
 
-        if crate::ID != current_ixn.program_id {
+                      if crate::ID != current_ixn.program_id {
             return Ok(true);
         }
 
@@ -29,17 +30,17 @@ pub trait InstructionLoader {
     }
 
     fn is_forbidden_cpi_call(&self) -> Result<bool> {
-        let current_index = self.load_current_index()? as usize;
+                                                                       let current_index = self.load_current_index()? as usize;
         let current_ixn = self.load_instruction_at(current_index)?;
 
-        if crate::ID != current_ixn.program_id {
+                      if crate::ID != current_ixn.program_id {
             let whitelisted_account = CPI_WHITELISTED_ACCOUNTS
                 .iter()
                 .find(|account| account.program_id == current_ixn.program_id);
 
             match whitelisted_account {
                 Some(whitelisted_account) => {
-                    if get_stack_height()
+                                       if get_stack_height()
                         > (TRANSACTION_LEVEL_STACK_HEIGHT + whitelisted_account.whitelist_level)
                     {
                         Ok(true)
@@ -47,7 +48,7 @@ pub trait InstructionLoader {
                         Ok(false)
                     }
                 }
-                None => Ok(true),
+                               None => Ok(true),
             }
         } else if get_stack_height() > TRANSACTION_LEVEL_STACK_HEIGHT {
             Ok(true)
@@ -103,8 +104,7 @@ where
                 self.current_ix_index = self.current_ix_index.checked_add(1).unwrap();
                 Some(Ok(ix))
             }
-            Err(ProgramError::InvalidArgument) => None,
-            Err(e) => Some(Err(e)),
+            Err(ProgramError::InvalidArgument) => None,            Err(e) => Some(Err(e)),
         }
     }
 }
