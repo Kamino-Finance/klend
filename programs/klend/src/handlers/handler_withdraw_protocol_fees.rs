@@ -55,7 +55,6 @@ pub struct WithdrawProtocolFees<'info> {
 
     #[account(mut,
         token::mint = reserve.load()?.liquidity.mint_pubkey,
-        token::authority = lending_market_owner,
     )]
     pub lending_market_owner_ata: Account<'info, TokenAccount>,
 

@@ -3,9 +3,15 @@ use anchor_lang::{prelude::*, Accounts};
 use crate::{
     lending_market::lending_operations,
     state::{LendingMarket, Reserve, UpdateConfigMode},
+    LendingError,
 };
 
-pub fn process(ctx: Context<UpdateReserveConfig>, mode: u64, value: &[u8]) -> Result<()> {
+pub fn process(
+    ctx: Context<UpdateReserveConfig>,
+    mode: u64,
+    value: &[u8],
+    skip_validation: bool,
+) -> Result<()> {
     let mode =
         UpdateConfigMode::try_from(mode).map_err(|_| ProgramError::InvalidInstructionData)?;
 
@@ -25,7 +31,18 @@ pub fn process(ctx: Context<UpdateReserveConfig>, mode: u64, value: &[u8]) -> Re
 
     lending_operations::update_reserve_config(reserve, mode, value);
 
-    lending_operations::utils::validate_reserve_config(&reserve.config, &market)?;
+    if skip_validation {
+        require!(
+            !matches!(
+                mode,
+                UpdateConfigMode::UpdateDepositLimit | UpdateConfigMode::UpdateBorrowLimit
+            ),
+            LendingError::InvalidConfig
+        );
+        msg!("WARNING! Skipping validation of the config");
+    } else {
+        lending_operations::utils::validate_reserve_config(&reserve.config, &market)?;
+    }
 
     Ok(())
 }

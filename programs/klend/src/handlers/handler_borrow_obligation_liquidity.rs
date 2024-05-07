@@ -1,18 +1,19 @@
+use std::cell::RefMut;
+
 use anchor_lang::{
     prelude::*,
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token::{self, Token, TokenAccount};
 use lending_checks::validate_referrer_token_state;
-use lending_operations::add_referrer_fee;
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{obligation::Obligation, CalculateBorrowResult, LendingMarket, Reserve},
-    utils::{seeds, token_transfer, FatAccountLoader, Fraction},
-    xmsg, LendingError, ReferrerTokenState, ReserveFarmKind,
+    utils::{seeds, token_transfer},
+    xmsg, LendingAction, LendingError, ReferrerTokenState, ReserveFarmKind,
 };
 
 pub fn process<'info>(
@@ -31,10 +32,35 @@ pub fn process<'info>(
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
+    let referrer_token_state_option: Option<RefMut<ReferrerTokenState>> =
+        if obligation.has_referrer() {
+            match &ctx.accounts.referrer_token_state {
+                Some(referrer_token_state_loader) => {
+                    let referrer_token_state = referrer_token_state_loader.load_mut()?;
+
+                    validate_referrer_token_state(
+                        &referrer_token_state,
+                        referrer_token_state_loader.key(),
+                        borrow_reserve.liquidity.mint_pubkey,
+                        obligation.referrer,
+                        ctx.accounts.borrow_reserve.key(),
+                    )?;
+
+                    Some(referrer_token_state)
+                }
+                None => return err!(LendingError::ReferrerAccountMissing),
+            }
+        } else {
+            None
+        };
+
+    let initial_reserve_token_balance =
+        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info())?;
+    let initial_reserve_available_liquidity = borrow_reserve.liquidity.available_amount;
+
     let CalculateBorrowResult {
         receive_amount,
         borrow_fee,
-        referrer_fee,
         ..
     } = lending_operations::borrow_obligation_liquidity(
         lending_market,
@@ -43,43 +69,12 @@ pub fn process<'info>(
         liquidity_amount,
         clock,
         ctx.accounts.borrow_reserve.key(),
+        referrer_token_state_option,
     )?;
 
     xmsg!("pnl: Borrow obligation liquidity {receive_amount} with borrow_fee {borrow_fee}",);
 
-    let mut owner_fee = borrow_fee;
-
-    if obligation.has_referrer() {
-        match &ctx.accounts.referrer_token_state {
-            Some(referrer_token_state_info) => {
-                let referrer_token_state_loader =
-                    FatAccountLoader::<ReferrerTokenState>::try_from(referrer_token_state_info)
-                        .unwrap();
-                let referrer_token_state = &mut referrer_token_state_loader.load_mut()?;
-
-                validate_referrer_token_state(
-                    referrer_token_state,
-                    referrer_token_state_info.key(),
-                    borrow_reserve.liquidity.mint_pubkey,
-                    obligation.referrer,
-                    ctx.accounts.borrow_reserve.key(),
-                )?;
-
-                add_referrer_fee(
-                    borrow_reserve,
-                    referrer_token_state,
-                    Fraction::from_num(referrer_fee),
-                )?;
-
-                owner_fee = owner_fee
-                    .checked_sub(referrer_fee)
-                    .ok_or(LendingError::MathOverflow)?;
-            }
-            None => return err!(LendingError::ReferrerAccountMissing),
-        }
-    }
-
-    if owner_fee > 0 {
+    if borrow_fee > 0 {
         token_transfer::send_origination_fees_transfer(
             ctx.accounts.token_program.to_account_info(),
             ctx.accounts.reserve_source_liquidity.to_account_info(),
@@ -88,7 +83,7 @@ pub fn process<'info>(
                 .to_account_info(),
             ctx.accounts.lending_market_authority.to_account_info(),
             authority_signer_seeds,
-            owner_fee,
+            borrow_fee,
         )?;
     }
 
@@ -99,6 +94,14 @@ pub fn process<'info>(
         ctx.accounts.lending_market_authority.to_account_info(),
         authority_signer_seeds,
         receive_amount,
+    )?;
+
+    lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info()).unwrap(),
+        borrow_reserve.liquidity.available_amount,
+        initial_reserve_token_balance,
+        initial_reserve_available_liquidity,
+        LendingAction::Subtractive(borrow_fee + receive_amount),
     )?;
 
     Ok(())
@@ -143,7 +146,7 @@ pub struct BorrowObligationLiquidity<'info> {
     pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
 
     #[account(mut)]
-    pub referrer_token_state: Option<AccountInfo<'info>>,
+    pub referrer_token_state: Option<AccountLoader<'info, ReferrerTokenState>>,
 
     pub token_program: Program<'info, Token>,
 

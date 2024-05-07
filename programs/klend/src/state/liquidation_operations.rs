@@ -7,7 +7,7 @@ use crate::{
     fraction::FractionExtra,
     lending_market::utils::get_max_ltv_and_liquidation_threshold,
     utils::{
-        bps_u128_to_fraction, fraction::fraction, slots, Fraction, BANKRUPTCY_THRESHOLD,
+        bps_u128_to_fraction, fraction::fraction, slots, Fraction, DUST_LAMPORT_THRESHOLD,
         ELEVATION_GROUP_NONE, MIN_AUTODELEVERAGE_BONUS_BPS,
     },
     xmsg, CalculateLiquidationResult, LendingError, LendingMarket, LendingResult,
@@ -22,7 +22,7 @@ pub fn max_liquidatable_borrowed_amount(
     liquidity: &ObligationLiquidity,
     user_ltv: Fraction,
     insolvency_risk_ltv_pct: u8,
-) -> LendingResult<Fraction> {
+) -> Fraction {
     let obligation_debt_for_liquidity_mv = Fraction::from_bits(liquidity.market_value_sf);
 
     let total_obligation_debt_mv = Fraction::from_bits(obligation.borrowed_assets_market_value_sf);
@@ -47,9 +47,7 @@ pub fn max_liquidatable_borrowed_amount(
     let max_liquidation_ratio = max_liquidatable_mv / obligation_debt_for_liquidity_mv;
 
     let borrowed_amount = Fraction::from_bits(liquidity.borrowed_amount_sf);
-    let max_liquidatable_amount = borrowed_amount * max_liquidation_ratio;
-
-    Ok(max_liquidatable_amount)
+    borrowed_amount * max_liquidation_ratio
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -103,8 +101,7 @@ pub fn calculate_liquidation(
             liquidity,
             user_ltv,
             lending_market.insolvency_risk_unhealthy_ltv_pct,
-        )?
-        .min(borrowed_amount_f)
+        )
         .min(debt_amount_to_liquidate)
     };
 
@@ -286,9 +283,9 @@ fn calculate_liquidation_amounts(
             let withdraw_amount_f = Fraction::from_num(collateral.deposited_amount) * withdraw_pct;
 
             let withdraw_amount = if is_below_min_full_liquidation_value_threshold
-                && withdraw_amount_f < BANKRUPTCY_THRESHOLD
+                && withdraw_amount_f < DUST_LAMPORT_THRESHOLD
             {
-                BANKRUPTCY_THRESHOLD
+                DUST_LAMPORT_THRESHOLD
             } else {
                 withdraw_amount_f.to_floor()
             };
@@ -526,7 +523,7 @@ pub fn calculate_protocol_liquidation_fee(
     amount_liquidated: u64,
     liquidation_bonus: Fraction,
     protocol_liquidation_fee_pct: u8,
-) -> LendingResult<u64> {
+) -> u64 {
     let protocol_liquidation_fee_rate = Fraction::from_percent(protocol_liquidation_fee_pct);
     let amount_liquidated = Fraction::from(amount_liquidated);
 
@@ -537,5 +534,5 @@ pub fn calculate_protocol_liquidation_fee(
     let protocol_fee = bonus * protocol_liquidation_fee_rate;
     let protocol_fee: u64 = protocol_fee.to_ceil();
 
-    Ok(max(protocol_fee, 1))
+    max(protocol_fee, 1)
 }

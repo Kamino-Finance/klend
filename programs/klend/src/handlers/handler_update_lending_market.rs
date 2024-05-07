@@ -55,6 +55,9 @@ pub fn process(
         UpdateLendingMarketMode::UpdateLiquidationMaxValue => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
             msg!("Value is {:?}", value);
+            if value == 0 {
+                return err!(LendingError::InvalidFlag);
+            }
             market.max_liquidatable_debt_market_value_at_once = value;
         }
         UpdateLendingMarketMode::UpdateGlobalAllowedBorrow => {
@@ -70,6 +73,9 @@ pub fn process(
         UpdateLendingMarketMode::UpdateMinFullLiquidationThreshold => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
             msg!("Value is {:?}", value);
+            if value == 0 {
+                return err!(LendingError::InvalidFlag);
+            }
             market.min_full_liquidation_value_threshold = value;
         }
         UpdateLendingMarketMode::UpdateRiskCouncil => {
@@ -128,6 +134,9 @@ pub fn process(
                 msg!("Referral fee bps must be in range [0, 10000]");
                 return err!(LendingError::InvalidConfig);
             }
+            if market.referral_fee_bps != 0 {
+                msg!("WARNING: Referral fee bps already set, unrefreshed obligations referral fees could be lost!");
+            }
             market.referral_fee_bps = value;
         }
         UpdateLendingMarketMode::UpdateMultiplierPoints => {
@@ -167,6 +176,19 @@ pub fn process(
             msg!("New Value is {:?}", borrow_disabled);
             validate_numerical_bool(borrow_disabled)?;
             market.borrow_disabled = borrow_disabled;
+        }
+        UpdateLendingMarketMode::UpdateMinNetValueObligationPostAction => {
+            let min_net_value_in_obligation_sf =
+                u128::from_le_bytes(value[..16].try_into().unwrap());
+            msg!(
+                "Prev Value is {}",
+                Fraction::from_bits(market.min_net_value_in_obligation_sf)
+            );
+            msg!(
+                "New Value is {}",
+                Fraction::from_bits(min_net_value_in_obligation_sf)
+            );
+            market.min_net_value_in_obligation_sf = min_net_value_in_obligation_sf;
         }
     }
 

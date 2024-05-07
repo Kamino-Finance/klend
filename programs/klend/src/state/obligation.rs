@@ -44,8 +44,13 @@ pub struct Obligation {
 
     pub referrer: Pubkey,
 
+    pub borrowing_disabled: u8,
+
     #[derivative(Debug = "ignore")]
-    pub padding_3: [u64; 128],
+    pub reserved: [u8; 7],
+
+    #[derivative(Debug = "ignore")]
+    pub padding_3: [u64; 127],
 }
 
 impl Default for Obligation {
@@ -67,8 +72,10 @@ impl Default for Obligation {
             borrows_asset_tiers: [u8::MAX; 5],
             elevation_group: ELEVATION_GROUP_NONE,
             num_of_obsolete_reserves: 0,
-            padding_3: [0; 128],
             has_debt: 0,
+            borrowing_disabled: 0,
+            reserved: [0; 7],
+            padding_3: [0; 127],
             referrer: Pubkey::default(),
         }
     }
@@ -209,12 +216,10 @@ impl Obligation {
         &mut self,
         deposit_reserve: Pubkey,
         deposit_reserve_asset_tier: AssetTier,
-    ) -> Result<&mut ObligationCollateral> {
+    ) -> Result<(&mut ObligationCollateral, usize)> {
         if let Some(collateral_index) = self.find_collateral_index_in_deposits(deposit_reserve) {
-            return Ok(&mut self.deposits[collateral_index]);
-        }
-
-        if let Some((index, collateral)) = self
+            Ok((&mut self.deposits[collateral_index], collateral_index))
+        } else if let Some((index, collateral)) = self
             .deposits
             .iter_mut()
             .enumerate()
@@ -223,7 +228,7 @@ impl Obligation {
             *collateral = ObligationCollateral::new(deposit_reserve);
             self.deposits_asset_tiers[index] = deposit_reserve_asset_tier.into();
 
-            Ok(collateral)
+            Ok((collateral, index))
         } else {
             xmsg!("Obligation has no empty deposits");
             err!(LendingError::ObligationReserveLimit)
@@ -269,12 +274,10 @@ impl Obligation {
         borrow_reserve: Pubkey,
         cumulative_borrow_rate: BigFraction,
         borrow_reserve_asset_tier: AssetTier,
-    ) -> Result<&mut ObligationLiquidity> {
+    ) -> Result<(&mut ObligationLiquidity, usize)> {
         if let Some(liquidity_index) = self.find_liquidity_index_in_borrows(borrow_reserve) {
-            return Ok(&mut self.borrows[liquidity_index]);
-        }
-
-        if let Some((index, liquidity)) = self
+            Ok((&mut self.borrows[liquidity_index], liquidity_index))
+        } else if let Some((index, liquidity)) = self
             .borrows
             .iter_mut()
             .enumerate()
@@ -283,7 +286,7 @@ impl Obligation {
             *liquidity = ObligationLiquidity::new(borrow_reserve, cumulative_borrow_rate);
             self.borrows_asset_tiers[index] = borrow_reserve_asset_tier.into();
 
-            Ok(liquidity)
+            Ok((liquidity, index))
         } else {
             xmsg!("Obligation has no empty borrows");
             err!(LendingError::ObligationReserveLimit)

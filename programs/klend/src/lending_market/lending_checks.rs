@@ -1,15 +1,19 @@
 use anchor_lang::{
-    err,
+    accounts::account_loader::AccountLoader,
+    err, error,
     prelude::{msg, Context, Pubkey},
-    Key, Result,
+    require_eq, Key, Result,
 };
 
 use crate::{
     handlers::*,
-    state::{RedeemReserveCollateralAccounts, WithdrawObligationCollateralAccounts},
+    state::{
+        DepositObligationCollateralAccounts, RedeemReserveCollateralAccounts,
+        WithdrawObligationCollateralAccounts,
+        WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
+    },
     utils::{seeds::BASE_SEED_REFERRER_TOKEN_STATE, FatAccountLoader, PROGRAM_VERSION},
-    DepositObligationCollateralAccounts, LendingError, Obligation, ReferrerTokenState,
-    ReserveStatus, WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
+    LendingAction, LendingError, Obligation, ReferrerTokenState, Reserve, ReserveStatus,
 };
 
 pub fn borrow_obligation_liquidity_checks(ctx: &Context<BorrowObligationLiquidity>) -> Result<()> {
@@ -286,6 +290,74 @@ pub fn refresh_obligation_farms_for_reserve_checks(
     if reserve.version != PROGRAM_VERSION as u64 {
         msg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
+    }
+
+    Ok(())
+}
+
+pub fn initial_liquidation_reserve_liquidity_available_amount(
+    repay_reserve: &AccountLoader<Reserve>,
+    withdraw_reserve: &AccountLoader<Reserve>,
+) -> (u64, u64) {
+    let repay_reserve = repay_reserve.load().unwrap();
+    let withdraw_reserve = withdraw_reserve.load().unwrap();
+    let repay_reserve_liquidity = repay_reserve.liquidity.available_amount;
+    let withdraw_reserve_liquidity = withdraw_reserve.liquidity.available_amount;
+
+    (repay_reserve_liquidity, withdraw_reserve_liquidity)
+}
+
+pub fn post_transfer_vault_balance_liquidity_reserve_checks(
+    final_reserve_vault_balance: u64,
+    final_reserve_available_liquidity: u64,
+    initial_reserve_vault_balance: u64,
+    initial_reserve_available_liquidity: u64,
+    action_type: LendingAction,
+) -> anchor_lang::Result<()> {
+    let pre_transfer_reserve_diff =
+        initial_reserve_vault_balance - initial_reserve_available_liquidity;
+    let post_transfer_reserve_diff =
+        final_reserve_vault_balance - final_reserve_available_liquidity;
+
+    require_eq!(
+        pre_transfer_reserve_diff,
+        post_transfer_reserve_diff,
+        LendingError::ReserveTokenBalanceMismatch
+    );
+
+    match action_type {
+        LendingAction::Additive(amount_transferred) => {
+            let expected_reserve_vault_balance = initial_reserve_vault_balance + amount_transferred;
+            require_eq!(
+                expected_reserve_vault_balance,
+                final_reserve_vault_balance,
+                LendingError::ReserveVaultBalanceMismatch,
+            );
+
+            let expected_reserve_available_liquidity =
+                initial_reserve_available_liquidity + amount_transferred;
+            require_eq!(
+                expected_reserve_available_liquidity,
+                final_reserve_available_liquidity,
+                LendingError::ReserveAccountingMismatch
+            );
+        }
+        LendingAction::Subtractive(amount_transferred) => {
+            let expected_reserve_vault_balance = initial_reserve_vault_balance - amount_transferred;
+            require_eq!(
+                expected_reserve_vault_balance,
+                final_reserve_vault_balance,
+                LendingError::ReserveVaultBalanceMismatch
+            );
+
+            let expected_reserve_available_liquidity =
+                initial_reserve_available_liquidity - amount_transferred;
+            require_eq!(
+                expected_reserve_available_liquidity,
+                final_reserve_available_liquidity,
+                LendingError::ReserveAccountingMismatch
+            );
+        }
     }
 
     Ok(())

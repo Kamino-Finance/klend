@@ -43,6 +43,7 @@ pub fn process(ctx: Context<DepositObligationCollateral>, collateral_amount: u64
         clock.slot,
         collateral_amount,
         ctx.accounts.deposit_reserve.key(),
+        lending_market,
     )?;
 
     msg!(

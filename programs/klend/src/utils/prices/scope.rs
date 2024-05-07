@@ -1,7 +1,7 @@
 use std::{cell::Ref, convert::TryInto};
 
 use anchor_lang::{__private::bytemuck, prelude::*, Discriminator};
-pub use scope::{DatedPrice, OraclePrices as ScopePrices};
+pub use scope::OraclePrices as ScopePrices;
 
 use super::{
     types::{TimestampedPrice, TimestampedPriceWithTwap},

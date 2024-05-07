@@ -3,14 +3,14 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::{Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{obligation::Obligation, LendingMarket, Reserve},
     utils::{close_account_loader, seeds, token_transfer},
-    ReserveFarmKind, WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
+    LendingAction, ReserveFarmKind, WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
 };
 
 pub fn process(
@@ -28,6 +28,7 @@ pub fn process(
         )?;
 
         let reserve = &mut ctx.accounts.withdraw_reserve.load_mut()?;
+
         let obligation = &mut ctx.accounts.obligation.load_mut()?;
         let lending_market = &ctx.accounts.lending_market.load()?;
         let lending_market_key = ctx.accounts.lending_market.key();
@@ -36,6 +37,9 @@ pub fn process(
         let authority_signer_seeds =
             gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
+        let initial_reserve_token_balance =
+            token::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())?;
+        let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
         let withdraw_obligation_amount = lending_operations::withdraw_obligation_collateral(
             lending_market,
             reserve,
@@ -66,6 +70,15 @@ pub fn process(
             authority_signer_seeds,
             withdraw_obligation_amount,
             withdraw_liquidity_amount,
+        )?;
+
+        lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+            token::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())
+                .unwrap(),
+            reserve.liquidity.available_amount,
+            initial_reserve_token_balance,
+            initial_reserve_available_liquidity,
+            LendingAction::Subtractive(withdraw_liquidity_amount),
         )?;
 
         obligation.deposits_empty() && obligation.borrows_empty()

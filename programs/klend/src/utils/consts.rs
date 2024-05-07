@@ -54,9 +54,11 @@ pub const ELEVATION_GROUP_NONE: u8 = 0;
 
 pub const MAX_NUM_ELEVATION_GROUPS: u8 = 10;
 
-pub const USD_DECIMALS: usize = 6;
+pub const USD_DECIMALS: u32 = 6;
 
-pub const BANKRUPTCY_THRESHOLD: u64 = 1;
+pub const MIN_NET_VALUE_IN_OBLIGATION: Fraction = fraction!(0.000001);
+
+pub const DUST_LAMPORT_THRESHOLD: u64 = 1;
 
 pub fn ten_pow(x: usize) -> u64 {
     const POWERS_OF_TEN: [u64; 20] = [
@@ -104,12 +106,19 @@ pub const SQUADS_PROGRAM_ID_V4_MAINNET_DEV: Pubkey =
 pub const FLEX_LEND_ID_MAINNET_PROD: Pubkey =
     pubkey!("FL3X2pRsQ9zHENpZSKDRREtccwJuei8yg9fwDu9UN69Q");
 
-pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 5] = [
+pub const METEORA_DYNAMIC_POOL_ID_MAINNET: Pubkey =
+    pubkey!("24Uqj9JCLxUeoC3hGfh5W3s9FM9uCHDS2SG3LYwBpyTi");
+
+pub const DEFI_CARROT_ID_MAINNET: Pubkey = pubkey!("CarrotwivhMpDnm27EHmRLeQ683Z1PufuqEmBZvD282s");
+
+pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 7] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_DEV, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V4_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V4_MAINNET_DEV, 1),
+    CpiWhitelistedAccount::new(METEORA_DYNAMIC_POOL_ID_MAINNET, 1),
+    CpiWhitelistedAccount::new(DEFI_CARROT_ID_MAINNET, 1),
 ];
 
 pub struct CpiWhitelistedAccount {

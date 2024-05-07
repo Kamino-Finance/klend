@@ -3,14 +3,14 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token::{self, Token, TokenAccount};
 
 use crate::{
     check_refresh_ixs,
-    lending_market::{lending_checks, repay_obligation_liquidity},
+    lending_market::{lending_checks, lending_operations},
     state::{obligation::Obligation, LendingMarket, Reserve},
-    utils::repay_obligation_liquidity_transfer,
-    xmsg, ReserveFarmKind,
+    utils::token_transfer,
+    xmsg, LendingAction, ReserveFarmKind,
 };
 
 pub fn process(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) -> Result<()> {
@@ -21,13 +21,19 @@ pub fn process(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) ->
 
     let repay_reserve = &mut ctx.accounts.repay_reserve.load_mut()?;
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
+    let lending_market = &ctx.accounts.lending_market.load()?;
 
-    let repay_amount = repay_obligation_liquidity(
+    let initial_reserve_token_balance =
+        token::accessor::amount(&ctx.accounts.reserve_destination_liquidity.to_account_info())?;
+    let initial_reserve_available_liquidity = repay_reserve.liquidity.available_amount;
+
+    let repay_amount = lending_operations::repay_obligation_liquidity(
         repay_reserve,
         obligation,
         &clock,
         liquidity_amount,
         ctx.accounts.repay_reserve.key(),
+        lending_market,
     )?;
 
     xmsg!(
@@ -36,12 +42,21 @@ pub fn process(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) ->
         liquidity_amount
     );
 
-    repay_obligation_liquidity_transfer(
+    token_transfer::repay_obligation_liquidity_transfer(
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.user_source_liquidity.to_account_info(),
         ctx.accounts.reserve_destination_liquidity.to_account_info(),
         ctx.accounts.owner.to_account_info(),
         repay_amount,
+    )?;
+
+    lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+        token::accessor::amount(&ctx.accounts.reserve_destination_liquidity.to_account_info())
+            .unwrap(),
+        repay_reserve.liquidity.available_amount,
+        initial_reserve_token_balance,
+        initial_reserve_available_liquidity,
+        LendingAction::Additive(repay_amount),
     )?;
 
     Ok(())

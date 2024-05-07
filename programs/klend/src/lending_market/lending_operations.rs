@@ -1,4 +1,5 @@
 use std::{
+    cell::RefMut,
     cmp::min,
     ops::{Add, Div, Mul},
 };
@@ -15,10 +16,12 @@ use solana_program::clock::{self, Clock};
 
 use self::utils::{
     calculate_obligation_collateral_market_value, calculate_obligation_liquidity_market_value,
-    check_elevation_group_borrowing_enabled, check_obligation_collateral_deposit_reserve,
-    check_obligation_fully_refreshed_and_not_null, check_obligation_liquidity_borrow_reserve,
-    check_same_elevation_group, get_elevation_group, get_max_ltv_and_liquidation_threshold,
-    validate_obligation_asset_tiers,
+    check_elevation_group_borrowing_enabled, check_non_elevation_group_borrowing_enabled,
+    check_obligation_collateral_deposit_reserve, check_obligation_fully_refreshed_and_not_null,
+    check_obligation_liquidity_borrow_reserve, check_same_elevation_group, get_elevation_group,
+    get_max_ltv_and_liquidation_threshold, post_borrow_obligation_invariants,
+    post_deposit_obligation_invariants, post_repay_obligation_invariants,
+    post_withdraw_obligation_invariants, validate_obligation_asset_tiers,
 };
 use super::{
     validate_referrer_token_state,
@@ -155,6 +158,7 @@ pub fn borrow_obligation_liquidity(
     liquidity_amount: u64,
     clock: &Clock,
     borrow_reserve_pk: Pubkey,
+    referrer_token_state: Option<RefMut<ReferrerTokenState>>,
 ) -> Result<CalculateBorrowResult> {
     if liquidity_amount == 0 {
         msg!("Liquidity amount provided cannot be zero");
@@ -201,8 +205,14 @@ pub fn borrow_obligation_liquidity(
     check_same_elevation_group(obligation, borrow_reserve)?;
 
     check_elevation_group_borrowing_enabled(lending_market, obligation)?;
+    check_non_elevation_group_borrowing_enabled(obligation)?;
 
     let remaining_reserve_capacity = borrow_limit_f.saturating_sub(reserve_liquidity_borrowed_f);
+
+    if remaining_reserve_capacity == Fraction::ZERO {
+        msg!("Borrow reserve is at full capacity");
+        return err!(LendingError::BorrowLimitExceeded);
+    }
 
     let CalculateBorrowResult {
         borrow_amount_f,
@@ -215,6 +225,7 @@ pub fn borrow_obligation_liquidity(
         remaining_reserve_capacity,
         lending_market.referral_fee_bps,
         obligation.elevation_group,
+        referrer_token_state.is_some(),
     )?;
 
     add_to_withdrawal_accum(
@@ -234,17 +245,34 @@ pub fn borrow_obligation_liquidity(
     let cumulative_borrow_rate_bf =
         BigFraction::from(borrow_reserve.liquidity.cumulative_borrow_rate_bsf);
 
-    let obligation_liquidity = obligation.find_or_add_liquidity_to_borrows(
+    let (obligation_liquidity, liquidity_index) = obligation.find_or_add_liquidity_to_borrows(
         borrow_reserve_pk,
         cumulative_borrow_rate_bf,
         borrow_reserve.config.get_asset_tier(),
     )?;
+
+    if referrer_token_state.is_some() {
+        add_referrer_fee(
+            borrow_reserve,
+            &mut referrer_token_state.unwrap(),
+            Fraction::from_num(referrer_fee),
+        )?;
+
+        borrow_reserve.liquidity.available_amount += referrer_fee;
+    }
 
     obligation_liquidity.borrow(borrow_amount_f);
     obligation.has_debt = 1;
     obligation.last_update.mark_stale();
 
     validate_obligation_asset_tiers(obligation)?;
+    post_borrow_obligation_invariants(
+        borrow_amount_f,
+        obligation,
+        borrow_reserve,
+        Fraction::from_bits(obligation.borrows[liquidity_index].market_value_sf),
+        Fraction::from_bits(lending_market.min_net_value_in_obligation_sf),
+    )?;
 
     Ok(CalculateBorrowResult {
         borrow_amount_f,
@@ -260,6 +288,7 @@ pub fn deposit_obligation_collateral(
     slot: Slot,
     collateral_amount: u64,
     deposit_reserve_pk: Pubkey,
+    lending_market: &LendingMarket,
 ) -> Result<()> {
     if collateral_amount == 0 {
         msg!("Collateral amount provided cannot be zero");
@@ -276,17 +305,26 @@ pub fn deposit_obligation_collateral(
 
     check_same_elevation_group(obligation, deposit_reserve)?;
 
-    obligation
-        .find_or_add_collateral_to_deposits(
-            deposit_reserve_pk,
-            deposit_reserve.config.get_asset_tier(),
-        )?
-        .deposit(collateral_amount)?;
+    let (collateral, collateral_index) = obligation.find_or_add_collateral_to_deposits(
+        deposit_reserve_pk,
+        deposit_reserve.config.get_asset_tier(),
+    )?;
+
+    collateral.deposit(collateral_amount)?;
     obligation.last_update.mark_stale();
 
     deposit_reserve.last_update.mark_stale();
 
     validate_obligation_asset_tiers(obligation)?;
+    post_deposit_obligation_invariants(
+        deposit_reserve
+            .collateral_exchange_rate()?
+            .fraction_collateral_to_liquidity(Fraction::from(collateral_amount)),
+        obligation,
+        deposit_reserve,
+        Fraction::from_bits(obligation.deposits[collateral_index].market_value_sf),
+        Fraction::from_bits(lending_market.min_net_value_in_obligation_sf),
+    )?;
 
     Ok(())
 }
@@ -357,13 +395,13 @@ pub fn withdraw_obligation_collateral(
         msg!("Obligation deposited value is zero");
         return err!(LendingError::ObligationDepositsZero);
     } else {
-        let (loan_to_value_pct, _) = get_max_ltv_and_liquidation_threshold(
+        let (reserve_loan_to_value_pct, _) = get_max_ltv_and_liquidation_threshold(
             lending_market,
             withdraw_reserve,
             obligation.elevation_group,
         )?;
 
-        let max_withdraw_value = obligation.max_withdraw_value(loan_to_value_pct)?;
+        let max_withdraw_value = obligation.max_withdraw_value(reserve_loan_to_value_pct)?;
 
         if max_withdraw_value == Fraction::ZERO {
             msg!("Maximum withdraw value is zero");
@@ -406,6 +444,16 @@ pub fn withdraw_obligation_collateral(
 
     obligation.withdraw(withdraw_amount, collateral_index)?;
     obligation.last_update.mark_stale();
+
+    post_withdraw_obligation_invariants(
+        withdraw_reserve
+            .collateral_exchange_rate()?
+            .fraction_collateral_to_liquidity(Fraction::from(withdraw_amount)),
+        obligation,
+        withdraw_reserve,
+        Fraction::from_bits(obligation.deposits[collateral_index].market_value_sf),
+        Fraction::from_bits(lending_market.min_net_value_in_obligation_sf),
+    )?;
 
     Ok(withdraw_amount)
 }
@@ -474,6 +522,7 @@ pub fn repay_obligation_liquidity(
     clock: &Clock,
     liquidity_amount: u64,
     repay_reserve_pk: Pubkey,
+    lending_market: &LendingMarket,
 ) -> Result<u64> {
     if liquidity_amount == 0 {
         msg!("Liquidity amount provided cannot be zero");
@@ -524,6 +573,14 @@ pub fn repay_obligation_liquidity(
     obligation.repay(settle_amount, liquidity_index)?;
     obligation.update_has_debt();
     obligation.last_update.mark_stale();
+
+    post_repay_obligation_invariants(
+        settle_amount,
+        obligation,
+        repay_reserve,
+        Fraction::from_bits(obligation.borrows[liquidity_index].market_value_sf),
+        Fraction::from_bits(lending_market.min_net_value_in_obligation_sf),
+    )?;
 
     Ok(repay_amount)
 }
@@ -610,6 +667,7 @@ where
     let mut unhealthy_borrow_value = Fraction::ZERO;
     let mut num_of_obsolete_reserves = 0;
     let mut prices_state = PriceStatusFlags::all();
+    let mut borrowing_disabled = false;
 
     for (index, deposit) in obligation
         .deposits
@@ -634,6 +692,12 @@ where
                 .contains(&elevation_group)
         {
             return err!(LendingError::InconsistentElevationGroup);
+        }
+
+        if elevation_group == ELEVATION_GROUP_NONE
+            && deposit_reserve.config.disable_usage_as_coll_outside_emode > 0
+        {
+            borrowing_disabled = true;
         }
 
         if deposit_reserve.config.status() == ReserveStatus::Obsolete {
@@ -690,6 +754,7 @@ where
         allowed_borrow_value_f: allowed_borrow_value,
         unhealthy_borrow_value_f: unhealthy_borrow_value,
         prices_state,
+        borrowing_disabled,
     })
 }
 
@@ -845,6 +910,7 @@ where
         allowed_borrow_value_f: allowed_borrow_value,
         unhealthy_borrow_value_f: unhealthy_borrow_value,
         prices_state: deposits_prices_state,
+        borrowing_disabled,
     } = refresh_obligation_deposits(
         obligation,
         lending_market,
@@ -886,6 +952,8 @@ where
     obligation.lowest_reserve_deposit_ltv = lowest_deposit_ltv_accumulator.into();
 
     obligation.num_of_obsolete_reserves = num_of_obsolete_reserves;
+
+    obligation.borrowing_disabled = borrowing_disabled.into();
 
     let prices_state = deposits_prices_state.intersection(borrows_prices_state);
     obligation.last_update.update_slot(slot, Some(prices_state));
@@ -1065,7 +1133,7 @@ pub(crate) fn post_liquidate_redeem(
             withdraw_liquidity_amount,
             liquidation_bonus_rate,
             withdraw_reserve.config.protocol_liquidation_fee_pct,
-        )?;
+        );
         msg!(
             "pnl: Liquidator repaid {} and withdrew {} collateral with fees {}",
             repay_amount,
@@ -1092,19 +1160,24 @@ pub fn flash_borrow_reserve_liquidity(reserve: &mut Reserve, liquidity_amount: u
     Ok(())
 }
 
-pub fn flash_repay_reserve_liquidity(
+pub fn flash_repay_reserve_liquidity<'info, T>(
     lending_market: &LendingMarket,
     reserve: &mut Reserve,
     liquidity_amount: u64,
     slot: Slot,
-) -> Result<(u64, u64, u64)> {
+    referrer_token_state_loader: Option<&T>,
+) -> Result<(u64, u64)>
+where
+    T: AnyAccountLoader<'info, ReferrerTokenState>,
+{
     let flash_loan_amount = liquidity_amount;
 
     let flash_loan_amount_f = Fraction::from(flash_loan_amount);
-    let (total_fee, referral_fee) = reserve
-        .config
-        .fees
-        .calculate_flash_loan_fees(flash_loan_amount_f, lending_market.referral_fee_bps)?;
+    let (protocol_fee, referrer_fee) = reserve.config.fees.calculate_flash_loan_fees(
+        flash_loan_amount_f,
+        lending_market.referral_fee_bps,
+        referrer_token_state_loader.is_some(),
+    )?;
 
     reserve
         .liquidity
@@ -1112,7 +1185,21 @@ pub fn flash_repay_reserve_liquidity(
     refresh_reserve_limit_timestamps(reserve, slot)?;
     reserve.last_update.mark_stale();
 
-    Ok((flash_loan_amount, total_fee, referral_fee))
+    if referrer_token_state_loader.is_some() {
+        let referrer_token_state = &mut referrer_token_state_loader.unwrap().get_mut()?;
+
+        add_referrer_fee(
+            reserve,
+            referrer_token_state,
+            Fraction::from_num(referrer_fee),
+        )?;
+
+        reserve.liquidity.available_amount += referrer_fee;
+    }
+
+    let flash_loan_amount_with_referral_fee = flash_loan_amount + referrer_fee;
+
+    Ok((flash_loan_amount_with_referral_fee, protocol_fee))
 }
 
 pub fn socialize_loss(
@@ -1269,8 +1356,8 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             let new = u64::from_le_bytes(value[..8].try_into().unwrap());
             let prv = reserve.config.fees.flash_loan_fee_sf;
             reserve.config.fees.flash_loan_fee_sf = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            msg!("Prv Value is {}", Fraction::from_bits(prv.into()));
+            msg!("New Value is {}", Fraction::from_bits(new.into()));
         }
         UpdateConfigMode::UpdateFeesReferralFeeBps => {
             msg!("ReferralFee moved to lending_market");
@@ -1587,6 +1674,13 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
+        UpdateConfigMode::UpdateDisableUsageAsCollateralOutsideEmode => {
+            let new = value[0];
+            let prv = reserve.config.disable_usage_as_coll_outside_emode;
+            reserve.config.disable_usage_as_coll_outside_emode = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
+        }
     }
 
     reserve.last_update.mark_stale();
@@ -1597,7 +1691,7 @@ pub mod utils {
     use crate::{
         fraction::FRACTION_ONE_SCALED,
         state::ReserveConfig,
-        utils::{ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
+        utils::{ten_pow, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
         ElevationGroup, ObligationCollateral, ObligationLiquidity,
     };
 
@@ -1632,36 +1726,42 @@ pub mod utils {
         Ok(())
     }
 
-    pub(crate) fn calculate_obligation_collateral_market_value(
-        deposit_reserve: &Reserve,
-        deposit: &ObligationCollateral,
+    pub(crate) fn calculate_market_value_from_liquidity_amount(
+        reserve: &Reserve,
+        liquidity_amount: Fraction,
     ) -> Result<Fraction> {
-        let mint_decimal_factor: u128 = 10u64
-            .pow(deposit_reserve.liquidity.mint_decimals.try_into().unwrap())
-            .into();
-        let market_price_f = deposit_reserve.liquidity.get_market_price_f();
-        let market_value = deposit_reserve
-            .collateral_exchange_rate()?
-            .fraction_collateral_to_liquidity(deposit.deposited_amount.into())
+        let mint_decimal_factor: u128 =
+            ten_pow(reserve.liquidity.mint_decimals.try_into().unwrap()).into();
+        let market_price_f = reserve.liquidity.get_market_price_f();
+        let market_value = liquidity_amount
             .mul(market_price_f)
             .div(mint_decimal_factor);
 
         Ok(market_value)
     }
 
+    pub(crate) fn calculate_obligation_collateral_market_value(
+        deposit_reserve: &Reserve,
+        deposit: &ObligationCollateral,
+    ) -> Result<Fraction> {
+        let liquidity_amount_from_collateral = deposit_reserve
+            .collateral_exchange_rate()?
+            .fraction_collateral_to_liquidity(deposit.deposited_amount.into());
+
+        calculate_market_value_from_liquidity_amount(
+            deposit_reserve,
+            liquidity_amount_from_collateral,
+        )
+    }
+
     pub(crate) fn calculate_obligation_liquidity_market_value(
         borrow_reserve: &Reserve,
         borrow: &ObligationLiquidity,
     ) -> Result<Fraction> {
-        let mint_decimal_factor =
-            10u64.pow(borrow_reserve.liquidity.mint_decimals.try_into().unwrap());
-
-        let borrowed_amount_f = Fraction::from_bits(borrow.borrowed_amount_sf);
-        let market_price_f = borrow_reserve.liquidity.get_market_price_f();
-
-        let market_value = borrowed_amount_f * market_price_f / u128::from(mint_decimal_factor);
-
-        Ok(market_value)
+        calculate_market_value_from_liquidity_amount(
+            borrow_reserve,
+            Fraction::from_bits(borrow.borrowed_amount_sf),
+        )
     }
 
     pub(crate) fn check_obligation_collateral_deposit_reserve(
@@ -1760,6 +1860,14 @@ pub mod utils {
         }
     }
 
+    pub fn check_non_elevation_group_borrowing_enabled(obligation: &Obligation) -> Result<()> {
+        if obligation.elevation_group == ELEVATION_GROUP_NONE && obligation.borrowing_disabled > 0 {
+            err!(LendingError::BorrowingDisabledOutsideElevationGroup)
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn check_same_elevation_group(obligation: &Obligation, reserve: &Reserve) -> Result<()> {
         if obligation.elevation_group != ELEVATION_GROUP_NONE
             && !reserve
@@ -1768,6 +1876,189 @@ pub mod utils {
                 .contains(&obligation.elevation_group)
         {
             return err!(LendingError::InconsistentElevationGroup);
+        }
+
+        Ok(())
+    }
+
+    pub fn post_deposit_obligation_invariants(
+        amount: Fraction,
+        obligation: &Obligation,
+        reserve: &Reserve,
+        collateral_asset_mv: Fraction,
+        min_accepted_net_value: Fraction,
+    ) -> Result<()> {
+        let asset_mv = calculate_market_value_from_liquidity_amount(reserve, amount)?;
+
+        let new_total_deposited_mv = Fraction::from_bits(obligation.deposited_value_sf) + asset_mv;
+
+        let new_collateral_asset_mv = collateral_asset_mv + asset_mv;
+
+        let new_ltv = Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf)
+            / new_total_deposited_mv;
+
+        if new_collateral_asset_mv > 0 && new_collateral_asset_mv < min_accepted_net_value {
+            msg!(
+                "Obligation new collateral value after deposit {} for ${}",
+                new_collateral_asset_mv.to_display(),
+                reserve.token_symbol()
+            );
+            return err!(LendingError::NetValueRemainingTooSmall);
+        }
+
+        if obligation.deposited_value_sf != 0 {
+            if new_ltv > obligation.loan_to_value() {
+                msg!(
+                    "Obligation new LTV after deposit {} of {}",
+                    new_ltv.to_display(),
+                    reserve.token_symbol()
+                );
+                return err!(LendingError::WorseLTVBlocked);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn post_withdraw_obligation_invariants(
+        amount: Fraction,
+        obligation: &Obligation,
+        reserve: &Reserve,
+        collateral_asset_mv: Fraction,
+        min_accepted_net_value: Fraction,
+    ) -> Result<()> {
+        let asset_mv = calculate_market_value_from_liquidity_amount(reserve, amount)?;
+
+        let new_total_deposited_mv = Fraction::from_bits(obligation.deposited_value_sf) - asset_mv;
+
+        if collateral_asset_mv != 0 {
+            let new_collateral_asset_mv = collateral_asset_mv - asset_mv;
+
+            if new_collateral_asset_mv > 0 && new_collateral_asset_mv < min_accepted_net_value {
+                msg!(
+                    "Obligation new collateral value after withdraw {} for {}",
+                    new_collateral_asset_mv.to_display(),
+                    reserve.token_symbol()
+                );
+                return err!(LendingError::NetValueRemainingTooSmall);
+            }
+        }
+
+        if new_total_deposited_mv != 0 {
+            if Fraction::from_bits(obligation.borrowed_assets_market_value_sf)
+                >= new_total_deposited_mv
+            {
+                msg!(
+                    "Obligation new total deposited market value after withdraw {} of {}",
+                    new_total_deposited_mv.to_display(),
+                    reserve.token_symbol()
+                );
+                return err!(LendingError::LiabilitiesBiggerThanAssets);
+            }
+
+            let new_ltv = Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf)
+                / new_total_deposited_mv;
+
+            let unhealthy_ltv = obligation.unhealthy_loan_to_value();
+
+            if new_ltv > unhealthy_ltv {
+                msg!(
+                    "Obligation new LTV/new unhealthy LTV after withdraw {:.2}/{:.2} of {}",
+                    new_ltv.to_display(),
+                    unhealthy_ltv.to_display(),
+                    reserve.token_symbol()
+                );
+                return err!(LendingError::WorseLTVBlocked);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn post_borrow_obligation_invariants(
+        amount: Fraction,
+        obligation: &Obligation,
+        reserve: &Reserve,
+        liquidity_asset_mv: Fraction,
+        min_accepted_net_value: Fraction,
+    ) -> Result<()> {
+        let asset_mv = calculate_market_value_from_liquidity_amount(reserve, amount)?;
+
+        let new_total_bf_debt_mv =
+            Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf)
+                + asset_mv * reserve.borrow_factor_f(obligation.elevation_group);
+        let new_total_no_bf_debt_mv =
+            Fraction::from_bits(obligation.borrowed_assets_market_value_sf) + asset_mv;
+        let new_liquidity_asset_mv = liquidity_asset_mv + asset_mv;
+
+        if new_liquidity_asset_mv > 0 && new_liquidity_asset_mv < min_accepted_net_value {
+            msg!(
+                "Obligation new borrowed value after borrow {} for {}",
+                new_liquidity_asset_mv.to_display(),
+                reserve.token_symbol()
+            );
+            return err!(LendingError::NetValueRemainingTooSmall);
+        }
+        let new_ltv = new_total_bf_debt_mv / Fraction::from_bits(obligation.deposited_value_sf);
+
+        if new_ltv > obligation.unhealthy_loan_to_value() {
+            msg!(
+                "Obligation new LTV/new unhealthy LTV after borrow {:.2}/{:.2} of {}",
+                new_ltv.to_display(),
+                obligation.unhealthy_loan_to_value().to_display(),
+                reserve.token_symbol()
+            );
+            return err!(LendingError::WorseLTVBlocked);
+        }
+
+        if new_total_no_bf_debt_mv >= Fraction::from_bits(obligation.deposited_value_sf) {
+            msg!(
+                "Obligation can't have more liabilities than assets after borrow {} of {}",
+                new_total_no_bf_debt_mv.to_display(),
+                reserve.token_symbol()
+            );
+            return err!(LendingError::LiabilitiesBiggerThanAssets);
+        }
+
+        Ok(())
+    }
+
+    pub fn post_repay_obligation_invariants(
+        amount: Fraction,
+        obligation: &Obligation,
+        reserve: &Reserve,
+        liquidity_asset_mv: Fraction,
+        min_accepted_net_value: Fraction,
+    ) -> Result<()> {
+        let asset_mv = calculate_market_value_from_liquidity_amount(reserve, amount)?;
+        let new_total_bf_debt_mv =
+            Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf)
+                - asset_mv * reserve.borrow_factor_f(obligation.elevation_group);
+        let total_deposited_mv = Fraction::from_bits(obligation.deposited_value_sf);
+
+        if liquidity_asset_mv != 0 {
+            let new_liquidity_asset_mv = liquidity_asset_mv - asset_mv;
+
+            if new_liquidity_asset_mv > 0 && new_liquidity_asset_mv < min_accepted_net_value {
+                msg!(
+                    "Obligation new borrowed value after repay {} for {}",
+                    new_liquidity_asset_mv.to_display(),
+                    reserve.token_symbol()
+                );
+                return err!(LendingError::NetValueRemainingTooSmall);
+            }
+        }
+
+        let new_ltv = new_total_bf_debt_mv / total_deposited_mv;
+
+        if new_ltv > obligation.loan_to_value() {
+            msg!(
+                "Obligation new LTV/new unhealthy LTV after repay {:.2}/{:.2} of {}",
+                new_ltv.to_display(),
+                obligation.unhealthy_loan_to_value().to_display(),
+                reserve.token_symbol()
+            );
+            return err!(LendingError::WorseLTVBlocked);
         }
 
         Ok(())
@@ -1821,9 +2112,9 @@ pub mod utils {
             .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
         {
             msg!(
-                "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
-                obligation.last_update.get_price_status().0
-            );
+            "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
+            obligation.last_update.get_price_status().0
+        );
             return err!(LendingError::ObligationStale);
         }
         if obligation.deposits_empty() {
@@ -1877,9 +2168,9 @@ pub mod utils {
             .is_stale(slot, PriceStatusFlags::LIQUIDATION_CHECKS)?
         {
             msg!(
-                "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
-                obligation.last_update.get_price_status().0
-            );
+            "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
+            obligation.last_update.get_price_status().0
+        );
             return err!(LendingError::ObligationStale);
         }
 

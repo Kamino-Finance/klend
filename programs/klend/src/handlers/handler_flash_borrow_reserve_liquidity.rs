@@ -1,12 +1,12 @@
 use anchor_lang::{prelude::*, solana_program::sysvar, Accounts};
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token::{self, Token, TokenAccount};
 
 use crate::{
     gen_signer_seeds,
     lending_market::{flash_ixs, lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{seeds, token_transfer},
-    ReferrerTokenState,
+    LendingAction, ReferrerTokenState,
 };
 
 pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64) -> Result<()> {
@@ -16,6 +16,10 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
     let lending_market_key = ctx.accounts.lending_market.key();
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
+
+    let initial_reserve_token_balance =
+        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info())?;
+    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
 
     flash_ixs::flash_borrow_checks(&ctx, liquidity_amount)?;
 
@@ -35,6 +39,14 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
         ctx.accounts.lending_market_authority.to_account_info(),
         authority_signer_seeds,
         liquidity_amount,
+    )?;
+
+    lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info()).unwrap(),
+        reserve.liquidity.available_amount,
+        initial_reserve_token_balance,
+        initial_reserve_available_liquidity,
+        LendingAction::Subtractive(liquidity_amount),
     )?;
 
     Ok(())

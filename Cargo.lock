@@ -1654,7 +1654,7 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "num_enum 0.5.11",
- "scope-types",
+ "scope-types 1.0.0 (git+https://github.com/hubbleprotocol/scope?branch=anchor_0.29)",
  "solana-security-txt",
  "spl-token 4.0.0",
  "static_assertions",
@@ -2339,7 +2339,7 @@ dependencies = [
  "fixed-macro",
  "num_enum 0.7.1",
  "pyth-sdk-solana",
- "scope-types",
+ "scope-types 1.0.0 (git+https://github.com/Kamino-Finance/scope.git?branch=anchor_0.29_idl)",
  "serde",
  "solana-program",
  "solana-program-test",
@@ -3702,6 +3702,18 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "num_enum 0.7.1",
+ "solana-program",
+]
+
+[[package]]
+name = "scope-types"
+version = "1.0.0"
+source = "git+https://github.com/Kamino-Finance/scope.git?branch=anchor_0.29_idl#0c8f7925aad9f5cf30b6715f2bef0ece9235d87a"
+dependencies = [
+ "anchor-lang",
+ "bytemuck",
+ "cfg-if",
+ "num_enum 0.5.11",
  "solana-program",
 ]
 
@@ -5557,7 +5569,7 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 [[package]]
 name = "switchboard-itf"
 version = "0.1.0"
-source = "git+https://github.com/hubbleprotocol/scope?branch=anchor_0.29#f997739206b20ebf6b8f5f9c247c7c2fdda49961"
+source = "git+https://github.com/Kamino-Finance/scope.git?branch=anchor_0.29_idl#0c8f7925aad9f5cf30b6715f2bef0ece9235d87a"
 dependencies = [
  "anchor-lang",
  "bytemuck",
