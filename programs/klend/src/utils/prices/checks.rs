@@ -11,7 +11,7 @@ pub(super) fn get_validated_price(
     token_info: &TokenInfo,
     unix_timestamp: clock::UnixTimestamp,
 ) -> Option<GetPriceResult> {
-       let unix_timestamp = u64::try_from(unix_timestamp).unwrap();
+    let unix_timestamp = u64::try_from(unix_timestamp).unwrap();
 
     let TimestampedPriceWithTwap { price, twap } = price_and_twap;
 
@@ -29,7 +29,7 @@ pub(super) fn get_validated_price(
         }
     };
 
-       match check_price_age(
+    match check_price_age(
         price.timestamp,
         token_info.max_age_price_seconds,
         unix_timestamp,
@@ -40,9 +40,9 @@ pub(super) fn get_validated_price(
         }
     }
 
-       if token_info.is_twap_enabled() {
+    if token_info.is_twap_enabled() {
         if let Some(twap) = twap {
-                       match check_price_age(
+            match check_price_age(
                 twap.timestamp,
                 token_info.max_age_twap_seconds,
                 unix_timestamp,
@@ -53,7 +53,7 @@ pub(super) fn get_validated_price(
                 }
             }
 
-                       match (twap.price_load)()
+            match (twap.price_load)()
                 .and_then(|twap_dec| check_twap_in_tolerance(price_dec, twap_dec, token_info))
             {
                 Ok(()) => {
@@ -65,13 +65,13 @@ pub(super) fn get_validated_price(
             }
         } else {
             msg!("Price twap is not available but required, token=[{price_label}]",);
-                   }
+        }
     } else {
-               price_status.set(PriceStatusFlags::TWAP_CHECKED, true);
+        price_status.set(PriceStatusFlags::TWAP_CHECKED, true);
         price_status.set(PriceStatusFlags::TWAP_AGE_CHECKED, true);
     }
 
-       match check_price_heuristics(price_dec, &token_info.heuristic) {
+    match check_price_heuristics(price_dec, &token_info.heuristic) {
         Ok(()) => price_status.set(PriceStatusFlags::HEURISTIC_CHECKED, true),
         Err(e) => msg!("Price heuristic check failed token=[{price_label}]: {e:?}",),
     }
@@ -88,7 +88,7 @@ fn check_price_age(
     max_age_seconds: u64,
     current_timestamp: u64,
 ) -> Result<()> {
-       let age_seconds = current_timestamp.saturating_sub(price_timestamp);
+    let age_seconds = current_timestamp.saturating_sub(price_timestamp);
     if age_seconds > max_age_seconds {
         msg!("Price is too old age={age_seconds} max_age={max_age_seconds}",);
         err!(LendingError::PriceTooOld)
@@ -98,7 +98,6 @@ fn check_price_age(
 }
 
 fn is_within_tolerance(px: Fraction, twap: Fraction, acceptable_tolerance_bps: u64) -> bool {
-      
     let abs_diff = Fraction::abs_diff(px, twap);
 
     let diff_bps_scaled = abs_diff * u128::from(FULL_BPS);
@@ -152,5 +151,3 @@ fn check_price_heuristics(token_price: Fraction, heuristic: &PriceHeuristic) -> 
 
     Ok(())
 }
-
-

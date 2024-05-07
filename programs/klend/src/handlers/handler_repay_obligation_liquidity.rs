@@ -64,7 +64,7 @@ pub fn process(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) ->
 
 #[derive(Accounts)]
 pub struct RepayObligationLiquidity<'info> {
-       pub owner: Signer<'info>,
+    pub owner: Signer<'info>,
 
     #[account(mut,
         has_one = lending_market,
@@ -91,6 +91,6 @@ pub struct RepayObligationLiquidity<'info> {
 
     pub token_program: Program<'info, Token>,
 
-       #[account(address = SysInstructions::id())]
+    #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

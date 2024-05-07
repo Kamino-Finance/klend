@@ -82,7 +82,7 @@ pub struct RedeemReserveCollateral<'info> {
         has_one = lending_market
     )]
     pub reserve: AccountLoader<'info, Reserve>,
-       #[account(
+    #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -108,6 +108,6 @@ pub struct RedeemReserveCollateral<'info> {
 
     pub token_program: Program<'info, Token>,
 
-       #[account(address = SysInstructions::id())]
+    #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

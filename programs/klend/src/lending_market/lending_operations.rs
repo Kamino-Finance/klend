@@ -52,26 +52,25 @@ pub fn refresh_reserve(
 ) -> Result<()> {
     let slot = clock.slot;
 
-       reserve.accrue_interest(slot, referral_fee_bps)?;
+    reserve.accrue_interest(slot, referral_fee_bps)?;
 
-       let price_status = if let Some(GetPriceResult {
+    let price_status = if let Some(GetPriceResult {
         price,
         status,
         timestamp,
     }) = price
     {
-       
         reserve.liquidity.market_price_sf = price.to_bits();
         reserve.liquidity.market_price_last_updated_ts = timestamp;
 
         Some(status)
     } else if !is_saved_price_age_valid(reserve, clock.unix_timestamp) {
-               Some(PriceStatusFlags::empty())
+        Some(PriceStatusFlags::empty())
     } else {
-               None
+        None
     };
 
-       reserve.last_update.update_slot(slot, price_status);
+    reserve.last_update.update_slot(slot, price_status);
 
     Ok(())
 }
@@ -81,7 +80,7 @@ pub fn is_saved_price_age_valid(reserve: &Reserve, current_ts: clock::UnixTimest
     let price_last_updated_ts = reserve.liquidity.market_price_last_updated_ts;
     let price_max_age = reserve.config.token_info.max_age_price_seconds;
 
-       current_ts.saturating_sub(price_last_updated_ts) < price_max_age
+    current_ts.saturating_sub(price_last_updated_ts) < price_max_age
 }
 
 pub fn is_price_refresh_needed(
@@ -97,7 +96,7 @@ pub fn is_price_refresh_needed(
     let price_refresh_trigger_to_max_age_secs =
         price_max_age * price_refresh_trigger_to_max_age_pct / 100;
 
-       current_ts.saturating_sub(price_last_updated_ts) >= price_refresh_trigger_to_max_age_secs
+    current_ts.saturating_sub(price_last_updated_ts) >= price_refresh_trigger_to_max_age_secs
 }
 
 pub fn refresh_reserve_limit_timestamps(reserve: &mut Reserve, slot: Slot) -> Result<()> {
@@ -111,7 +110,7 @@ pub fn deposit_reserve_liquidity(
     clock: &Clock,
     liquidity_amount: u64,
 ) -> Result<u64> {
-       if liquidity_amount == 0 {
+    if liquidity_amount == 0 {
         msg!("Liquidity amount provided cannot be zero");
         return err!(LendingError::InvalidAmount);
     }
@@ -161,7 +160,7 @@ pub fn borrow_obligation_liquidity(
     borrow_reserve_pk: Pubkey,
     referrer_token_state: Option<RefMut<ReferrerTokenState>>,
 ) -> Result<CalculateBorrowResult> {
-       if liquidity_amount == 0 {
+    if liquidity_amount == 0 {
         msg!("Liquidity amount provided cannot be zero");
         return err!(LendingError::InvalidAmount);
     }
@@ -187,7 +186,7 @@ pub fn borrow_obligation_liquidity(
     let borrow_limit_f = Fraction::from(borrow_reserve.config.borrow_limit);
 
     let new_borrowed_amount_f = liquidity_amount_f + reserve_liquidity_borrowed_f;
-          if liquidity_amount != u64::MAX && new_borrowed_amount_f > borrow_limit_f {
+    if liquidity_amount != u64::MAX && new_borrowed_amount_f > borrow_limit_f {
         msg!(
             "Cannot borrow above the borrow limit. New total borrow: {} > limit: {}",
             new_borrowed_amount_f.to_display(),
@@ -208,7 +207,6 @@ pub fn borrow_obligation_liquidity(
     check_elevation_group_borrowing_enabled(lending_market, obligation)?;
     check_non_elevation_group_borrowing_enabled(obligation)?;
 
-   
     let remaining_reserve_capacity = borrow_limit_f.saturating_sub(reserve_liquidity_borrowed_f);
 
     if remaining_reserve_capacity == Fraction::ZERO {
@@ -263,11 +261,10 @@ pub fn borrow_obligation_liquidity(
         borrow_reserve.liquidity.available_amount += referrer_fee;
     }
 
-   
     obligation_liquidity.borrow(borrow_amount_f);
-    obligation.has_debt = 1;    obligation.last_update.mark_stale();
+    obligation.has_debt = 1;
+    obligation.last_update.mark_stale();
 
-   
     validate_obligation_asset_tiers(obligation)?;
     post_borrow_obligation_invariants(
         borrow_amount_f,
@@ -293,7 +290,7 @@ pub fn deposit_obligation_collateral(
     deposit_reserve_pk: Pubkey,
     lending_market: &LendingMarket,
 ) -> Result<()> {
-       if collateral_amount == 0 {
+    if collateral_amount == 0 {
         msg!("Collateral amount provided cannot be zero");
         return err!(LendingError::InvalidAmount);
     }
@@ -308,7 +305,6 @@ pub fn deposit_obligation_collateral(
 
     check_same_elevation_group(obligation, deposit_reserve)?;
 
-   
     let (collateral, collateral_index) = obligation.find_or_add_collateral_to_deposits(
         deposit_reserve_pk,
         deposit_reserve.config.get_asset_tier(),
@@ -319,7 +315,6 @@ pub fn deposit_obligation_collateral(
 
     deposit_reserve.last_update.mark_stale();
 
-   
     validate_obligation_asset_tiers(obligation)?;
     post_deposit_obligation_invariants(
         deposit_reserve
@@ -342,7 +337,7 @@ pub fn withdraw_obligation_collateral(
     slot: Slot,
     withdraw_reserve_pk: Pubkey,
 ) -> Result<u64> {
-       if collateral_amount == 0 {
+    if collateral_amount == 0 {
         return err!(LendingError::InvalidAmount);
     }
 
@@ -390,7 +385,6 @@ pub fn withdraw_obligation_collateral(
         return err!(LendingError::ObligationInDeprecatedReserve);
     }
 
-   
     let withdraw_amount = if is_borrows_empty {
         if collateral_amount == u64::MAX {
             collateral.deposited_amount
@@ -451,7 +445,6 @@ pub fn withdraw_obligation_collateral(
     obligation.withdraw(withdraw_amount, collateral_index)?;
     obligation.last_update.mark_stale();
 
-   
     post_withdraw_obligation_invariants(
         withdraw_reserve
             .collateral_exchange_rate()?
@@ -471,7 +464,7 @@ pub fn redeem_reserve_collateral(
     clock: &Clock,
     add_amount_to_withdrawal_caps: bool,
 ) -> Result<u64> {
-       if collateral_amount == 0 {
+    if collateral_amount == 0 {
         msg!("Collateral amount provided cannot be zero");
         return err!(LendingError::InvalidAmount);
     }
@@ -483,9 +476,9 @@ pub fn redeem_reserve_collateral(
         msg!("Reserve is stale and must be refreshed in the current slot");
         return err!(LendingError::ReserveStale);
     }
-   
+
     let liquidity_amount = reserve.redeem_collateral(collateral_amount)?;
-       refresh_reserve_limit_timestamps(reserve, clock.slot)?;
+    refresh_reserve_limit_timestamps(reserve, clock.slot)?;
     reserve.last_update.mark_stale();
 
     if add_amount_to_withdrawal_caps {
@@ -531,7 +524,7 @@ pub fn repay_obligation_liquidity(
     repay_reserve_pk: Pubkey,
     lending_market: &LendingMarket,
 ) -> Result<u64> {
-       if liquidity_amount == 0 {
+    if liquidity_amount == 0 {
         msg!("Liquidity amount provided cannot be zero");
         return err!(LendingError::InvalidAmount);
     }
@@ -551,8 +544,7 @@ pub fn repay_obligation_liquidity(
         return err!(LendingError::ObligationLiquidityEmpty);
     }
 
-   
-       let cumulative_borrow_rate =
+    let cumulative_borrow_rate =
         BigFraction::from(repay_reserve.liquidity.cumulative_borrow_rate_bsf);
     liquidity.accrue_interest(cumulative_borrow_rate)?;
 
@@ -582,7 +574,6 @@ pub fn repay_obligation_liquidity(
     obligation.update_has_debt();
     obligation.last_update.mark_stale();
 
-   
     post_repay_obligation_invariants(
         settle_amount,
         obligation,
@@ -606,15 +597,15 @@ where
     T: AnyAccountLoader<'info, Reserve>,
     U: AnyAccountLoader<'info, ReferrerTokenState>,
 {
-          check_obligation_fully_refreshed_and_not_null(obligation, slot)?;
+    check_obligation_fully_refreshed_and_not_null(obligation, slot)?;
 
-       require!(
+    require!(
         obligation.elevation_group != new_elevation_group,
         LendingError::ElevationGroupAlreadyActivated
     );
 
     {
-               let elevation_group = get_elevation_group(new_elevation_group, lending_market).unwrap();
+        let elevation_group = get_elevation_group(new_elevation_group, lending_market).unwrap();
 
         if elevation_group.new_loans_disabled() && new_elevation_group != ELEVATION_GROUP_NONE {
             return err!(LendingError::ElevationGroupNewLoansDisabled);
@@ -731,7 +722,6 @@ where
             elevation_group,
         )?;
 
-       
         lowest_deposit_ltv_accumulator = min(
             lowest_deposit_ltv_accumulator.min(deposit_reserve.config.loan_to_value_pct),
             coll_ltv_pct,
@@ -744,7 +734,7 @@ where
 
         obligation.deposits_asset_tiers[index] = deposit_reserve.config.asset_tier;
 
-               prices_state &= deposit_reserve.last_update.get_price_status();
+        prices_state &= deposit_reserve.last_update.get_price_status();
 
         msg!(
             "Deposit: {} amount: {} value: {}",
@@ -824,7 +814,7 @@ where
         let previous_borrowed_amount_f = Fraction::from_bits(borrow.borrowed_amount_sf);
 
         borrow.accrue_interest(cumulative_borrow_rate_bf)?;
-                            
+
         let absolute_referral_rate =
             Fraction::from_bits(borrow_reserve.liquidity.absolute_referral_rate_sf);
         let net_new_debt_f =
@@ -839,7 +829,7 @@ where
         borrow_reserve.liquidity.pending_referrer_fees_sf -= referrer_fee_capped_sf;
 
         if obligation_has_referrer {
-                       let referrer_token_state_loader = referrer_token_states_iter
+            let referrer_token_state_loader = referrer_token_states_iter
                 .next()
                 .ok_or(LendingError::InvalidAccountInput)?;
             let referrer_token_state = &mut referrer_token_state_loader
@@ -882,9 +872,9 @@ where
 
         obligation.borrows_asset_tiers[index] = borrow_reserve.config.asset_tier;
 
-               obligation.has_debt = 1;
+        obligation.has_debt = 1;
 
-               prices_state &= borrow_reserve.last_update.get_price_status();
+        prices_state &= borrow_reserve.last_update.get_price_status();
 
         msg!(
             "Borrow: {} amount: {} value: {} value_bf: {}",
@@ -913,7 +903,6 @@ where
     T: AnyAccountLoader<'info, Reserve>,
     U: AnyAccountLoader<'info, ReferrerTokenState>,
 {
-   
     let RefreshObligationDepositsResult {
         lowest_deposit_ltv_accumulator,
         num_of_obsolete_reserves,
@@ -1034,7 +1023,7 @@ pub fn liquidate_obligation(
         lending_market.liquidation_max_debt_close_factor_pct,
         lending_market.max_liquidatable_debt_market_value_at_once
     );
-       let repay_reserve_ref = repay_reserve.get()?;
+    let repay_reserve_ref = repay_reserve.get()?;
     let withdraw_reserve_ref = withdraw_reserve.get()?;
 
     let slot = clock.slot;
@@ -1085,7 +1074,7 @@ pub fn liquidate_obligation(
         max_allowed_ltv_override_pct_opt,
     )?;
 
-       drop(repay_reserve_ref);
+    drop(repay_reserve_ref);
     drop(withdraw_reserve_ref);
 
     {
@@ -1137,7 +1126,7 @@ pub(crate) fn post_liquidate_redeem(
     liquidation_bonus_rate: Fraction,
     clock: &Clock,
 ) -> Result<Option<(u64, u64)>> {
-       if withdraw_collateral_amount != 0 {
+    if withdraw_collateral_amount != 0 {
         let withdraw_liquidity_amount =
             redeem_reserve_collateral(withdraw_reserve, withdraw_collateral_amount, clock, false)?;
         let protocol_fee = liquidation_operations::calculate_protocol_liquidation_fee(
@@ -1151,7 +1140,7 @@ pub(crate) fn post_liquidate_redeem(
             withdraw_liquidity_amount.checked_sub(protocol_fee).unwrap(),
             protocol_fee
         );
-               Ok(Some((withdraw_liquidity_amount, protocol_fee)))
+        Ok(Some((withdraw_liquidity_amount, protocol_fee)))
     } else {
         Ok(None)
     }
@@ -1163,8 +1152,8 @@ pub fn flash_borrow_reserve_liquidity(reserve: &mut Reserve, liquidity_amount: u
         return err!(LendingError::FlashLoansDisabled);
     }
 
-          let liquidity_amount_f = Fraction::from(liquidity_amount);
-                              
+    let liquidity_amount_f = Fraction::from(liquidity_amount);
+
     reserve.liquidity.borrow(liquidity_amount_f)?;
     reserve.last_update.mark_stale();
 
@@ -1193,7 +1182,7 @@ where
     reserve
         .liquidity
         .repay(flash_loan_amount, flash_loan_amount_f)?;
-       refresh_reserve_limit_timestamps(reserve, slot)?;
+    refresh_reserve_limit_timestamps(reserve, slot)?;
     reserve.last_update.mark_stale();
 
     if referrer_token_state_loader.is_some() {
@@ -1254,7 +1243,6 @@ pub fn socialize_loss(
 
     let (liquidity, liquidity_index) = obligation.find_liquidity_in_borrows(*reserve_pk)?;
 
-               
     let liquidity_amount_f = Fraction::from(liquidity_amount);
     let borrowed_amount_f = Fraction::from_bits(liquidity.borrowed_amount_sf);
     let forgive_amount_f = min(liquidity_amount_f, borrowed_amount_f);
@@ -1321,7 +1309,7 @@ pub fn withdraw_referrer_fees(
 }
 
 pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, value: &[u8]) {
-       match mode {
+    match mode {
         UpdateConfigMode::UpdateLoanToValuePct => {
             let new = value[0];
             let prv = reserve.config.loan_to_value_pct;
@@ -1417,8 +1405,6 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             msg!("New Value is {:?}", new);
         }
         UpdateConfigMode::UpdateTokenInfoScopeChain => {
-                                                       
-                                            
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
             let x = value.to_le_bytes();
             let end = x
@@ -1449,8 +1435,6 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             );
         }
         UpdateConfigMode::UpdateTokenInfoName => {
-                      
-                                                       
             let value: [u8; 32] = value[0..32].try_into().unwrap();
             let str_name = std::str::from_utf8(&value).unwrap();
             let cached = reserve.config.token_info.name;
@@ -1477,7 +1461,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             let new: [u8; 32] = value[0..32].try_into().unwrap();
             let new = Pubkey::new_from_array(new);
             let prv = reserve.config.token_info.scope_configuration.price_feed;
-                       reserve.config.token_info.scope_configuration.price_feed = new;
+            reserve.config.token_info.scope_configuration.price_feed = new;
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
@@ -1486,7 +1470,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             let new: [u8; 32] = value[0..32].try_into().unwrap();
             let new = Pubkey::new_from_array(new);
             let prv = reserve.config.token_info.pyth_configuration.price;
-                       reserve.config.token_info.pyth_configuration.price = new;
+            reserve.config.token_info.pyth_configuration.price = new;
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
@@ -1498,7 +1482,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
                 .token_info
                 .switchboard_configuration
                 .price_aggregator;
-                       reserve
+            reserve
                 .config
                 .token_info
                 .switchboard_configuration
@@ -1514,7 +1498,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
                 .token_info
                 .switchboard_configuration
                 .twap_aggregator;
-                       reserve
+            reserve
                 .config
                 .token_info
                 .switchboard_configuration
@@ -1535,7 +1519,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             msg!("New Value is {:?}", value);
         }
         UpdateConfigMode::UpdateDebtWithdrawalCap => {
-                       let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
             let interval_length_seconds = u64::from_le_bytes(value[8..16].try_into().unwrap());
 
             let prev_capacity = reserve.config.debt_withdrawal_cap.config_capacity;
@@ -1562,7 +1546,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             );
         }
         UpdateConfigMode::UpdateDepositWithdrawalCap => {
-                       let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
             let interval_length_seconds = u64::from_le_bytes(value[8..16].try_into().unwrap());
 
             let prev_capacity = reserve.config.deposit_withdrawal_cap.config_capacity;
@@ -1678,7 +1662,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             let new: [u8; 32] = value[0..32].try_into().unwrap();
             let new = Pubkey::new_from_array(new);
             let prv = reserve.farm_collateral;
-                       reserve.farm_collateral = new;
+            reserve.farm_collateral = new;
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
@@ -1686,7 +1670,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             let new: [u8; 32] = value[0..32].try_into().unwrap();
             let new = Pubkey::new_from_array(new);
             let prv = reserve.farm_debt;
-                       reserve.farm_debt = new;
+            reserve.farm_debt = new;
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
@@ -1774,7 +1758,6 @@ pub mod utils {
         borrow_reserve: &Reserve,
         borrow: &ObligationLiquidity,
     ) -> Result<Fraction> {
-       
         calculate_market_value_from_liquidity_amount(
             borrow_reserve,
             Fraction::from_bits(borrow.borrowed_amount_sf),
@@ -1796,7 +1779,7 @@ pub mod utils {
             return err!(LendingError::InvalidAccountInput);
         }
 
-               if deposit_reserve
+        if deposit_reserve
             .last_update
             .is_stale(slot, PriceStatusFlags::NONE)?
         {
@@ -1837,7 +1820,7 @@ pub mod utils {
             return err!(LendingError::InvalidAccountInput);
         }
 
-               if borrow_reserve
+        if borrow_reserve
             .last_update
             .is_stale(slot, PriceStatusFlags::NONE)?
         {
@@ -1923,8 +1906,8 @@ pub mod utils {
             return err!(LendingError::NetValueRemainingTooSmall);
         }
 
-               if obligation.deposited_value_sf != 0 {
-                       if new_ltv > obligation.loan_to_value() {
+        if obligation.deposited_value_sf != 0 {
+            if new_ltv > obligation.loan_to_value() {
                 msg!(
                     "Obligation new LTV after deposit {} of {}",
                     new_ltv.to_display(),
@@ -1946,9 +1929,9 @@ pub mod utils {
     ) -> Result<()> {
         let asset_mv = calculate_market_value_from_liquidity_amount(reserve, amount)?;
 
-               let new_total_deposited_mv = Fraction::from_bits(obligation.deposited_value_sf) - asset_mv;
+        let new_total_deposited_mv = Fraction::from_bits(obligation.deposited_value_sf) - asset_mv;
 
-               if collateral_asset_mv != 0 {
+        if collateral_asset_mv != 0 {
             let new_collateral_asset_mv = collateral_asset_mv - asset_mv;
 
             if new_collateral_asset_mv > 0 && new_collateral_asset_mv < min_accepted_net_value {
@@ -1961,8 +1944,7 @@ pub mod utils {
             }
         }
 
-               if new_total_deposited_mv != 0 {
-           
+        if new_total_deposited_mv != 0 {
             if Fraction::from_bits(obligation.borrowed_assets_market_value_sf)
                 >= new_total_deposited_mv
             {
@@ -1979,7 +1961,7 @@ pub mod utils {
 
             let unhealthy_ltv = obligation.unhealthy_loan_to_value();
 
-                       if new_ltv > unhealthy_ltv {
+            if new_ltv > unhealthy_ltv {
                 msg!(
                     "Obligation new LTV/new unhealthy LTV after withdraw {:.2}/{:.2} of {}",
                     new_ltv.to_display(),
@@ -2049,12 +2031,12 @@ pub mod utils {
         min_accepted_net_value: Fraction,
     ) -> Result<()> {
         let asset_mv = calculate_market_value_from_liquidity_amount(reserve, amount)?;
-               let new_total_bf_debt_mv =
+        let new_total_bf_debt_mv =
             Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf)
                 - asset_mv * reserve.borrow_factor_f(obligation.elevation_group);
         let total_deposited_mv = Fraction::from_bits(obligation.deposited_value_sf);
 
-               if liquidity_asset_mv != 0 {
+        if liquidity_asset_mv != 0 {
             let new_liquidity_asset_mv = liquidity_asset_mv - asset_mv;
 
             if new_liquidity_asset_mv > 0 && new_liquidity_asset_mv < min_accepted_net_value {
@@ -2069,7 +2051,7 @@ pub mod utils {
 
         let new_ltv = new_total_bf_debt_mv / total_deposited_mv;
 
-               if new_ltv > obligation.loan_to_value() {
+        if new_ltv > obligation.loan_to_value() {
             msg!(
                 "Obligation new LTV/new unhealthy LTV after repay {:.2}/{:.2} of {}",
                 new_ltv.to_display(),
@@ -2086,11 +2068,11 @@ pub mod utils {
         elevation_group_id: u8,
         market: &LendingMarket,
     ) -> Result<ElevationGroup> {
-               if elevation_group_id > MAX_NUM_ELEVATION_GROUPS {
+        if elevation_group_id > MAX_NUM_ELEVATION_GROUPS {
             return err!(LendingError::InvalidElevationGroup);
         }
 
-               let elevation_group = market.get_elevation_group(elevation_group_id)?;
+        let elevation_group = market.get_elevation_group(elevation_group_id)?;
 
         if elevation_group_id != ELEVATION_GROUP_NONE
             && (elevation_group.liquidation_threshold_pct == 0 || elevation_group.ltv_pct == 0)
@@ -2108,7 +2090,7 @@ pub mod utils {
     ) -> Result<(u8, u8)> {
         let elevation_group = get_elevation_group(obligation_elevation_group, lending_market)?;
 
-               if obligation_elevation_group == ELEVATION_GROUP_NONE {
+        if obligation_elevation_group == ELEVATION_GROUP_NONE {
             Ok((
                 deposit_reserve.config.loan_to_value_pct,
                 deposit_reserve.config.liquidation_threshold_pct,
@@ -2268,11 +2250,10 @@ pub mod utils {
         }
 
         for elevation_group_id in config.elevation_groups {
-           
             let elevation_group = get_elevation_group(elevation_group_id, market)?;
 
             if elevation_group_id == ELEVATION_GROUP_NONE {
-                           } else {
+            } else {
                 if elevation_group.max_liquidation_bonus_bps > config.max_liquidation_bonus_bps {
                     msg!("Invalid max liquidation bonus, elevation id liquidation bonus must be less than the config's");
                     return err!(LendingError::InvalidConfig);
@@ -2356,4 +2337,3 @@ pub mod utils {
         Ok(())
     }
 }
-

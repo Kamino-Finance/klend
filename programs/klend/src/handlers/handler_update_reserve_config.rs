@@ -41,7 +41,7 @@ pub fn process(
         );
         msg!("WARNING! Skipping validation of the config");
     } else {
-               lending_operations::utils::validate_reserve_config(&reserve.config, &market)?;
+        lending_operations::utils::validate_reserve_config(&reserve.config, &market)?;
     }
 
     Ok(())

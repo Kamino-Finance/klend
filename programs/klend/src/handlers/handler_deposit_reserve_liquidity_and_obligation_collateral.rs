@@ -102,7 +102,7 @@ pub struct DepositReserveLiquidityAndObligationCollateral<'info> {
     pub obligation: AccountLoader<'info, Obligation>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
-       #[account(
+    #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -130,6 +130,6 @@ pub struct DepositReserveLiquidityAndObligationCollateral<'info> {
 
     pub token_program: Program<'info, Token>,
 
-       #[account(address = SysInstructions::id())]
+    #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

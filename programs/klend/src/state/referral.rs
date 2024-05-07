@@ -1,4 +1,3 @@
-
 use std::fmt::{self, Display, Formatter};
 
 use anchor_lang::prelude::*;
@@ -17,11 +16,11 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<ReferrerTokenState>()
 #[account(zero_copy)]
 #[repr(C)]
 pub struct ReferrerTokenState {
-       pub referrer: Pubkey,
-       pub mint: Pubkey,
-       pub amount_unclaimed_sf: u128,
-       pub amount_cumulative_sf: u128,
-       pub bump: u64,
+    pub referrer: Pubkey,
+    pub mint: Pubkey,
+    pub amount_unclaimed_sf: u128,
+    pub amount_cumulative_sf: u128,
+    pub bump: u64,
 
     #[derivative(Debug = "ignore")]
     pub padding: [u64; 31],
@@ -56,10 +55,10 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<UserMetadata>() % 8);
 #[account(zero_copy)]
 #[repr(C)]
 pub struct UserMetadata {
-       pub referrer: Pubkey,
-       pub bump: u64,
-       pub user_lookup_table: Pubkey,
-       pub owner: Pubkey,
+    pub referrer: Pubkey,
+    pub bump: u64,
+    pub user_lookup_table: Pubkey,
+    pub owner: Pubkey,
 
     #[derivative(Debug = "ignore")]
     pub padding_1: [u64; 51],

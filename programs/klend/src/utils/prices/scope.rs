@@ -60,7 +60,7 @@ fn get_price_account<'a>(scope_price_account: &'a AccountInfo) -> Result<Ref<'a,
 
     let disc_bytes = &data[0..8];
     if disc_bytes != ScopePrices::discriminator() {
-               return Err(LendingError::CouldNotDeserializeScope.into());
+        return Err(LendingError::CouldNotDeserializeScope.into());
     }
 
     Ok(Ref::map(data, |data| bytemuck::from_bytes(&data[8..])))
@@ -74,7 +74,7 @@ fn get_price_usd(
         msg!("Scope chain is not initialized properly");
         return err!(LendingError::PriceNotValid);
     }
-       let price_chain_raw = tokens_chain.map(|token_id| get_base_price(scope_prices, token_id));
+    let price_chain_raw = tokens_chain.map(|token_id| get_base_price(scope_prices, token_id));
 
     let chain_len = price_chain_raw.iter().take_while(|v| v.is_some()).count();
 
@@ -85,7 +85,7 @@ fn get_price_usd(
 
     let price_chain = &price_chain_raw[..chain_len];
 
-       if chain_len == 1 {
+    if chain_len == 1 {
         let price = price_chain[0].unwrap();
         let price_load = Box::new(move || Ok(price_to_fraction(price.0)));
         return Ok(TimestampedPrice {
@@ -104,7 +104,7 @@ fn get_price_usd(
             .try_fold(0u32, |acc, price| acc.checked_add(price.0.exp))
             .ok_or_else(|| dbg_msg!(LendingError::MathOverflow))?;
 
-               let product = price_chain
+        let product = price_chain
             .iter()
             .flatten()
             .try_fold(U128::from(1u128), |acc, price| {

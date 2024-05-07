@@ -4,8 +4,6 @@ use anchor_lang::prelude::*;
 
 mod handlers;
 pub mod lending_market;
-#[cfg(feature = "program-test")]
-pub mod program_test;
 pub mod state;
 pub mod utils;
 
@@ -37,9 +35,9 @@ pub mod kamino_lending {
 
     use super::*;
 
-       pub fn init_lending_market(
+    pub fn init_lending_market(
         ctx: Context<InitLendingMarket>,
-               quote_currency: [u8; 32],
+        quote_currency: [u8; 32],
     ) -> Result<()> {
         handler_init_lending_market::process(ctx, quote_currency)
     }
@@ -93,7 +91,7 @@ pub mod kamino_lending {
         handler_withdraw_protocol_fees::process(ctx, amount)
     }
 
-       #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
         handler_refresh_reserve::process(ctx)
     }

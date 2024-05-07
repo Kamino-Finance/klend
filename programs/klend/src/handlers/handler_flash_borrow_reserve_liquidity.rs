@@ -54,9 +54,9 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
 
 #[derive(Accounts)]
 pub struct FlashBorrowReserveLiquidity<'info> {
-       pub user_transfer_authority: Signer<'info>,
+    pub user_transfer_authority: Signer<'info>,
 
-       #[account(
+    #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -69,26 +69,26 @@ pub struct FlashBorrowReserveLiquidity<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
-       #[account(mut,
+    #[account(mut,
         address = reserve.load()?.liquidity.supply_vault
     )]
     pub reserve_source_liquidity: Box<Account<'info, TokenAccount>>,
 
-       #[account(mut)]
+    #[account(mut)]
     pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
 
-       #[account(mut,
+    #[account(mut,
         address = reserve.load()?.liquidity.fee_vault
     )]
     pub reserve_liquidity_fee_receiver: Box<Account<'info, TokenAccount>>,
 
-       #[account(mut)]
+    #[account(mut)]
     pub referrer_token_state: Option<AccountLoader<'info, ReferrerTokenState>>,
 
-       #[account(mut)]
+    #[account(mut)]
     pub referrer_account: Option<AccountInfo<'info>>,
 
-       #[account(address = sysvar::instructions::ID)]
+    #[account(address = sysvar::instructions::ID)]
     pub sysvar_info: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }

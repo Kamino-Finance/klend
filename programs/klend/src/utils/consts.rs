@@ -61,7 +61,7 @@ pub const MIN_NET_VALUE_IN_OBLIGATION: Fraction = fraction!(0.000001);
 pub const DUST_LAMPORT_THRESHOLD: u64 = 1;
 
 pub fn ten_pow(x: usize) -> u64 {
-       const POWERS_OF_TEN: [u64; 20] = [
+    const POWERS_OF_TEN: [u64; 20] = [
         1,
         10,
         100,
@@ -84,11 +84,11 @@ pub fn ten_pow(x: usize) -> u64 {
         10_000_000_000_000_000_000,
     ];
 
-       if x > 19 {
+    if x > 19 {
         panic!("The exponent must be between 0 and 19.");
     }
 
-       POWERS_OF_TEN[x]
+    POWERS_OF_TEN[x]
 }
 
 pub const SQUADS_PROGRAM_ID_V3_MAINNET_PROD: Pubkey =
@@ -123,7 +123,7 @@ pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 7] = [
 
 pub struct CpiWhitelistedAccount {
     pub program_id: Pubkey,
-             pub whitelist_level: usize,
+    pub whitelist_level: usize,
 }
 
 impl CpiWhitelistedAccount {

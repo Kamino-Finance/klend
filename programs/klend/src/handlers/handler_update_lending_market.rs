@@ -98,7 +98,7 @@ pub fn process(
                 BorshDeserialize::deserialize(&mut &value[..]).unwrap();
             msg!("Value is {:?}", elevation_group);
 
-                       if elevation_group.id > MAX_NUM_ELEVATION_GROUPS {
+            if elevation_group.id > MAX_NUM_ELEVATION_GROUPS {
                 return err!(LendingError::InvalidElevationGroupConfig);
             }
 
@@ -108,7 +108,7 @@ pub fn process(
                 return err!(LendingError::InvalidElevationGroupConfig);
             }
 
-                       if elevation_group.liquidation_threshold_pct >= 100
+            if elevation_group.liquidation_threshold_pct >= 100
                 || elevation_group.ltv_pct >= 100
                 || elevation_group.ltv_pct > elevation_group.liquidation_threshold_pct
                 || elevation_group.max_liquidation_bonus_bps > FULL_BPS
@@ -116,7 +116,7 @@ pub fn process(
                 return err!(LendingError::InvalidElevationGroupConfig);
             }
 
-                                  if Fraction::from_percent(elevation_group.liquidation_threshold_pct)
+            if Fraction::from_percent(elevation_group.liquidation_threshold_pct)
                 + Fraction::from_percent(elevation_group.liquidation_threshold_pct)
                     * Fraction::from_bps(elevation_group.max_liquidation_bonus_bps)
                 > Fraction::ONE

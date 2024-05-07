@@ -86,7 +86,7 @@ pub struct DepositReserveLiquidity<'info> {
     pub reserve: AccountLoader<'info, Reserve>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
-       #[account(
+    #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -109,6 +109,6 @@ pub struct DepositReserveLiquidity<'info> {
 
     pub token_program: Program<'info, Token>,
 
-       #[account(address = SysInstructions::id())]
+    #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

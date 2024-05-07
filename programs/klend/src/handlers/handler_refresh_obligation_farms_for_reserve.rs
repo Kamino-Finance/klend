@@ -20,7 +20,7 @@ pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Resu
     let reserve = &mut ctx.accounts.reserve.load()?;
     let reserve_address: Pubkey = *ctx.accounts.reserve.to_account_info().key;
 
-       let farm_address = reserve.get_farm(farm_kind);
+    let farm_address = reserve.get_farm(farm_kind);
     require!(
         farm_address == ctx.accounts.reserve_farm_state.key(),
         LendingError::InvalidAccountInput
@@ -71,12 +71,12 @@ pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Resu
 pub struct RefreshObligationFarmsForReserve<'info> {
     #[account(mut)]
     pub crank: Signer<'info>,
-       #[account(
+    #[account(
         constraint = obligation_farm_user_state.load()?.delegatee == obligation.key() @ LendingError::InvalidAccountInput
     )]
     pub obligation: AccountInfo<'info>,
 
-       #[account(
+    #[account(
         mut,
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -86,10 +86,10 @@ pub struct RefreshObligationFarmsForReserve<'info> {
     #[account(has_one = lending_market)]
     pub reserve: AccountLoader<'info, Reserve>,
 
-       #[account(mut)]
+    #[account(mut)]
     pub reserve_farm_state: AccountInfo<'info>,
 
-       #[account(mut,
+    #[account(mut,
         constraint = obligation_farm_user_state.load()?.delegatee == obligation.key() @ LendingError::InvalidAccountInput,
     )]
     pub obligation_farm_user_state: AccountLoader<'info, FarmsUserState>,

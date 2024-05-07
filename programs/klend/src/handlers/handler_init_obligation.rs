@@ -56,8 +56,8 @@ pub struct InitObligation<'info> {
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
 
-       pub seed1_account: AccountInfo<'info>,
-       pub seed2_account: AccountInfo<'info>,
+    pub seed1_account: AccountInfo<'info>,
+    pub seed2_account: AccountInfo<'info>,
 
     #[account(
         seeds = [BASE_SEED_USER_METADATA, obligation_owner.key().as_ref()],
@@ -85,13 +85,13 @@ pub fn check_obligation_seeds(
             );
         }
         1 => {
-                       let _mint1_check =
+            let _mint1_check =
                 Mint::try_deserialize(&mut seed1_account.data.borrow().as_ref()).unwrap();
             let _mint2_check =
                 Mint::try_deserialize(&mut seed2_account.data.borrow().as_ref()).unwrap();
         }
         2 => {
-                       let _mint_check =
+            let _mint_check =
                 Mint::try_deserialize(&mut seed1_account.data.borrow().as_ref()).unwrap();
             require!(
                 seed1_key == seed2_key,
@@ -99,7 +99,7 @@ pub fn check_obligation_seeds(
             )
         }
         3 => {
-                       let _mint1_check =
+            let _mint1_check =
                 Mint::try_deserialize(&mut seed1_account.data.borrow().as_ref()).unwrap();
             let _mint2_check =
                 Mint::try_deserialize(&mut seed2_account.data.borrow().as_ref()).unwrap();

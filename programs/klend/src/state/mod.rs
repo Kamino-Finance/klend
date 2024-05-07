@@ -48,7 +48,7 @@ impl UpdateReserveConfigValue {
     pub fn to_bytes_single(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE] {
         let long_bytes = self.to_raw_bytes();
 
-               let mut short_bytes = [0; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE];
+        let mut short_bytes = [0; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE];
         short_bytes.copy_from_slice(&long_bytes[..VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE]);
         short_bytes
     }
@@ -327,4 +327,3 @@ pub mod serde_bool_u8 {
         Ok(s as u8)
     }
 }
-

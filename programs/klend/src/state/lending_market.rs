@@ -25,16 +25,16 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<LendingMarket>() % 8)
 #[account(zero_copy)]
 #[repr(C)]
 pub struct LendingMarket {
-       pub version: u64,
-       pub bump_seed: u64,
-       #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+    pub version: u64,
+    pub bump_seed: u64,
+    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub lending_market_owner: Pubkey,
-       #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub lending_market_owner_cached: Pubkey,
-          #[cfg_attr(feature = "serde", serde(with = "serde_utf_string", default))]
+    #[cfg_attr(feature = "serde", serde(with = "serde_utf_string", default))]
     pub quote_currency: [u8; 32],
 
-       pub referral_fee_bps: u16,
+    pub referral_fee_bps: u16,
 
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub emergency_mode: u8,
@@ -43,30 +43,30 @@ pub struct LendingMarket {
     pub autodeleverage_enabled: u8,
 
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
-       pub borrow_disabled: u8,
+    pub borrow_disabled: u8,
 
-             pub price_refresh_trigger_to_max_age_pct: u8,
+    pub price_refresh_trigger_to_max_age_pct: u8,
 
-       pub liquidation_max_debt_close_factor_pct: u8,
-       pub insolvency_risk_unhealthy_ltv_pct: u8,
-       pub min_full_liquidation_value_threshold: u64,
+    pub liquidation_max_debt_close_factor_pct: u8,
+    pub insolvency_risk_unhealthy_ltv_pct: u8,
+    pub min_full_liquidation_value_threshold: u64,
 
-       pub max_liquidatable_debt_market_value_at_once: u64,
-       pub global_unhealthy_borrow_value: u64,
-       pub global_allowed_borrow_value: u64,
-       #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+    pub max_liquidatable_debt_market_value_at_once: u64,
+    pub global_unhealthy_borrow_value: u64,
+    pub global_allowed_borrow_value: u64,
+    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub risk_council: Pubkey,
 
-       pub multiplier_points_tag_boost: [u8; 8],
+    pub multiplier_points_tag_boost: [u8; 8],
 
-       pub elevation_groups: [ElevationGroup; 32],
+    pub elevation_groups: [ElevationGroup; 32],
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_padding_90")
     )]
     pub elevation_group_padding: [u64; 90],
 
-       #[cfg_attr(
+    #[cfg_attr(
         feature = "serde",
         serde(
             serialize_with = "serialize_min_net_value",
@@ -123,7 +123,7 @@ impl Default for LendingMarket {
 }
 
 impl LendingMarket {
-       pub fn init(&mut self, params: InitLendingMarketParams) {
+    pub fn init(&mut self, params: InitLendingMarketParams) {
         *self = Self::default();
         self.version = PROGRAM_VERSION as u64;
         self.bump_seed = params.bump_seed as u64;
@@ -147,7 +147,7 @@ impl LendingMarket {
     }
 
     pub fn set_elevation_group(&mut self, elevation_group: ElevationGroup) -> Result<()> {
-               if elevation_group.id == ELEVATION_GROUP_NONE {
+        if elevation_group.id == ELEVATION_GROUP_NONE {
             return err!(LendingError::InvalidElevationGroupConfig);
         }
 
@@ -162,9 +162,9 @@ impl LendingMarket {
 }
 
 pub struct InitLendingMarketParams {
-       pub bump_seed: u8,
-       pub lending_market_owner: Pubkey,
-          pub quote_currency: [u8; 32],
+    pub bump_seed: u8,
+    pub lending_market_owner: Pubkey,
+    pub quote_currency: [u8; 32],
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Default, Derivative, PartialEq, Eq)]

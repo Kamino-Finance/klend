@@ -11,7 +11,6 @@ use crate::{
     ReserveFarmKind,
 };
 
-
 pub fn process(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
     check_refresh_ixs!(ctx, reserve, ReserveFarmKind::Debt);
 
@@ -33,7 +32,7 @@ pub fn process(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()>
 
 #[derive(Accounts)]
 pub struct SocializeLoss<'info> {
-       pub risk_council: Signer<'info>,
+    pub risk_council: Signer<'info>,
 
     #[account(mut,
         has_one = lending_market
@@ -48,6 +47,6 @@ pub struct SocializeLoss<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
-       #[account(address = SysInstructions::id())]
+    #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }
