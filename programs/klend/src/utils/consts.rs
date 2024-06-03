@@ -44,6 +44,8 @@ pub const REFERRER_TOKEN_STATE_SIZE: usize = 352;
 pub const USER_METADATA_SIZE: usize = 1024;
 pub const REFERRER_STATE_SIZE: usize = 64;
 pub const SHORT_URL_SIZE: usize = 68;
+pub const TOKEN_INFO_SIZE: usize = 384;
+
 pub const GLOBAL_UNHEALTHY_BORROW_VALUE: u64 = 50_000_000;
 
 pub const GLOBAL_ALLOWED_BORROW_VALUE: u64 = 45_000_000;

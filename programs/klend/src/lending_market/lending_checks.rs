@@ -240,8 +240,8 @@ pub fn flash_borrow_reserve_liquidity_checks(
         return err!(LendingError::ReserveDeprecated);
     }
 
-    if reserve.config.status() != ReserveStatus::Active {
-        msg!("Reserve is not active");
+    if reserve.config.status() == ReserveStatus::Obsolete {
+        msg!("Reserve is obsolete");
         return err!(LendingError::ReserveObsolete);
     }
 

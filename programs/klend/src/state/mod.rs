@@ -175,6 +175,8 @@ pub enum UpdateConfigMode {
     UpdateFarmCollateral = 40,
     UpdateFarmDebt = 41,
     UpdateDisableUsageAsCollateralOutsideEmode = 42,
+    UpdateBlockBorrowingAboveUtilization = 43,
+    UpdateBlockPriceUsage = 44,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]

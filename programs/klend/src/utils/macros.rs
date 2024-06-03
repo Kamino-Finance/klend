@@ -129,10 +129,16 @@ macro_rules! xmsg {
     ($($arg:tt)*) => (msg!($($arg)*));
 }
 
-#[cfg(not(target_arch = "bpf"))]
+#[cfg(all(not(target_arch = "bpf"), not(feature = "tracing")))]
 #[macro_export]
 macro_rules! xmsg {
     ($($arg:tt)*) => (println!($($arg)*));
+}
+
+#[cfg(all(not(target_arch = "bpf"), feature = "tracing"))]
+#[macro_export]
+macro_rules! xmsg {
+    ($($arg:tt)*) => (tracing::info!($($arg)*));
 }
 
 #[cfg(not(target_arch = "bpf"))]
