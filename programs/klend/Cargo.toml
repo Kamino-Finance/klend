@@ -20,6 +20,7 @@ default = []
 serde = ["dep:serde", "fixed/serde-str"]
 staging = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+tracing = ["dep:tracing"]
 
 [dependencies]
 anchor-lang.workspace = true
@@ -68,4 +69,4 @@ solana-sdk = { workspace = true, optional = true, features = [
 ] }
 arrayref = { version = "0.3.6", optional = true }
 bitflags = "2.4.1"
-
+tracing = { version = "0.1.40", optional = true }

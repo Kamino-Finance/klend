@@ -740,9 +740,11 @@ pub struct ReserveConfig {
     pub elevation_groups: [u8; 20],
     pub disable_usage_as_coll_outside_emode: u8,
 
+    pub utilization_limit_block_borrowing_above: u8,
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 3],
+    pub reserved_1: [u8; 2],
 }
 
 impl ReserveConfig {
@@ -1008,8 +1010,8 @@ impl ReserveFees {
 
             let borrow_fee: u64 = borrow_fee_f.to_round();
             let referral_fee = if need_to_assess_referral_fee {
-                let referal_fee_f = borrow_fee_f * referral_fee_rate;
-                referal_fee_f.to_floor::<u64>().max(1u64)
+                let referral_fee_f = borrow_fee_f * referral_fee_rate;
+                referral_fee_f.to_floor::<u64>().max(1u64)
             } else {
                 0
             };

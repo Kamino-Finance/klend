@@ -265,7 +265,7 @@ fn calculate_liquidation_amounts(
                 repay_amount_f
             };
 
-            let repay_amount = repay_amount_f.to_ceil();
+            let repay_amount = settle_amount.to_ceil();
 
             let withdraw_amount = collateral.deposited_amount;
             (settle_amount, repay_amount, withdraw_amount)

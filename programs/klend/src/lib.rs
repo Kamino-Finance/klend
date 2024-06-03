@@ -477,6 +477,8 @@ pub enum LendingError {
     ReserveVaultBalanceMismatch,
     #[msg("Reserve internal state accounting has been unexpectedly modified")]
     ReserveAccountingMismatch,
+    #[msg("Borrowing above set utilization rate is disabled")]
+    BorrowingAboveUtilizationRateDisabled,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

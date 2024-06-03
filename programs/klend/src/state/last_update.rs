@@ -31,6 +31,7 @@ bitflags! {
         const TWAP_CHECKED =        0b_0000_0100;
         const TWAP_AGE_CHECKED =    0b_0000_1000;
         const HEURISTIC_CHECKED =   0b_0001_0000;
+        const PRICE_USAGE_ALLOWED = 0b_0010_0000;
     }
 }
 
@@ -39,8 +40,9 @@ impl PriceStatusFlags {
 
     pub const NONE: PriceStatusFlags = PriceStatusFlags::empty();
 
-    pub const LIQUIDATION_CHECKS: PriceStatusFlags =
-        PriceStatusFlags::PRICE_LOADED.union(PriceStatusFlags::PRICE_AGE_CHECKED);
+    pub const LIQUIDATION_CHECKS: PriceStatusFlags = PriceStatusFlags::PRICE_LOADED
+        .union(PriceStatusFlags::PRICE_AGE_CHECKED)
+        .union(PriceStatusFlags::PRICE_USAGE_ALLOWED);
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Debug)]

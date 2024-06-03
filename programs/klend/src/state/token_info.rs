@@ -7,8 +7,13 @@ use serde;
 
 #[cfg(feature = "serde")]
 use super::serde_string;
-use crate::{utils::NULL_PUBKEY, LendingError};
+use crate::{
+    utils::{NULL_PUBKEY, TOKEN_INFO_SIZE},
+    LendingError,
+};
 
+static_assertions::const_assert_eq!(TOKEN_INFO_SIZE, std::mem::size_of::<TokenInfo>());
+static_assertions::const_assert_eq!(0, std::mem::size_of::<TokenInfo>() % 8);
 #[derive(BorshDeserialize, BorshSerialize, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -34,8 +39,13 @@ pub struct TokenInfo {
     #[cfg_attr(feature = "serde", serde(default))]
     pub pyth_configuration: PythConfiguration,
 
+    pub block_price_usage: u8,
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
-    pub _padding: [u64; 20],
+    pub reserved: [u8; 7],
+
+    #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
+    pub _padding: [u64; 19],
 }
 
 impl std::fmt::Debug for TokenInfo {
@@ -50,6 +60,7 @@ impl std::fmt::Debug for TokenInfo {
             .field("scope_configuration", &self.scope_configuration)
             .field("switchboard_configuration", &self.switchboard_configuration)
             .field("pyth_configuration", &self.pyth_configuration)
+            .field("block_price_usage", &self.block_price_usage)
             .finish()
     }
 }

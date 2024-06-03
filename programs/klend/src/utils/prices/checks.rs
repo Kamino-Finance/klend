@@ -3,7 +3,7 @@ use anchor_lang::{prelude::*, solana_program::clock};
 use super::{types::TimestampedPriceWithTwap, utils::price_to_fraction, GetPriceResult, Price};
 use crate::{
     utils::{Fraction, FULL_BPS},
-    LendingError, PriceHeuristic, PriceStatusFlags, TokenInfo,
+    xmsg, LendingError, PriceHeuristic, PriceStatusFlags, TokenInfo,
 };
 
 pub(super) fn get_validated_price(
@@ -36,7 +36,7 @@ pub(super) fn get_validated_price(
     ) {
         Ok(()) => price_status.set(PriceStatusFlags::PRICE_AGE_CHECKED, true),
         Err(e) => {
-            msg!("Price is too old token=[{price_label}], {e:?}",);
+            xmsg!("Price is too old token=[{price_label}], {e:?}",);
         }
     }
 
@@ -76,6 +76,10 @@ pub(super) fn get_validated_price(
         Err(e) => msg!("Price heuristic check failed token=[{price_label}]: {e:?}",),
     }
 
+    if token_info.block_price_usage == 0 {
+        price_status.set(PriceStatusFlags::PRICE_USAGE_ALLOWED, true);
+    }
+
     Some(GetPriceResult {
         price: price_dec,
         timestamp: price.timestamp,
@@ -90,7 +94,7 @@ fn check_price_age(
 ) -> Result<()> {
     let age_seconds = current_timestamp.saturating_sub(price_timestamp);
     if age_seconds > max_age_seconds {
-        msg!("Price is too old age={age_seconds} max_age={max_age_seconds}",);
+        xmsg!("Price is too old age={age_seconds} max_age={max_age_seconds}",);
         err!(LendingError::PriceTooOld)
     } else {
         Ok(())

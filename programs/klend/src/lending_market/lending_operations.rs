@@ -265,6 +265,23 @@ pub fn borrow_obligation_liquidity(
     obligation.has_debt = 1;
     obligation.last_update.mark_stale();
 
+    let new_utilization_rate: u8 = borrow_reserve
+        .liquidity
+        .utilization_rate()?
+        .to_percent()
+        .unwrap();
+    require!(
+        new_utilization_rate
+            < borrow_reserve
+                .config
+                .utilization_limit_block_borrowing_above
+            || borrow_reserve
+                .config
+                .utilization_limit_block_borrowing_above
+                == 0,
+        LendingError::BorrowingAboveUtilizationRateDisabled
+    );
+
     validate_obligation_asset_tiers(obligation)?;
     post_borrow_obligation_invariants(
         borrow_amount_f,
@@ -493,10 +510,7 @@ pub fn redeem_reserve_collateral(
 }
 
 pub fn redeem_fees(reserve: &mut Reserve, slot: Slot) -> Result<u64> {
-    if reserve
-        .last_update
-        .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
-    {
+    if reserve.last_update.is_stale(slot, PriceStatusFlags::NONE)? {
         msg!(
             "reserve is stale and must be refreshed in the current slot, price status: {:08b}",
             reserve.last_update.get_price_status().0
@@ -736,7 +750,7 @@ where
 
         prices_state &= deposit_reserve.last_update.get_price_status();
 
-        msg!(
+        xmsg!(
             "Deposit: {} amount: {} value: {}",
             &deposit_reserve.config.token_info.symbol(),
             deposit_reserve
@@ -876,7 +890,7 @@ where
 
         prices_state &= borrow_reserve.last_update.get_price_status();
 
-        msg!(
+        xmsg!(
             "Borrow: {} amount: {} value: {} value_bf: {}",
             &borrow_reserve.config.token_info.symbol(),
             Fraction::from_bits(borrow.borrowed_amount_sf),
@@ -1681,6 +1695,20 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
+        UpdateConfigMode::UpdateBlockBorrowingAboveUtilization => {
+            let new = value[0];
+            let prv = reserve.config.utilization_limit_block_borrowing_above;
+            reserve.config.utilization_limit_block_borrowing_above = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
+        }
+        UpdateConfigMode::UpdateBlockPriceUsage => {
+            let new = value[0];
+            let prv = reserve.config.token_info.block_price_usage;
+            reserve.config.token_info.block_price_usage = new;
+            msg!("Prv Value is {:?}", prv);
+            msg!("New Value is {:?}", new);
+        }
     }
 
     reserve.last_update.mark_stale();
@@ -2048,17 +2076,18 @@ pub mod utils {
                 return err!(LendingError::NetValueRemainingTooSmall);
             }
         }
+        if total_deposited_mv > 0 {
+            let new_ltv = new_total_bf_debt_mv / total_deposited_mv;
 
-        let new_ltv = new_total_bf_debt_mv / total_deposited_mv;
-
-        if new_ltv > obligation.loan_to_value() {
-            msg!(
-                "Obligation new LTV/new unhealthy LTV after repay {:.2}/{:.2} of {}",
-                new_ltv.to_display(),
-                obligation.unhealthy_loan_to_value().to_display(),
-                reserve.token_symbol()
-            );
-            return err!(LendingError::WorseLTVBlocked);
+            if new_ltv > obligation.loan_to_value() {
+                msg!(
+                    "Obligation new LTV/new unhealthy LTV after repay {:.2}/{:.2} of {}",
+                    new_ltv.to_display(),
+                    obligation.unhealthy_loan_to_value().to_display(),
+                    reserve.token_symbol()
+                );
+                return err!(LendingError::WorseLTVBlocked);
+            }
         }
 
         Ok(())

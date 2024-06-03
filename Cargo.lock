@@ -2349,6 +2349,7 @@ dependencies = [
  "static_assertions",
  "strum 0.24.0",
  "switchboard-itf",
+ "tracing",
  "uint",
 ]
 
