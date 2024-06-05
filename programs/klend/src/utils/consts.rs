@@ -113,7 +113,9 @@ pub const METEORA_DYNAMIC_POOL_ID_MAINNET: Pubkey =
 
 pub const DEFI_CARROT_ID_MAINNET: Pubkey = pubkey!("CarrotwivhMpDnm27EHmRLeQ683Z1PufuqEmBZvD282s");
 
-pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 7] = [
+pub const SANDGLASS_ID_MAINNET: Pubkey = pubkey!("SANDsy8SBzwUE8Zio2mrYZYqL52Phr2WQb9DDKuXMVK");
+
+pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 8] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_DEV, 1),
@@ -121,6 +123,7 @@ pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 7] = [
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V4_MAINNET_DEV, 1),
     CpiWhitelistedAccount::new(METEORA_DYNAMIC_POOL_ID_MAINNET, 1),
     CpiWhitelistedAccount::new(DEFI_CARROT_ID_MAINNET, 1),
+    CpiWhitelistedAccount::new(SANDGLASS_ID_MAINNET, 1),
 ];
 
 pub struct CpiWhitelistedAccount {
