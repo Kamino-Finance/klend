@@ -181,6 +181,7 @@ pub fn borrow_obligation_liquidity(
         return err!(LendingError::BorrowingDisabled);
     }
 
+    let current_utilization = borrow_reserve.liquidity.utilization_rate()?;
     let reserve_liquidity_borrowed_f = borrow_reserve.liquidity.total_borrow();
     let liquidity_amount_f = Fraction::from(liquidity_amount);
     let borrow_limit_f = Fraction::from(borrow_reserve.config.borrow_limit);
@@ -228,6 +229,8 @@ pub fn borrow_obligation_liquidity(
         referrer_token_state.is_some(),
     )?;
 
+    msg!("Requested {}, allowed {}", liquidity_amount, receive_amount);
+
     add_to_withdrawal_accum(
         &mut borrow_reserve.config.debt_withdrawal_cap,
         borrow_amount_f.to_floor(),
@@ -265,22 +268,19 @@ pub fn borrow_obligation_liquidity(
     obligation.has_debt = 1;
     obligation.last_update.mark_stale();
 
-    let new_utilization_rate: u8 = borrow_reserve
-        .liquidity
-        .utilization_rate()?
-        .to_percent()
-        .unwrap();
-    require!(
-        new_utilization_rate
-            < borrow_reserve
-                .config
-                .utilization_limit_block_borrowing_above
-            || borrow_reserve
-                .config
-                .utilization_limit_block_borrowing_above
-                == 0,
-        LendingError::BorrowingAboveUtilizationRateDisabled
-    );
+    let new_utilization_rate = borrow_reserve.liquidity.utilization_rate()?;
+    let utilization_limit = borrow_reserve
+        .config
+        .utilization_limit_block_borrowing_above;
+    if new_utilization_rate >= Fraction::from_percent(utilization_limit) && utilization_limit != 0 {
+        msg!(
+            "Borrowing above utilization rate is disabled, current {}, new {}, limit {}",
+            current_utilization.to_display(),
+            new_utilization_rate.to_display(),
+            utilization_limit
+        );
+        return err!(LendingError::BorrowingAboveUtilizationRateDisabled);
+    }
 
     validate_obligation_asset_tiers(obligation)?;
     post_borrow_obligation_invariants(
