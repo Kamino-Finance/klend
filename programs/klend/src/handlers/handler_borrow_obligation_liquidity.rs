@@ -20,6 +20,7 @@ pub fn process<'info>(
     ctx: Context<'_, '_, '_, 'info, BorrowObligationLiquidity<'info>>,
     liquidity_amount: u64,
 ) -> Result<()> {
+    msg!("liquidity_amount {}", liquidity_amount);
     check_refresh_ixs!(ctx, borrow_reserve, ReserveFarmKind::Debt);
     lending_checks::borrow_obligation_liquidity_checks(&ctx)?;
 
