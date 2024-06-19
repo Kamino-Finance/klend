@@ -43,7 +43,7 @@ pub struct LiquidationParams {
 }
 
 pub struct RefreshObligationDepositsResult {
-    pub lowest_deposit_ltv_accumulator: u8,
+    pub lowest_deposit_liquidation_ltv_threshold: u8,
     pub num_of_obsolete_reserves: u8,
     pub deposited_value_f: Fraction,
     pub allowed_borrow_value_f: Fraction,
@@ -56,6 +56,8 @@ pub struct RefreshObligationBorrowsResult {
     pub borrow_factor_adjusted_debt_value_f: Fraction,
     pub borrowed_assets_market_value_f: Fraction,
     pub prices_state: PriceStatusFlags,
+    pub highest_borrow_factor_pct: u64,
+    pub borrowed_amount_in_elevation_group: Option<u64>,
 }
 
 pub enum LendingAction {

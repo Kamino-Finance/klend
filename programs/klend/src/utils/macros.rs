@@ -126,19 +126,13 @@ macro_rules! dbg_msg {
 #[cfg(target_arch = "bpf")]
 #[macro_export]
 macro_rules! xmsg {
-    ($($arg:tt)*) => (msg!($($arg)*));
+    ($($arg:tt)*) => (::anchor_lang::prelude::msg!($($arg)*));
 }
 
-#[cfg(all(not(target_arch = "bpf"), not(feature = "tracing")))]
+#[cfg(all(not(target_arch = "bpf")))]
 #[macro_export]
 macro_rules! xmsg {
     ($($arg:tt)*) => (println!($($arg)*));
-}
-
-#[cfg(all(not(target_arch = "bpf"), feature = "tracing"))]
-#[macro_export]
-macro_rules! xmsg {
-    ($($arg:tt)*) => (tracing::info!($($arg)*));
 }
 
 #[cfg(not(target_arch = "bpf"))]
@@ -153,6 +147,22 @@ macro_rules! cu_log {
     () => {
         ::anchor_lang::solana_program::log::sol_log(concat!("CU at: ", file!(), ":", line!()));
         ::anchor_lang::solana_program::log::sol_log_compute_units();
+    };
+}
+
+#[macro_export]
+macro_rules! assert_fuzzy_eq_f {
+    ($actual:expr, $expected:expr, $epsilon:expr) => {
+        let eps = $epsilon as Fraction;
+        let act = $actual as Fraction;
+        let exp = $expected as Fraction;
+        let diff = if act > exp { act - exp } else { exp - act };
+        if diff > eps {
+            panic!(
+                "Actual {} Expected {} diff {} Epsilon {}",
+                $actual, $expected, diff, eps
+            );
+        }
     };
 }
 
@@ -256,6 +266,78 @@ macro_rules! assert_almost_eq_fraction {
                 left_val, right_val, std::fmt::format(format_args!($($arg)+))
             );
         }
+    };
+}
+
+#[macro_export]
+macro_rules! assert_gt {
+    ($left:expr, $right:expr) => {
+        if !($left > $right) {
+            panic!(
+                "Assertion failed: {:?} is not greater than {:?}",
+                $left, $right
+            );
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! assert_gte {
+    ($left:expr, $right:expr) => {
+        if !($left >= $right) {
+            panic!(
+                "Assertion failed: {:?} is not greater than {:?}",
+                $left, $right
+            );
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! prop_assert_gt {
+    ($left:expr, $right:expr) => {
+        let act = $left;
+        let exp = $right;
+        ::proptest::prop_assert!(
+            act > exp,
+            "assertion failed: `(Left > Right)` \
+             \n   Left: `{:?}`,\
+             \n Right: `{:?}`",
+            act,
+            exp,
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! prop_assert_gte {
+    ($left:expr, $right:expr) => {
+        let act = $left;
+        let exp = $right;
+        ::proptest::prop_assert!(
+            act >= exp,
+            "assertion failed: `(Left >= Right)` \
+             \n   Left: `{:?}`,\
+             \n Right: `{:?}`",
+            act,
+            exp,
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! prop_assert_eq {
+    ($left:expr, $right:expr) => {
+        let l = $left;
+        let r = $right;
+        ::proptest::prop_assert!(
+            l == r,
+            "assertion failed: `(Left == Right)` \
+             \n   Left: `{:?}`,\
+             \n Right: `{:?}`",
+            l,
+            r,
+        );
     };
 }
 

@@ -4,6 +4,7 @@ use anchor_lang::prelude::*;
 
 mod handlers;
 pub mod lending_market;
+
 pub mod state;
 pub mod utils;
 
@@ -24,7 +25,7 @@ solana_security_txt::security_txt! {
     name: "Kamino Lending",
     project_url: "https://kamino.finance/",
     contacts: "email:security@kamino.finance",
-    policy: "https://github.com/hubbleprotocol/audits/blob/master/docs/SECURITY.md",
+    policy: "https://github.com/Kamino-Finance/audits/blob/master/docs/SECURITY.md",
 
        preferred_languages: "en",
     auditors: "OtterSec, Offside Labs"
@@ -62,21 +63,13 @@ pub mod kamino_lending {
         handler_init_farms_for_reserve::process(ctx, mode)
     }
 
-    pub fn update_single_reserve_config(
+    pub fn update_reserve_config(
         ctx: Context<UpdateReserveConfig>,
         mode: u64,
-        value: [u8; 32],
+        value: Vec<u8>,
         skip_validation: bool,
     ) -> Result<()> {
         handler_update_reserve_config::process(ctx, mode, &value, skip_validation)
-    }
-
-    pub fn update_entire_reserve_config(
-        ctx: Context<UpdateReserveConfig>,
-        mode: u64,
-        value: [u8; VALUE_BYTE_ARRAY_LEN_RESERVE],
-    ) -> Result<()> {
-        handler_update_reserve_config::process(ctx, mode, &value, false)
     }
 
     pub fn redeem_fees(ctx: Context<RedeemFees>) -> Result<()> {
@@ -191,13 +184,13 @@ pub mod kamino_lending {
     pub fn liquidate_obligation_and_redeem_reserve_collateral(
         ctx: Context<LiquidateObligationAndRedeemReserveCollateral>,
         liquidity_amount: u64,
-        min_acceptable_received_collateral_amount: u64,
+        min_acceptable_received_liquidity_amount: u64,
         max_allowed_ltv_override_percent: u64,
     ) -> Result<()> {
         handler_liquidate_obligation_and_redeem_reserve_collateral::process(
             ctx,
             liquidity_amount,
-            min_acceptable_received_collateral_amount,
+            min_acceptable_received_liquidity_amount,
             max_allowed_ltv_override_percent,
         )
     }
@@ -413,8 +406,8 @@ pub enum LendingError {
     WithdrawalCapReached,
     #[msg("The last interval start timestamp is greater than the current timestamp")]
     LastTimestampGreaterThanCurrent,
-    #[msg("The reward amount is less than the minimum acceptable received collateral")]
-    LiquidationSlippageError,
+    #[msg("The reward amount is less than the minimum acceptable received liquidity")]
+    LiquidationRewardTooSmall,
     #[msg("Isolated Asset Tier Violation")]
     IsolatedAssetTierViolation,
     #[msg("The obligation's elevation group and the reserve's are not the same")]
@@ -479,6 +472,26 @@ pub enum LendingError {
     ReserveAccountingMismatch,
     #[msg("Borrowing above set utilization rate is disabled")]
     BorrowingAboveUtilizationRateDisabled,
+    #[msg("Liquidation must prioritize the debt with the highest borrow factor")]
+    LiquidationBorrowFactorPriority,
+    #[msg("Liquidation must prioritize the collateral with the lowest LTV")]
+    LiquidationLowestLTVPriority,
+    #[msg("Elevation group borrow limit exceeded")]
+    ElevationGroupBorrowLimitExceeded,
+    #[msg("The elevation group does not have a debt reserve defined")]
+    ElevationGroupWithoutDebtReserve,
+    #[msg("The elevation group does not allow any collateral reserves")]
+    ElevationGroupMaxCollateralReserveZero,
+    #[msg("In elevation group attempt to borrow from a reserve that is not the debt reserve")]
+    ElevationGroupHasAnotherDebtReserve,
+    #[msg("The elevation group's debt reserve cannot be used as a collateral reserve")]
+    ElevationGroupDebtReserveAsCollateral,
+    #[msg("Obligation have more collateral than the maximum allowed by the elevation group")]
+    ObligationCollateralExceedsElevationGroupLimit,
+    #[msg("Obligation is an elevation group but have more than one debt reserve")]
+    ObligationElevationGroupMultipleDebtReserve,
+    #[msg("Mint has a token (2022) extension that is not supported")]
+    UnsupportedTokenExtension,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

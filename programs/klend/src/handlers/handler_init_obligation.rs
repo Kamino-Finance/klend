@@ -1,5 +1,5 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token::{Mint, Token};
+use anchor_spl::token::Mint;
 
 use crate::{
     state::{
@@ -66,7 +66,6 @@ pub struct InitObligation<'info> {
     pub owner_user_metadata: AccountLoader<'info, UserMetadata>,
 
     pub rent: Sysvar<'info, Rent>,
-    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 

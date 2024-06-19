@@ -1,6 +1,7 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
+use crate::utils::constraints;
 use crate::{
     gen_signer_seeds,
     lending_market::lending_operations,
@@ -9,6 +10,10 @@ use crate::{
 };
 
 pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
+    constraints::token_2022::validate_liquidity_token_extensions(
+        &ctx.accounts.reserve_liquidity_mint.to_account_info(),
+    )?;
+
     let clock = &Clock::get()?;
 
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
@@ -24,6 +29,7 @@ pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
 
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.reserve_liquidity_mint.to_account_info(),
         ctx.accounts.reserve_supply_liquidity.to_account_info(),
         ctx.accounts
             .reserve_liquidity_fee_receiver
@@ -31,6 +37,7 @@ pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
         ctx.accounts.lending_market_authority.to_account_info(),
         authority_signer_seeds,
         withdraw_amount,
+        ctx.accounts.reserve_liquidity_mint.decimals,
     )?;
 
     Ok(())
@@ -41,10 +48,17 @@ pub struct RedeemFees<'info> {
     #[account(mut,
         has_one = lending_market)]
     pub reserve: AccountLoader<'info, Reserve>,
+    #[account(mut,
+        address = reserve.load()?.liquidity.mint_pubkey,
+        mint::token_program = token_program,
+    )]
+    pub reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, address = reserve.load()?.liquidity.fee_vault)]
-    pub reserve_liquidity_fee_receiver: Box<Account<'info, TokenAccount>>,
-    #[account(mut, address = reserve.load()?.liquidity.supply_vault)]
-    pub reserve_supply_liquidity: Box<Account<'info, TokenAccount>>,
+    pub reserve_liquidity_fee_receiver: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(mut,
+        address = reserve.load()?.liquidity.supply_vault,
+    )]
+    pub reserve_supply_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
     #[account(
@@ -53,5 +67,5 @@ pub struct RedeemFees<'info> {
     )]
     pub lending_market_authority: AccountInfo<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }

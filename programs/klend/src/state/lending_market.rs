@@ -1,6 +1,9 @@
 use anchor_lang::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
+use bytemuck::Zeroable;
 use derivative::Derivative;
+#[cfg(feature = "serde")]
+use serde_values::*;
 
 #[cfg(feature = "serde")]
 use super::{serde_bool_u8, serde_string, serde_utf_string};
@@ -13,8 +16,6 @@ use crate::{
     },
     LendingError,
 };
-#[cfg(feature = "serde")]
-use serde_values::*;
 
 static_assertions::const_assert_eq!(LENDING_MARKET_SIZE, std::mem::size_of::<LendingMarket>());
 static_assertions::const_assert_eq!(0, std::mem::size_of::<LendingMarket>() % 8);
@@ -75,17 +76,19 @@ pub struct LendingMarket {
     )]
     pub min_net_value_in_obligation_sf: u128,
 
+    pub min_value_skip_liquidation_ltv_bf_checks: u64,
+
     #[cfg_attr(
         feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_padding_178")
+        serde(skip_deserializing, skip_serializing, default = "default_padding_177")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 178],
+    pub padding1: [u64; 177],
 }
 
 #[cfg(feature = "serde")]
-fn default_padding_178() -> [u64; 178] {
-    [0; 178]
+fn default_padding_177() -> [u64; 177] {
+    [0; 177]
 }
 
 #[cfg(feature = "serde")]
@@ -103,6 +106,7 @@ impl Default for LendingMarket {
             quote_currency: [0; 32],
             lending_market_owner_cached: Pubkey::default(),
             emergency_mode: 0,
+            borrow_disabled: 0,
             autodeleverage_enabled: 0,
             liquidation_max_debt_close_factor_pct: LIQUIDATION_CLOSE_FACTOR,
             insolvency_risk_unhealthy_ltv_pct: CLOSE_TO_INSOLVENCY_RISKY_LTV,
@@ -114,10 +118,10 @@ impl Default for LendingMarket {
             referral_fee_bps: 0,
             price_refresh_trigger_to_max_age_pct: 0,
             elevation_groups: [ElevationGroup::default(); 32],
-            borrow_disabled: 0,
+            min_value_skip_liquidation_ltv_bf_checks: 0,
             elevation_group_padding: [0; 90],
             min_net_value_in_obligation_sf: MIN_NET_VALUE_IN_OBLIGATION.to_bits(),
-            padding1: [0; 178],
+            padding1: [0; 177],
         }
     }
 }
@@ -135,14 +139,15 @@ impl LendingMarket {
     pub fn get_elevation_group(
         &self,
         index: u8,
-    ) -> std::result::Result<ElevationGroup, LendingError> {
+    ) -> std::result::Result<Option<&ElevationGroup>, LendingError> {
         if index == ELEVATION_GROUP_NONE {
-            Ok(ElevationGroup::default())
+            Ok(None)
         } else {
-            Ok(*self
-                .elevation_groups
-                .get(index as usize - 1)
-                .ok_or(LendingError::InvalidElevationGroup)?)
+            Ok(Some(
+                self.elevation_groups
+                    .get(index as usize - 1)
+                    .ok_or(LendingError::InvalidElevationGroup)?,
+            ))
         }
     }
 
@@ -151,7 +156,7 @@ impl LendingMarket {
             return err!(LendingError::InvalidElevationGroupConfig);
         }
 
-        self.elevation_groups[elevation_group.id as usize - 1] = elevation_group;
+        self.elevation_groups[elevation_group.get_index()] = elevation_group;
 
         Ok(())
     }
@@ -167,7 +172,7 @@ pub struct InitLendingMarketParams {
     pub quote_currency: [u8; 32],
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Default, Derivative, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Derivative, PartialEq, Eq)]
 #[derivative(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -179,24 +184,40 @@ pub struct ElevationGroup {
     pub ltv_pct: u8,
     pub liquidation_threshold_pct: u8,
     pub allow_new_loans: u8,
+    pub max_reserves_as_collateral: u8,
+
     #[derivative(Debug = "ignore")]
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default)
     )]
-    #[derivative(Debug = "ignore")]
-    pub reserved: [u8; 2],
+    pub padding_0: u8,
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+    pub debt_reserve: Pubkey,
     #[derivative(Debug = "ignore")]
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default)
     )]
-    pub padding: [u64; 8],
+    pub padding_1: [u64; 4],
+}
+
+impl Default for ElevationGroup {
+    fn default() -> Self {
+        let mut default = Self::zeroed();
+        default.max_reserves_as_collateral = u8::MAX;
+        default
+    }
 }
 
 impl ElevationGroup {
     pub fn new_loans_disabled(&self) -> bool {
         self.allow_new_loans == 0
+    }
+
+    pub fn get_index(&self) -> usize {
+        self.id as usize - 1
     }
 }
 

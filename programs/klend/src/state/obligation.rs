@@ -24,7 +24,7 @@ pub struct Obligation {
     pub lending_market: Pubkey,
     pub owner: Pubkey,
     pub deposits: [ObligationCollateral; 8],
-    pub lowest_reserve_deposit_ltv: u64,
+    pub lowest_reserve_deposit_liquidation_ltv: u64,
     pub deposited_value_sf: u128,
 
     pub borrows: [ObligationLiquidity; 5],
@@ -49,8 +49,10 @@ pub struct Obligation {
     #[derivative(Debug = "ignore")]
     pub reserved: [u8; 7],
 
+    pub highest_borrow_factor_pct: u64,
+
     #[derivative(Debug = "ignore")]
-    pub padding_3: [u64; 127],
+    pub padding_3: [u64; 126],
 }
 
 impl Default for Obligation {
@@ -66,7 +68,7 @@ impl Default for Obligation {
             borrowed_assets_market_value_sf: 0,
             allowed_borrow_value_sf: 0,
             unhealthy_borrow_value_sf: 0,
-            lowest_reserve_deposit_ltv: 0,
+            lowest_reserve_deposit_liquidation_ltv: 0,
             borrow_factor_adjusted_debt_value_sf: 0,
             deposits_asset_tiers: [u8::MAX; 8],
             borrows_asset_tiers: [u8::MAX; 5],
@@ -74,8 +76,9 @@ impl Default for Obligation {
             num_of_obsolete_reserves: 0,
             has_debt: 0,
             borrowing_disabled: 0,
+            highest_borrow_factor_pct: 0,
             reserved: [0; 7],
-            padding_3: [0; 127],
+            padding_3: [0; 126],
             referrer: Pubkey::default(),
         }
     }
@@ -124,6 +127,12 @@ impl Display for Obligation {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum WithdrawResult {
+    Full,
+    Partial,
+}
+
 impl Obligation {
     pub const LEN: usize = 1784;
 
@@ -145,6 +154,11 @@ impl Obligation {
             / Fraction::from_bits(self.deposited_value_sf)
     }
 
+    pub fn no_bf_loan_to_value(&self) -> Fraction {
+        Fraction::from_bits(self.borrowed_assets_market_value_sf)
+            / Fraction::from_bits(self.deposited_value_sf)
+    }
+
     pub fn unhealthy_loan_to_value(&self) -> Fraction {
         Fraction::from_bits(self.unhealthy_borrow_value_sf)
             / Fraction::from_bits(self.deposited_value_sf)
@@ -161,15 +175,20 @@ impl Obligation {
         Ok(())
     }
 
-    pub fn withdraw(&mut self, withdraw_amount: u64, collateral_index: usize) -> Result<()> {
+    pub fn withdraw(
+        &mut self,
+        withdraw_amount: u64,
+        collateral_index: usize,
+    ) -> Result<WithdrawResult> {
         let collateral = &mut self.deposits[collateral_index];
         if withdraw_amount == collateral.deposited_amount {
             self.deposits[collateral_index] = ObligationCollateral::default();
             self.deposits_asset_tiers[collateral_index] = u8::MAX;
+            Ok(WithdrawResult::Full)
         } else {
             collateral.withdraw(withdraw_amount)?;
+            Ok(WithdrawResult::Partial)
         }
-        Ok(())
     }
 
     pub fn max_withdraw_value(&self, withdraw_collateral_ltv_pct: u8) -> LendingResult<Fraction> {
@@ -201,44 +220,58 @@ impl Obligation {
     pub fn find_collateral_in_deposits(
         &self,
         deposit_reserve: Pubkey,
-    ) -> Result<(&ObligationCollateral, usize)> {
+    ) -> Result<&ObligationCollateral> {
         if self.deposits_empty() {
             xmsg!("Obligation has no deposits");
             return err!(LendingError::ObligationDepositsEmpty);
         }
-        let collateral_index = self
-            .find_collateral_index_in_deposits(deposit_reserve)
+        let collateral = self
+            .deposits
+            .iter()
+            .find(|collateral| collateral.deposit_reserve == deposit_reserve)
             .ok_or(LendingError::InvalidObligationCollateral)?;
-        Ok((&self.deposits[collateral_index], collateral_index))
+        Ok(collateral)
     }
 
     pub fn find_or_add_collateral_to_deposits(
         &mut self,
         deposit_reserve: Pubkey,
         deposit_reserve_asset_tier: AssetTier,
-    ) -> Result<(&mut ObligationCollateral, usize)> {
-        if let Some(collateral_index) = self.find_collateral_index_in_deposits(deposit_reserve) {
-            Ok((&mut self.deposits[collateral_index], collateral_index))
-        } else if let Some((index, collateral)) = self
+        init_function: impl FnOnce(&mut ObligationCollateral) -> Result<()>,
+    ) -> Result<&mut ObligationCollateral> {
+        if let Some(collateral_index) = self
             .deposits
             .iter_mut()
-            .enumerate()
-            .find(|c| c.1.deposit_reserve == Pubkey::default())
+            .position(|collateral| collateral.deposit_reserve == deposit_reserve)
         {
+            Ok(&mut self.deposits[collateral_index])
+        } else if let Some(collateral_index) = self
+            .deposits
+            .iter()
+            .position(|c| c.deposit_reserve == Pubkey::default())
+        {
+            let collateral = &mut self.deposits[collateral_index];
             *collateral = ObligationCollateral::new(deposit_reserve);
-            self.deposits_asset_tiers[index] = deposit_reserve_asset_tier.into();
+            self.deposits_asset_tiers[collateral_index] = deposit_reserve_asset_tier.into();
 
-            Ok((collateral, index))
+            init_function(collateral)?;
+
+            Ok(collateral)
         } else {
             xmsg!("Obligation has no empty deposits");
             err!(LendingError::ObligationReserveLimit)
         }
     }
 
-    fn find_collateral_index_in_deposits(&self, deposit_reserve: Pubkey) -> Option<usize> {
+    pub fn position_of_collateral_in_deposits(&self, deposit_reserve: Pubkey) -> Result<usize> {
+        if self.deposits_empty() {
+            xmsg!("Obligation has no deposits");
+            return err!(LendingError::ObligationDepositsEmpty);
+        }
         self.deposits
             .iter()
             .position(|collateral| collateral.deposit_reserve == deposit_reserve)
+            .ok_or(error!(LendingError::InvalidObligationCollateral))
     }
 
     pub fn find_liquidity_in_borrows(
@@ -251,7 +284,7 @@ impl Obligation {
         }
         let liquidity_index = self
             .find_liquidity_index_in_borrows(borrow_reserve)
-            .ok_or(LendingError::InvalidObligationLiquidity)?;
+            .ok_or_else(|| error!(LendingError::InvalidObligationLiquidity))?;
         Ok((&self.borrows[liquidity_index], liquidity_index))
     }
 
@@ -265,7 +298,7 @@ impl Obligation {
         }
         let liquidity_index = self
             .find_liquidity_index_in_borrows(borrow_reserve)
-            .ok_or(LendingError::InvalidObligationLiquidity)?;
+            .ok_or_else(|| error!(LendingError::InvalidObligationLiquidity))?;
         Ok((&mut self.borrows[liquidity_index], liquidity_index))
     }
 
@@ -353,6 +386,17 @@ impl Obligation {
             .collect::<Vec<AssetTier>>()
     }
 
+    pub fn get_borrowed_amount_if_single_token(&self) -> Option<u64> {
+        if self.borrows_count() > 1 {
+            None
+        } else {
+            Some(
+                Fraction::from_bits(self.borrows.iter().map(|l| l.borrowed_amount_sf).sum())
+                    .to_ceil::<u64>(),
+            )
+        }
+    }
+
     pub fn has_referrer(&self) -> bool {
         self.referrer != Pubkey::default()
     }
@@ -389,7 +433,8 @@ pub struct ObligationCollateral {
     pub deposit_reserve: Pubkey,
     pub deposited_amount: u64,
     pub market_value_sf: u128,
-    pub padding: [u64; 10],
+    pub borrowed_amount_against_this_collateral_in_elevation_group: u64,
+    pub padding: [u64; 9],
 }
 
 impl ObligationCollateral {
@@ -398,7 +443,8 @@ impl ObligationCollateral {
             deposit_reserve,
             deposited_amount: 0,
             market_value_sf: 0,
-            padding: [0; 10],
+            borrowed_amount_against_this_collateral_in_elevation_group: 0,
+            padding: [0; 9],
         }
     }
 
@@ -430,7 +476,9 @@ pub struct ObligationLiquidity {
     pub market_value_sf: u128,
     pub borrow_factor_adjusted_market_value_sf: u128,
 
-    pub padding2: [u64; 8],
+    pub borrowed_amount_outside_elevation_groups: u64,
+
+    pub padding2: [u64; 7],
 }
 
 impl ObligationLiquidity {
@@ -442,7 +490,8 @@ impl ObligationLiquidity {
             borrowed_amount_sf: 0,
             market_value_sf: 0,
             borrow_factor_adjusted_market_value_sf: 0,
-            padding2: [0; 8],
+            borrowed_amount_outside_elevation_groups: 0,
+            padding2: [0; 7],
         }
     }
 

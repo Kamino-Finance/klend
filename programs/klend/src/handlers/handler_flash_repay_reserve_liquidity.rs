@@ -1,5 +1,6 @@
 use anchor_lang::{prelude::*, solana_program::sysvar, Accounts};
-use anchor_spl::token::{self, Token, TokenAccount};
+use anchor_spl::token::Token;
+use anchor_spl::token_interface::{self, Mint, TokenAccount};
 use lending_checks::validate_referrer_token_state;
 
 use crate::{
@@ -19,8 +20,9 @@ pub fn process(
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
 
-    let initial_reserve_token_balance =
-        token::accessor::amount(&ctx.accounts.reserve_destination_liquidity.to_account_info())?;
+    let initial_reserve_token_balance = token_interface::accessor::amount(
+        &ctx.accounts.reserve_destination_liquidity.to_account_info(),
+    )?;
     let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
 
     flash_ixs::flash_repay_checks(&ctx, borrow_instruction_index, liquidity_amount)?;
@@ -62,27 +64,33 @@ pub fn process(
 
     token_transfer::repay_obligation_liquidity_transfer(
         ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.reserve_liquidity_mint.to_account_info(),
         ctx.accounts.user_source_liquidity.to_account_info(),
         ctx.accounts.reserve_destination_liquidity.to_account_info(),
         ctx.accounts.user_transfer_authority.to_account_info(),
         flash_loan_amount_with_referrer_fee,
+        ctx.accounts.reserve_liquidity_mint.decimals,
     )?;
 
     if reserve_origination_fee > 0 {
         token_transfer::pay_borrowing_fees_transfer(
             ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.reserve_liquidity_mint.to_account_info(),
             ctx.accounts.user_source_liquidity.to_account_info(),
             ctx.accounts
                 .reserve_liquidity_fee_receiver
                 .to_account_info(),
             ctx.accounts.user_transfer_authority.to_account_info(),
             reserve_origination_fee,
+            ctx.accounts.reserve_liquidity_mint.decimals,
         )?;
     }
 
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
-        token::accessor::amount(&ctx.accounts.reserve_destination_liquidity.to_account_info())
-            .unwrap(),
+        token_interface::accessor::amount(
+            &ctx.accounts.reserve_destination_liquidity.to_account_info(),
+        )
+        .unwrap(),
         reserve.liquidity.available_amount,
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
@@ -110,17 +118,23 @@ pub struct FlashRepayReserveLiquidity<'info> {
     pub reserve: AccountLoader<'info, Reserve>,
 
     #[account(mut,
-        address = reserve.load()?.liquidity.supply_vault
+        address = reserve.load()?.liquidity.mint_pubkey,
+        mint::token_program = token_program,
     )]
-    pub reserve_destination_liquidity: Box<Account<'info, TokenAccount>>,
+    pub reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    #[account(mut,
+        address = reserve.load()?.liquidity.supply_vault,
+    )]
+    pub reserve_destination_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut)]
-    pub user_source_liquidity: Box<Account<'info, TokenAccount>>,
+    pub user_source_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut,
         address = reserve.load()?.liquidity.fee_vault
     )]
-    pub reserve_liquidity_fee_receiver: Box<Account<'info, TokenAccount>>,
+    pub reserve_liquidity_fee_receiver: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut)]
     pub referrer_token_state: Option<AccountLoader<'info, ReferrerTokenState>>,

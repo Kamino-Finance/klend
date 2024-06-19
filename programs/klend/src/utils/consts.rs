@@ -39,7 +39,7 @@ pub const NULL_PUBKEY: solana_program::pubkey::Pubkey =
 pub const LENDING_MARKET_SIZE: usize = 4656;
 pub const RESERVE_SIZE: usize = 8616;
 pub const OBLIGATION_SIZE: usize = 3336;
-pub const RESERVE_CONFIG_SIZE: usize = 648;
+pub const RESERVE_CONFIG_SIZE: usize = 912;
 pub const REFERRER_TOKEN_STATE_SIZE: usize = 352;
 pub const USER_METADATA_SIZE: usize = 1024;
 pub const REFERRER_STATE_SIZE: usize = 64;
@@ -54,7 +54,7 @@ pub const DEFAULT_BORROW_FACTOR_PCT: u64 = 100;
 
 pub const ELEVATION_GROUP_NONE: u8 = 0;
 
-pub const MAX_NUM_ELEVATION_GROUPS: u8 = 10;
+pub const MAX_NUM_ELEVATION_GROUPS: u8 = 32;
 
 pub const USD_DECIMALS: u32 = 6;
 
@@ -108,14 +108,18 @@ pub const SQUADS_PROGRAM_ID_V4_MAINNET_DEV: Pubkey =
 pub const FLEX_LEND_ID_MAINNET_PROD: Pubkey =
     pubkey!("FL3X2pRsQ9zHENpZSKDRREtccwJuei8yg9fwDu9UN69Q");
 
-pub const METEORA_DYNAMIC_POOL_ID_MAINNET: Pubkey =
-    pubkey!("24Uqj9JCLxUeoC3hGfh5W3s9FM9uCHDS2SG3LYwBpyTi");
+pub const KAMINO_VAULT_STAGING: Pubkey = pubkey!("STkvh7ostar39Fwr4uZKASs1RNNuYMFMTsE77FiRsL2");
+
+pub const KAMINO_VAULT_MAINNET: Pubkey = pubkey!("kvauTFR8qm1dhniz6pYuBZkuene3Hfrs1VQhVRgCNrr");
 
 pub const DEFI_CARROT_ID_MAINNET: Pubkey = pubkey!("CarrotwivhMpDnm27EHmRLeQ683Z1PufuqEmBZvD282s");
 
+pub const METEORA_DYNAMIC_POOL_ID_MAINNET: Pubkey =
+    pubkey!("24Uqj9JCLxUeoC3hGfh5W3s9FM9uCHDS2SG3LYwBpyTi");
+
 pub const SANDGLASS_ID_MAINNET: Pubkey = pubkey!("SANDsy8SBzwUE8Zio2mrYZYqL52Phr2WQb9DDKuXMVK");
 
-pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 8] = [
+pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 10] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_DEV, 1),
@@ -124,6 +128,8 @@ pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 8] = [
     CpiWhitelistedAccount::new(METEORA_DYNAMIC_POOL_ID_MAINNET, 1),
     CpiWhitelistedAccount::new(DEFI_CARROT_ID_MAINNET, 1),
     CpiWhitelistedAccount::new(SANDGLASS_ID_MAINNET, 1),
+    CpiWhitelistedAccount::new(KAMINO_VAULT_STAGING, 1),
+    CpiWhitelistedAccount::new(KAMINO_VAULT_MAINNET, 1),
 ];
 
 pub struct CpiWhitelistedAccount {
