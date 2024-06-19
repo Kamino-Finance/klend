@@ -3,23 +3,21 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::{
-    token,
-    token::{Mint, Token, TokenAccount},
-};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use anchor_spl::{token, token::Token, token_interface};
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{obligation::Obligation, LendingMarket, RedeemReserveCollateralAccounts, Reserve},
-    utils::{seeds, token_transfer},
+    utils::{seeds, token_transfer, FatAccountLoader},
     xmsg, LendingAction, LiquidateAndRedeemResult, ReserveFarmKind,
 };
 
 pub fn process(
     ctx: Context<LiquidateObligationAndRedeemReserveCollateral>,
     liquidity_amount: u64,
-    min_acceptable_received_collateral_amount: u64,
+    min_acceptable_received_liquidity_amount: u64,
     max_allowed_ltv_override_percent: u64,
 ) -> Result<()> {
     xmsg!(
@@ -41,12 +39,14 @@ pub fn process(
         user_source_collateral: ctx.accounts.user_destination_collateral.clone(),
         user_destination_liquidity: ctx.accounts.user_destination_liquidity.clone(),
         reserve: ctx.accounts.withdraw_reserve.clone(),
+        reserve_liquidity_mint: ctx.accounts.withdraw_reserve_liquidity_mint.clone(),
         reserve_collateral_mint: ctx.accounts.withdraw_reserve_collateral_mint.clone(),
         reserve_liquidity_supply: ctx.accounts.withdraw_reserve_liquidity_supply.clone(),
         lending_market: ctx.accounts.lending_market.clone(),
         lending_market_authority: ctx.accounts.lending_market_authority.clone(),
         owner: ctx.accounts.liquidator.clone(),
-        token_program: ctx.accounts.token_program.clone(),
+        collateral_token_program: ctx.accounts.collateral_token_program.clone(),
+        liquidity_token_program: ctx.accounts.withdraw_liquidity_token_program.clone(),
     })?;
 
     let lending_market = &ctx.accounts.lending_market.load()?;
@@ -101,22 +101,27 @@ pub fn process(
         obligation,
         clock,
         liquidity_amount,
-        min_acceptable_received_collateral_amount,
+        min_acceptable_received_liquidity_amount,
         max_allowed_ltv_override_pct_opt,
+        ctx.remaining_accounts.iter().map(|a| {
+            FatAccountLoader::try_from(a).expect("Remaining account is not a valid deposit reserve")
+        }),
     )?;
 
     token_transfer::repay_obligation_liquidity_transfer(
-        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.repay_liquidity_token_program.to_account_info(),
+        ctx.accounts.repay_reserve_liquidity_mint.to_account_info(),
         ctx.accounts.user_source_liquidity.to_account_info(),
         ctx.accounts
             .repay_reserve_liquidity_supply
             .to_account_info(),
         ctx.accounts.liquidator.to_account_info(),
         repay_amount,
+        ctx.accounts.repay_reserve_liquidity_mint.decimals,
     )?;
 
     token_transfer::withdraw_obligation_collateral_transfer(
-        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.collateral_token_program.to_account_info(),
         ctx.accounts.user_destination_collateral.to_account_info(),
         ctx.accounts
             .withdraw_reserve_collateral_supply
@@ -128,7 +133,13 @@ pub fn process(
 
     if let Some((withdraw_liquidity_amount, protocol_fee)) = total_withdraw_liquidity_amount {
         token_transfer::redeem_reserve_collateral_transfer(
-            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.collateral_token_program.to_account_info(),
+            ctx.accounts
+                .withdraw_liquidity_token_program
+                .to_account_info(),
+            ctx.accounts
+                .withdraw_reserve_liquidity_mint
+                .to_account_info(),
             ctx.accounts
                 .withdraw_reserve_collateral_mint
                 .to_account_info(),
@@ -142,21 +153,29 @@ pub fn process(
             authority_signer_seeds,
             withdraw_collateral_amount,
             withdraw_liquidity_amount,
+            ctx.accounts.withdraw_reserve_liquidity_mint.decimals,
         )?;
 
-        token::transfer(
+        token_interface::transfer_checked(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                anchor_spl::token::Transfer {
+                ctx.accounts
+                    .withdraw_liquidity_token_program
+                    .to_account_info(),
+                token_interface::TransferChecked {
                     from: ctx.accounts.user_destination_liquidity.to_account_info(),
                     to: ctx
                         .accounts
                         .withdraw_reserve_liquidity_fee_receiver
                         .to_account_info(),
                     authority: ctx.accounts.liquidator.to_account_info(),
+                    mint: ctx
+                        .accounts
+                        .withdraw_reserve_liquidity_mint
+                        .to_account_info(),
                 },
             ),
             protocol_fee,
+            ctx.accounts.withdraw_reserve_liquidity_mint.decimals,
         )?;
         let withdraw_reserve = &ctx.accounts.withdraw_reserve.load()?;
 
@@ -241,39 +260,51 @@ pub struct LiquidateObligationAndRedeemReserveCollateral<'info> {
     )]
     pub repay_reserve: AccountLoader<'info, Reserve>,
     #[account(mut,
-        address = repay_reserve.load()?.liquidity.supply_vault
+        address = repay_reserve.load()?.liquidity.mint_pubkey,
+        mint::token_program = repay_liquidity_token_program,
     )]
-    pub repay_reserve_liquidity_supply: Box<Account<'info, TokenAccount>>,
+    pub repay_reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut,
+        address = repay_reserve.load()?.liquidity.supply_vault,
+    )]
+    pub repay_reserve_liquidity_supply: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut,
         has_one = lending_market
     )]
     pub withdraw_reserve: AccountLoader<'info, Reserve>,
     #[account(mut,
-        address = withdraw_reserve.load()?.collateral.mint_pubkey
+        address = withdraw_reserve.load()?.liquidity.mint_pubkey,
+        mint::token_program = withdraw_liquidity_token_program,
     )]
-    pub withdraw_reserve_collateral_mint: Box<Account<'info, Mint>>,
+    pub withdraw_reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut,
+        address = withdraw_reserve.load()?.collateral.mint_pubkey,
+    )]
+    pub withdraw_reserve_collateral_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut,
         address = withdraw_reserve.load()?.collateral.supply_vault
     )]
-    pub withdraw_reserve_collateral_supply: Box<Account<'info, TokenAccount>>,
+    pub withdraw_reserve_collateral_supply: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut,
         address = withdraw_reserve.load()?.liquidity.supply_vault
     )]
-    pub withdraw_reserve_liquidity_supply: Box<Account<'info, TokenAccount>>,
+    pub withdraw_reserve_liquidity_supply: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut,
-        address = withdraw_reserve.load()?.liquidity.fee_vault
+        address = withdraw_reserve.load()?.liquidity.fee_vault,
     )]
-    pub withdraw_reserve_liquidity_fee_receiver: Box<Account<'info, TokenAccount>>,
+    pub withdraw_reserve_liquidity_fee_receiver: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut)]
-    pub user_source_liquidity: Box<Account<'info, TokenAccount>>,
+    pub user_source_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
-    pub user_destination_collateral: Box<Account<'info, TokenAccount>>,
+    pub user_destination_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
-    pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
+    pub user_destination_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    pub token_program: Program<'info, Token>,
+    pub collateral_token_program: Program<'info, Token>,
+    pub repay_liquidity_token_program: Interface<'info, TokenInterface>,
+    pub withdraw_liquidity_token_program: Interface<'info, TokenInterface>,
 
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,

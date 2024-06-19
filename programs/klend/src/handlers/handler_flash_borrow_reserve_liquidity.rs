@@ -1,5 +1,6 @@
 use anchor_lang::{prelude::*, solana_program::sysvar, Accounts};
-use anchor_spl::token::{self, Token, TokenAccount};
+use anchor_spl::token::Token;
+use anchor_spl::token_interface::{self, Mint, TokenAccount};
 
 use crate::{
     gen_signer_seeds,
@@ -17,8 +18,9 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
 
-    let initial_reserve_token_balance =
-        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info())?;
+    let initial_reserve_token_balance = token_interface::accessor::amount(
+        &ctx.accounts.reserve_source_liquidity.to_account_info(),
+    )?;
     let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
 
     flash_ixs::flash_borrow_checks(&ctx, liquidity_amount)?;
@@ -34,15 +36,18 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
 
     token_transfer::borrow_obligation_liquidity_transfer(
         ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.reserve_liquidity_mint.to_account_info(),
         ctx.accounts.reserve_source_liquidity.to_account_info(),
         ctx.accounts.user_destination_liquidity.to_account_info(),
         ctx.accounts.lending_market_authority.to_account_info(),
         authority_signer_seeds,
         liquidity_amount,
+        ctx.accounts.reserve_liquidity_mint.decimals,
     )?;
 
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
-        token::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info()).unwrap(),
+        token_interface::accessor::amount(&ctx.accounts.reserve_source_liquidity.to_account_info())
+            .unwrap(),
         reserve.liquidity.available_amount,
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
@@ -70,17 +75,23 @@ pub struct FlashBorrowReserveLiquidity<'info> {
     pub reserve: AccountLoader<'info, Reserve>,
 
     #[account(mut,
-        address = reserve.load()?.liquidity.supply_vault
+        address = reserve.load()?.liquidity.mint_pubkey,
+        mint::token_program = token_program,
     )]
-    pub reserve_source_liquidity: Box<Account<'info, TokenAccount>>,
+    pub reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    #[account(mut,
+        address = reserve.load()?.liquidity.supply_vault,
+    )]
+    pub reserve_source_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut)]
-    pub user_destination_liquidity: Box<Account<'info, TokenAccount>>,
+    pub user_destination_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut,
         address = reserve.load()?.liquidity.fee_vault
     )]
-    pub reserve_liquidity_fee_receiver: Box<Account<'info, TokenAccount>>,
+    pub reserve_liquidity_fee_receiver: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut)]
     pub referrer_token_state: Option<AccountLoader<'info, ReferrerTokenState>>,

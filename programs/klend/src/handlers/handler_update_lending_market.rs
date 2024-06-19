@@ -116,6 +116,13 @@ pub fn process(
                 return err!(LendingError::InvalidElevationGroupConfig);
             }
 
+            if elevation_group.id != ELEVATION_GROUP_NONE
+                && (elevation_group.debt_reserve == Pubkey::default()
+                    || elevation_group.max_reserves_as_collateral == 0)
+            {
+                return err!(LendingError::InvalidElevationGroupConfig);
+            }
+
             if Fraction::from_percent(elevation_group.liquidation_threshold_pct)
                 + Fraction::from_percent(elevation_group.liquidation_threshold_pct)
                     * Fraction::from_bps(elevation_group.max_liquidation_bonus_bps)
@@ -189,6 +196,18 @@ pub fn process(
                 Fraction::from_bits(min_net_value_in_obligation_sf)
             );
             market.min_net_value_in_obligation_sf = min_net_value_in_obligation_sf;
+        }
+        UpdateLendingMarketMode::UpdateMinValueSkipPriorityLiqCheck => {
+            let min_value_skip_liquidation_ltv_bf_checks =
+                u64::from_le_bytes(value[..8].try_into().unwrap());
+            msg!(
+                "Prev Value is {}",
+                market.min_value_skip_liquidation_ltv_bf_checks
+            );
+            msg!("New Value is {}", min_value_skip_liquidation_ltv_bf_checks);
+
+            market.min_value_skip_liquidation_ltv_bf_checks =
+                min_value_skip_liquidation_ltv_bf_checks;
         }
     }
 

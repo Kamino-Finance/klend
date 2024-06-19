@@ -1,6 +1,7 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
+use crate::utils::constraints;
 use crate::{
     gen_signer_seeds,
     lending_market::lending_operations,
@@ -13,6 +14,10 @@ use crate::{
 };
 
 pub fn process(ctx: Context<WithdrawReferrerFees>) -> Result<()> {
+    constraints::token_2022::validate_liquidity_token_extensions(
+        &ctx.accounts.reserve_liquidity_mint.to_account_info(),
+    )?;
+
     let clock = &Clock::get()?;
 
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
@@ -28,11 +33,13 @@ pub fn process(ctx: Context<WithdrawReferrerFees>) -> Result<()> {
 
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.reserve_liquidity_mint.to_account_info(),
         ctx.accounts.reserve_supply_liquidity.to_account_info(),
         ctx.accounts.referrer_token_account.to_account_info(),
         ctx.accounts.lending_market_authority.to_account_info(),
         authority_signer_seeds,
         withdraw_amount,
+        ctx.accounts.reserve_liquidity_mint.decimals,
     )?;
 
     Ok(())
@@ -54,11 +61,19 @@ pub struct WithdrawReferrerFees<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
-    #[account(mut, address = reserve.load()?.liquidity.supply_vault)]
-    pub reserve_supply_liquidity: Box<Account<'info, TokenAccount>>,
+    #[account(mut,
+        address = reserve.load()?.liquidity.mint_pubkey,
+        mint::token_program = token_program,
+    )]
+    pub reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    #[account(mut,
+        address = reserve.load()?.liquidity.supply_vault,
+    )]
+    pub reserve_supply_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut, token::mint = reserve.load()?.liquidity.mint_pubkey)]
-    pub referrer_token_account: Box<Account<'info, TokenAccount>>,
+    pub referrer_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
     #[account(
@@ -67,5 +82,5 @@ pub struct WithdrawReferrerFees<'info> {
     )]
     pub lending_market_authority: AccountInfo<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }

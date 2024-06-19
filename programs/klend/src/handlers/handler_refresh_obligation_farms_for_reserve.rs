@@ -1,5 +1,4 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token::Token;
 use farms::{program::Farms, state::UserState as FarmsUserState};
 
 use crate::{
@@ -98,7 +97,6 @@ pub struct RefreshObligationFarmsForReserve<'info> {
 
     pub farms_program: Program<'info, Farms>,
     pub rent: Sysvar<'info, Rent>,
-    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
@@ -126,7 +124,7 @@ fn amount_for_obligation(
     match farm_kind {
         ReserveFarmKind::Collateral => {
             let collateral = obligation.find_collateral_in_deposits(*reserve_address);
-            if let Ok((obligation_collateral, _)) = collateral {
+            if let Ok(obligation_collateral) = collateral {
                 obligation_collateral.deposited_amount
             } else {
                 0

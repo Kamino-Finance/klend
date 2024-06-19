@@ -14,6 +14,9 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
     let lending_market = &ctx.accounts.lending_market.load()?;
 
     constraints::check_remaining_accounts(&ctx)?;
+    if reserve.liquidity.token_program == Pubkey::default() {
+        reserve.liquidity.token_program = anchor_spl::token::ID;
+    }
 
     require!(
         reserve.version == PROGRAM_VERSION as u64,

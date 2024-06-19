@@ -42,79 +42,31 @@ pub enum UpdateReserveConfigValue {
     Full(Box<ReserveConfig>),
     WithdrawalCap(u64, u64),
     ElevationGroups([u8; 20]),
+    ElevationGroupBorrowLimits([u64; 32]),
 }
 
 impl UpdateReserveConfigValue {
-    pub fn to_bytes_single(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE] {
-        let long_bytes = self.to_raw_bytes();
-
-        let mut short_bytes = [0; VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE];
-        short_bytes.copy_from_slice(&long_bytes[..VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE]);
-        short_bytes
-    }
-
-    pub fn to_bytes_entire(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_RESERVE] {
-        self.to_raw_bytes()
-    }
-
-    pub fn to_raw_bytes(&self) -> [u8; VALUE_BYTE_ARRAY_LEN_RESERVE] {
-        let mut val = [0; VALUE_BYTE_ARRAY_LEN_RESERVE];
+    pub fn to_raw_bytes(&self) -> Vec<u8> {
         match self {
             UpdateReserveConfigValue::Bool(v) => {
-                val[0] = *v as u8;
-                val
+                vec![*v as u8]
             }
             UpdateReserveConfigValue::U8(v) => {
-                val[0] = *v;
-                val
+                vec![*v]
             }
-            UpdateReserveConfigValue::U16(v) => {
-                val[..2].copy_from_slice(&v.to_le_bytes());
-                val
-            }
-            UpdateReserveConfigValue::U64(v) => {
-                val[..8].copy_from_slice(&v.to_le_bytes());
-                val
-            }
-            UpdateReserveConfigValue::Pubkey(v) => {
-                val[..32].copy_from_slice(v.as_ref());
-                val
-            }
-            UpdateReserveConfigValue::ScopeChain(chain) => {
-                let expanded: [u8; 8] = chain.map(|x| x.to_le_bytes()).concat().try_into().unwrap();
-                val[..8].clone_from_slice(&expanded);
-                val
-            }
-            UpdateReserveConfigValue::Name(v) => {
-                val[..v.len()].copy_from_slice(v);
-                val
-            }
-            UpdateReserveConfigValue::Full(config) => {
-                let src = config.try_to_vec().unwrap();
-                val[..src.len()].copy_from_slice(&src);
-                val
-            }
-            UpdateReserveConfigValue::BorrowRateCurve(curve) => {
-                let curve = curve.try_to_vec().unwrap();
-                val[..curve.len()].copy_from_slice(&curve);
-                val
-            }
+            UpdateReserveConfigValue::U16(v) => v.to_le_bytes().to_vec(),
+            UpdateReserveConfigValue::U64(v) => v.to_le_bytes().to_vec(),
+            UpdateReserveConfigValue::Pubkey(v) => v.as_ref().to_vec(),
+            UpdateReserveConfigValue::ScopeChain(chain) => chain.map(|x| x.to_le_bytes()).concat(),
+            UpdateReserveConfigValue::Name(v) => v.to_vec(),
+            UpdateReserveConfigValue::Full(config) => config.try_to_vec().unwrap(),
+            UpdateReserveConfigValue::BorrowRateCurve(curve) => curve.try_to_vec().unwrap(),
             UpdateReserveConfigValue::WithdrawalCap(cap, interval) => {
-                let cap = cap.try_to_vec().unwrap();
-                let interval = interval.try_to_vec().unwrap();
-                val[..8].copy_from_slice(&cap);
-                val[8..16].copy_from_slice(&interval);
-                val
+                (*cap, *interval).try_to_vec().unwrap()
             }
-            UpdateReserveConfigValue::ElevationGroups(groups) => {
-                val[..groups.len()].copy_from_slice(groups);
-                val
-            }
-            UpdateReserveConfigValue::U8Tuple(mode, value) => {
-                val[0] = *mode;
-                val[1] = *value;
-                val
-            }
+            UpdateReserveConfigValue::ElevationGroups(groups) => groups.to_vec(),
+            UpdateReserveConfigValue::U8Tuple(mode, value) => (*mode, *value).try_to_vec().unwrap(),
+            UpdateReserveConfigValue::ElevationGroupBorrowLimits(e) => e.try_to_vec().unwrap(),
         }
     }
 }
@@ -177,6 +129,9 @@ pub enum UpdateConfigMode {
     UpdateDisableUsageAsCollateralOutsideEmode = 42,
     UpdateBlockBorrowingAboveUtilization = 43,
     UpdateBlockPriceUsage = 44,
+    UpdateBorrowLimitOutsideElevationGroup = 45,
+    UpdateBorrowLimitsInElevationGroupAgainstThisReserve = 46,
+    UpdateHostFixedInterestRateBps = 47,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -260,6 +215,7 @@ pub enum UpdateLendingMarketMode {
     UpdateAutodeleverageEnabled = 13,
     UpdateBorrowingDisabled = 14,
     UpdateMinNetValueObligationPostAction = 15,
+    UpdateMinValueSkipPriorityLiqCheck = 16,
 }
 
 #[cfg(feature = "serde")]

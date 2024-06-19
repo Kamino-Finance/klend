@@ -1,5 +1,4 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token::Token;
 use farms::program::Farms;
 
 use crate::{
@@ -71,6 +70,5 @@ pub struct InitObligationFarmsForReserve<'info> {
 
     pub farms_program: Program<'info, Farms>,
     pub rent: Sysvar<'info, Rent>,
-    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }

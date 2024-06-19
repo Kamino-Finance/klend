@@ -3,7 +3,8 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token::Token;
+use anchor_spl::token_interface::TokenAccount;
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
@@ -31,7 +32,7 @@ pub fn process(ctx: Context<WithdrawObligationCollateral>, collateral_amount: u6
         )?;
         let clock = &Clock::get()?;
 
-        let withdraw_reserve = &mut ctx.accounts.withdraw_reserve.load()?;
+        let withdraw_reserve = &mut ctx.accounts.withdraw_reserve.load_mut()?;
         let obligation = &mut ctx.accounts.obligation.load_mut()?;
         let lending_market = &mut ctx.accounts.lending_market.load()?;
         let lending_market_key = ctx.accounts.lending_market.key();
@@ -88,19 +89,20 @@ pub struct WithdrawObligationCollateral<'info> {
     pub lending_market_authority: AccountInfo<'info>,
 
     #[account(
+        mut,
         has_one = lending_market
     )]
     pub withdraw_reserve: AccountLoader<'info, Reserve>,
 
     #[account(mut,
-        address = withdraw_reserve.load()?.collateral.supply_vault
+        address = withdraw_reserve.load()?.collateral.supply_vault,
     )]
-    pub reserve_source_collateral: Box<Account<'info, TokenAccount>>,
+    pub reserve_source_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut,
         token::mint = withdraw_reserve.load()?.collateral.mint_pubkey
     )]
-    pub user_destination_collateral: Box<Account<'info, TokenAccount>>,
+    pub user_destination_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
 

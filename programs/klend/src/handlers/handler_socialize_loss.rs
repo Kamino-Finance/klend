@@ -8,6 +8,7 @@ use crate::{
     check_refresh_ixs,
     lending_market::lending_operations,
     state::{obligation::Obligation, LendingMarket, Reserve},
+    utils::FatAccountLoader,
     ReserveFarmKind,
 };
 
@@ -25,6 +26,9 @@ pub fn process(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()>
         obligation,
         liquidity_amount,
         clock.slot,
+        ctx.remaining_accounts.iter().map(|a| {
+            FatAccountLoader::try_from(a).expect("Remaining account is not a valid deposit reserve")
+        }),
     )?;
 
     Ok(())
