@@ -12,6 +12,7 @@ use crate::{
 pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
+        &ctx.accounts.reserve_supply_liquidity.to_account_info(),
     )?;
 
     let clock = &Clock::get()?;

@@ -492,6 +492,8 @@ pub enum LendingError {
     ObligationElevationGroupMultipleDebtReserve,
     #[msg("Mint has a token (2022) extension that is not supported")]
     UnsupportedTokenExtension,
+    #[msg("Can't have an spl token mint with a t22 account")]
+    InvalidTokenAccount,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

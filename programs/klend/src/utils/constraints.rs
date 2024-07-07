@@ -29,10 +29,12 @@ pub mod token_2022 {
     use anchor_lang::err;
     use anchor_spl::token::spl_token;
     use anchor_spl::token_2022::spl_token_2022;
+    use anchor_spl::token_2022::spl_token_2022::extension::confidential_transfer::EncryptedBalance;
     use anchor_spl::token_interface::spl_token_2022::extension::ExtensionType;
     use anchor_spl::token_interface::spl_token_2022::extension::{
         BaseStateWithExtensions, StateWithExtensions,
     };
+    use bytemuck::Zeroable;
     use solana_program::account_info::AccountInfo;
     use solana_program::pubkey::Pubkey;
 
@@ -49,12 +51,22 @@ pub mod token_2022 {
 
     pub fn validate_liquidity_token_extensions(
         mint_acc_info: &AccountInfo,
+        token_acc_info: &AccountInfo,
     ) -> anchor_lang::Result<()> {
         if mint_acc_info.owner == &spl_token::id() {
             return Ok(());
         }
+
+        if token_acc_info.owner == &spl_token::id() {
+            return err!(LendingError::InvalidTokenAccount);
+        }
+
         let mint_data = mint_acc_info.data.borrow();
         let mint = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+
+        let token_acc_data = token_acc_info.data.borrow();
+        let token_acc =
+            StateWithExtensions::<spl_token_2022::state::Account>::unpack(&token_acc_data)?;
         for mint_ext in mint.get_extension_types()? {
             if !VALID_LIQUIDITY_TOKEN_EXTENSIONS.contains(&mint_ext) {
                 xmsg!(
@@ -87,6 +99,36 @@ pub mod token_2022 {
                         ext
                     );
                     return err!(LendingError::UnsupportedTokenExtension);
+                }
+            } else if mint_ext == ExtensionType::ConfidentialTransferMint {
+                let ext = mint
+                .get_extension::<spl_token_2022::extension::confidential_transfer::ConfidentialTransferMint>(
+                )?;
+                if bool::from(ext.auto_approve_new_accounts) {
+                    xmsg!(
+                        "Auto approve new accounts must be false for liquidity tokens, got {:?}",
+                        ext
+                    );
+                    return err!(LendingError::UnsupportedTokenExtension);
+                }
+
+                if let Ok(token_acc_ext) = token_acc.get_extension::<spl_token_2022::extension::confidential_transfer::ConfidentialTransferAccount>() {
+                    if bool::from(token_acc_ext.allow_confidential_credits) {
+                        xmsg!(
+                            "Allow confidential credits must be false for token accounts, got {:?}",
+                            token_acc_ext
+                        );
+                        return err!(LendingError::UnsupportedTokenExtension);
+                    }
+                    if token_acc_ext.pending_balance_lo != EncryptedBalance::zeroed()
+                        && token_acc_ext.pending_balance_hi != EncryptedBalance::zeroed()
+                    {
+                        xmsg!(
+                            "Pending balance must be zero for token accounts, got {:?}",
+                            token_acc_ext
+                        );
+                        return err!(LendingError::UnsupportedTokenExtension);
+                    }
                 }
             }
         }

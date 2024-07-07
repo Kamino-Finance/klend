@@ -1,6 +1,5 @@
 use anchor_lang::{prelude::*, solana_program::sysvar, Accounts};
-use anchor_spl::token::Token;
-use anchor_spl::token_interface::{self, Mint, TokenAccount};
+use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
 use lending_checks::validate_referrer_token_state;
 
 use crate::{
@@ -144,5 +143,5 @@ pub struct FlashRepayReserveLiquidity<'info> {
 
     #[account(address = sysvar::instructions::ID)]
     pub sysvar_info: AccountInfo<'info>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
