@@ -39,6 +39,7 @@ pub fn borrow_obligation_liquidity_checks(ctx: &Context<BorrowObligationLiquidit
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.borrow_reserve_liquidity_mint.to_account_info(),
+        &ctx.accounts.user_destination_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -93,6 +94,7 @@ pub fn deposit_reserve_liquidity_checks(
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
+        &accounts.user_source_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -120,6 +122,7 @@ pub fn deposit_reserve_liquidity_and_obligation_collateral_checks(
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
+        &accounts.user_source_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -163,6 +166,14 @@ pub fn liquidate_obligation_checks(
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.repay_reserve_liquidity_mint.to_account_info(),
+        &ctx.accounts.user_source_liquidity.to_account_info(),
+    )?;
+
+    constraints::token_2022::validate_liquidity_token_extensions(
+        &ctx.accounts
+            .withdraw_reserve_liquidity_mint
+            .to_account_info(),
+        &ctx.accounts.user_destination_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -187,6 +198,7 @@ pub fn redeem_reserve_collateral_checks(accounts: &RedeemReserveCollateralAccoun
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
+        &accounts.user_destination_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -209,6 +221,7 @@ pub fn withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
+        &accounts.user_destination_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -229,6 +242,7 @@ pub fn repay_obligation_liquidity_checks(ctx: &Context<RepayObligationLiquidity>
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
+        &ctx.accounts.user_source_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -281,6 +295,7 @@ pub fn flash_borrow_reserve_liquidity_checks(
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
+        &ctx.accounts.user_destination_liquidity.to_account_info(),
     )?;
 
     Ok(())

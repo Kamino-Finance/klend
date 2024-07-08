@@ -20,6 +20,7 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
     let reserve = &mut ctx.accounts.reserve.load_init()?;
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
+        &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
 
     reserve.init(InitReserveParams {

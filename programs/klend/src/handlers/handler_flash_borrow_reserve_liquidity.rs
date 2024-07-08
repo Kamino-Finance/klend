@@ -1,6 +1,5 @@
 use anchor_lang::{prelude::*, solana_program::sysvar, Accounts};
-use anchor_spl::token::Token;
-use anchor_spl::token_interface::{self, Mint, TokenAccount};
+use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
 
 use crate::{
     gen_signer_seeds,
@@ -101,5 +100,5 @@ pub struct FlashBorrowReserveLiquidity<'info> {
 
     #[account(address = sysvar::instructions::ID)]
     pub sysvar_info: AccountInfo<'info>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
