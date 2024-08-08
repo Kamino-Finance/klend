@@ -1616,12 +1616,19 @@ where
     let absolute_referral_rate =
         Fraction::from_bits(borrow_reserve.liquidity.absolute_referral_rate_sf);
 
+    if absolute_referral_rate == Fraction::ZERO {
+        return Ok(());
+    }
+
     let fixed_rate = approximate_compounded_interest(
         Fraction::from_bps(borrow_reserve.config.host_fixed_interest_rate_bps),
         slots_elapsed,
     );
     let net_new_debt = borrowed_amount_f - previous_borrowed_amount_f;
     let net_new_fixed_debt = previous_borrowed_amount_f * fixed_rate - previous_borrowed_amount_f;
+    if net_new_fixed_debt > net_new_debt {
+        return Err(LendingError::CannotCalculateReferralAmountDueToSlotsMismatch.into());
+    }
     let net_new_variable_debt_f = net_new_debt - net_new_fixed_debt;
 
     let referrer_fee_f = net_new_variable_debt_f * absolute_referral_rate;
@@ -2932,7 +2939,11 @@ pub mod utils {
         Ok(())
     }
 
-    pub fn validate_reserve_config(config: &ReserveConfig, market: &LendingMarket) -> Result<()> {
+    pub fn validate_reserve_config(
+        config: &ReserveConfig,
+        market: &LendingMarket,
+        reserve_address: Pubkey,
+    ) -> Result<()> {
         if config.loan_to_value_pct >= 100 {
             msg!("Loan to value ratio must be in range [0, 100)");
             return err!(LendingError::InvalidConfig);
@@ -3008,19 +3019,22 @@ pub mod utils {
                     return err!(LendingError::InvalidConfig);
                 }
 
-                if elevation_group.liquidation_threshold_pct < config.liquidation_threshold_pct {
-                    msg!("Invalid liquidation threshold, elevation id liquidation threshold must be greater than the config's");
-                    return err!(LendingError::InvalidConfig);
-                }
-
-                if elevation_group.ltv_pct < config.loan_to_value_pct {
-                    msg!("Invalid ltv ratio, cannot be bigger than the ltv ratio");
-                    return err!(LendingError::InvalidConfig);
-                }
-
                 if elevation_group.debt_reserve == Pubkey::default() {
                     msg!("Invalid elevation group debt reserve");
                     return err!(LendingError::InvalidConfig);
+                }
+
+                if elevation_group.debt_reserve != reserve_address {
+                    if elevation_group.liquidation_threshold_pct < config.liquidation_threshold_pct
+                    {
+                        msg!("Invalid liquidation threshold, elevation id liquidation threshold must be greater than the config's");
+                        return err!(LendingError::InvalidConfig);
+                    }
+
+                    if elevation_group.ltv_pct < config.loan_to_value_pct {
+                        msg!("Invalid ltv ratio, cannot be bigger than the ltv ratio");
+                        return err!(LendingError::InvalidConfig);
+                    }
                 }
 
                 if elevation_group.max_reserves_as_collateral == 0 {

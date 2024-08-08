@@ -494,6 +494,8 @@ pub enum LendingError {
     UnsupportedTokenExtension,
     #[msg("Can't have an spl token mint with a t22 account")]
     InvalidTokenAccount,
+    #[msg("Cannot calculate referral amount due to slots mismatch")]
+    CannotCalculateReferralAmountDueToSlotsMismatch,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
