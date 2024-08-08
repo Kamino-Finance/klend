@@ -13,7 +13,7 @@ pub fn process(ctx: Context<InitObligationFarmsForReserve>, mode: u8) -> Result<
     let obligation = &ctx.accounts.obligation.to_account_info().key;
 
     require!(
-        reserve.config.status() == ReserveStatus::Active,
+        reserve.config.status() != ReserveStatus::Obsolete,
         LendingError::ReserveObsolete
     );
 
