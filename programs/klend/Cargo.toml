@@ -20,7 +20,6 @@ default = []
 serde = ["dep:serde", "fixed/serde-str"]
 staging = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
-tracing = ["dep:tracing"]
 
 [dependencies]
 anchor-lang.workspace = true
@@ -61,12 +60,5 @@ uint = "0.9.5"
 # Only required when serializing to market config to JSON and in tests
 serde = { workspace = true, optional = true }
 
-# Test dependencies
-spl-associated-token-account = { workspace = true, optional = true }
-solana-sdk = { workspace = true, optional = true, features = [
-    "dev-context-only-utils",
-] }
-arrayref = { version = "0.3.6", optional = true }
 bitflags = "2.4.1"
-tracing = { version = "0.1.40", optional = true }
 
