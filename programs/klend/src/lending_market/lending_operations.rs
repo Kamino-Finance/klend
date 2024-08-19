@@ -3015,17 +3015,18 @@ pub mod utils {
 
         for elevation_group_id in config.elevation_groups {
             if let Some(elevation_group) = get_elevation_group(elevation_group_id, market)? {
-                if elevation_group.max_liquidation_bonus_bps > config.max_liquidation_bonus_bps {
-                    msg!("Invalid max liquidation bonus, elevation id liquidation bonus must be less than the config's");
-                    return err!(LendingError::InvalidConfig);
-                }
-
                 if elevation_group.debt_reserve == Pubkey::default() {
                     msg!("Invalid elevation group debt reserve");
                     return err!(LendingError::InvalidConfig);
                 }
 
                 if elevation_group.debt_reserve != reserve_address {
+                    if elevation_group.max_liquidation_bonus_bps > config.max_liquidation_bonus_bps
+                    {
+                        msg!("Invalid max liquidation bonus, elevation id liquidation bonus must be less than the config's");
+                        return err!(LendingError::InvalidConfig);
+                    }
+
                     if elevation_group.liquidation_threshold_pct < config.liquidation_threshold_pct
                     {
                         msg!("Invalid liquidation threshold, elevation id liquidation threshold must be greater than the config's");
