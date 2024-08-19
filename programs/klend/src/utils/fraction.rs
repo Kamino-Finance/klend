@@ -65,6 +65,9 @@ pub trait FractionExtra {
     where
         Self: std::marker::Sized;
 
+    fn mul_int_ratio(&self, numerator: impl Into<u128>, denominator: impl Into<u128>) -> Self;
+    fn full_mul_int_ratio(&self, numerator: impl Into<U256>, denominator: impl Into<U256>) -> Self;
+
     fn to_floor<Dst: FromFixed>(&self) -> Dst;
     fn to_ceil<Dst: FromFixed>(&self) -> Dst;
     fn to_round<Dst: FromFixed>(&self) -> Dst;
@@ -104,6 +107,25 @@ impl FractionExtra for Fraction {
         Self: std::marker::Sized,
     {
         pow_fraction(*self, power)
+    }
+
+    #[inline]
+    fn mul_int_ratio(&self, numerator: impl Into<u128>, denominator: impl Into<u128>) -> Self {
+        let numerator = numerator.into();
+        let denominator = denominator.into();
+        *self * numerator / denominator
+    }
+
+    #[inline]
+    fn full_mul_int_ratio(&self, numerator: impl Into<U256>, denominator: impl Into<U256>) -> Self {
+        let numerator = numerator.into();
+        let denominator = denominator.into();
+        let big_sf = U256::from(self.to_bits());
+        let big_sf_res = big_sf * numerator / denominator;
+        let sf_res: u128 = big_sf_res
+            .try_into()
+            .expect("Denominator is not big enough, the result doesn't fit in a Fraction.");
+        Fraction::from_bits(sf_res)
     }
 
     #[inline]

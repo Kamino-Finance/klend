@@ -3356,8 +3356,3 @@ dependencies = [
  "quote",
  "syn 2.0.48",
 ]
-
-[[patch.unused]]
-name = "solana-program-test"
-version = "1.17.18"
-source = "git+https://github.com/hubbleprotocol/solana.git?branch=anchor_0.29_compat#caa4bcf4329fafc099596dcc4fecfbb8b433b3af"

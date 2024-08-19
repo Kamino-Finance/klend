@@ -146,12 +146,6 @@ pub fn process(
             }
             market.referral_fee_bps = value;
         }
-        UpdateLendingMarketMode::UpdateMultiplierPoints => {
-            msg!("Value is {:?}", value);
-            let value: [u8; 8] = value[..8].try_into().unwrap();
-            market.multiplier_points_tag_boost = value;
-            msg!("Setting multiplier tag to {value:?}",);
-        }
         UpdateLendingMarketMode::UpdatePriceRefreshTriggerToMaxAgePct => {
             let value = value[0];
             msg!("Value is {:?}", value);
@@ -208,6 +202,14 @@ pub fn process(
 
             market.min_value_skip_liquidation_ltv_bf_checks =
                 min_value_skip_liquidation_ltv_bf_checks;
+        }
+        UpdateLendingMarketMode::UpdatePaddingFields => {
+            msg!("Prev Value is {:?}", market.reserved1);
+            market.reserved1 = [0; 8];
+            msg!("New Value is {:?}", market.reserved1);
+        }
+        UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints => {
+            panic!("Deprecated field")
         }
     }
 

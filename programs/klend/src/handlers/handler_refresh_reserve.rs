@@ -14,9 +14,6 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
     let lending_market = &ctx.accounts.lending_market.load()?;
 
     constraints::check_remaining_accounts(&ctx)?;
-    if reserve.liquidity.token_program == Pubkey::default() {
-        reserve.liquidity.token_program = anchor_spl::token::ID;
-    }
 
     require!(
         reserve.version == PROGRAM_VERSION as u64,
@@ -29,10 +26,10 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
         clock.unix_timestamp,
     ) {
         reserve.config.token_info.validate_token_info_config(
-            &ctx.accounts.pyth_oracle,
-            &ctx.accounts.switchboard_price_oracle,
-            &ctx.accounts.switchboard_twap_oracle,
-            &ctx.accounts.scope_prices,
+            ctx.accounts.pyth_oracle.as_ref(),
+            ctx.accounts.switchboard_price_oracle.as_ref(),
+            ctx.accounts.switchboard_twap_oracle.as_ref(),
+            ctx.accounts.scope_prices.as_ref(),
         )?;
 
         get_price(

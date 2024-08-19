@@ -68,6 +68,9 @@ pub fn refresh_reserve(
 
     reserve.last_update.update_slot(slot, price_status);
 
+    reserve.config.reserved_2 = [0; 2];
+    reserve.config.reserved_3 = [0; 8];
+
     Ok(())
 }
 
@@ -339,6 +342,14 @@ pub fn deposit_obligation_collateral(
     {
         msg!("Deposit reserve is stale and must be refreshed in the current slot");
         return err!(LendingError::ReserveStale);
+    }
+
+    if deposit_reserve.config.disable_usage_as_coll_outside_emode > 0
+        && obligation.elevation_group == ELEVATION_GROUP_NONE
+        && obligation.borrow_factor_adjusted_debt_value_sf > 0
+    {
+        msg!("Deposit reserve is disabled for usage as collateral outside elevation group");
+        return err!(LendingError::DepositDisabledOutsideElevationGroup);
     }
 
     check_same_elevation_group(obligation, deposit_reserve)?;
@@ -2025,22 +2036,6 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
-        UpdateConfigMode::UpdateMultiplierTagBoost => {
-            let tag: usize = value[0].into();
-            let multiplier = value[1];
-            let cached = reserve.config.multiplier_tag_boost[tag];
-            reserve.config.multiplier_tag_boost[tag] = multiplier;
-
-            msg!("Prv multiplier for tag {tag} to {cached}",);
-            msg!("New multiplier for tag {tag} to {multiplier}",);
-        }
-        UpdateConfigMode::UpdateMultiplierSideBoost => {
-            let new = [value[0], value[1]];
-            let prv = reserve.config.multiplier_side_boost;
-            reserve.config.multiplier_side_boost = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
-        }
         UpdateConfigMode::UpdateReserveStatus => {
             let new = ReserveStatus::try_from(value[0]).unwrap();
             let prv = ReserveStatus::try_from(reserve.config.status).unwrap();
@@ -2116,6 +2111,12 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             reserve.config.host_fixed_interest_rate_bps = new;
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
+        }
+        UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost => {
+            panic!("Deprecated endpoint")
+        }
+        UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost => {
+            panic!("Deprecated endpoint")
         }
     }
 

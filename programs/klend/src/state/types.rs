@@ -63,4 +63,5 @@ pub struct RefreshObligationBorrowsResult {
 pub enum LendingAction {
     Additive(u64),
     Subtractive(u64),
+    SubstractiveSigned(i64),
 }

@@ -121,8 +121,8 @@ pub enum UpdateConfigMode {
     UpdateAssetTier = 34,
     UpdateElevationGroup = 35,
     DeleveragingThresholdSlotsPerBps = 36,
-    UpdateMultiplierSideBoost = 37,
-    UpdateMultiplierTagBoost = 38,
+    DeprecatedUpdateMultiplierSideBoost = 37,
+    DeprecatedUpdateMultiplierTagBoost = 38,
     UpdateReserveStatus = 39,
     UpdateFarmCollateral = 40,
     UpdateFarmDebt = 41,
@@ -210,12 +210,13 @@ pub enum UpdateLendingMarketMode {
     UpdateInsolvencyRiskLtv = 8,
     UpdateElevationGroup = 9,
     UpdateReferralFeeBps = 10,
-    UpdateMultiplierPoints = 11,
+    DeprecatedUpdateMultiplierPoints = 11,
     UpdatePriceRefreshTriggerToMaxAgePct = 12,
     UpdateAutodeleverageEnabled = 13,
     UpdateBorrowingDisabled = 14,
     UpdateMinNetValueObligationPostAction = 15,
     UpdateMinValueSkipPriorityLiqCheck = 16,
+    UpdatePaddingFields = 17,
 }
 
 #[cfg(feature = "serde")]

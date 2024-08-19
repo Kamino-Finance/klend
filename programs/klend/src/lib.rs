@@ -4,7 +4,6 @@ use anchor_lang::prelude::*;
 
 mod handlers;
 pub mod lending_market;
-
 pub mod state;
 pub mod utils;
 
@@ -87,6 +86,13 @@ pub mod kamino_lending {
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
         handler_refresh_reserve::process(ctx)
+    }
+
+    pub fn refresh_reserves_batch(
+        ctx: Context<RefreshReservesBatch>,
+        skip_price_updates: bool,
+    ) -> Result<()> {
+        handler_refresh_reserves_batch::process(ctx, skip_price_updates)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
@@ -494,6 +500,8 @@ pub enum LendingError {
     UnsupportedTokenExtension,
     #[msg("Can't have an spl token mint with a t22 account")]
     InvalidTokenAccount,
+    #[msg("Can't deposit into this reserve outside elevation group")]
+    DepositDisabledOutsideElevationGroup,
     #[msg("Cannot calculate referral amount due to slots mismatch")]
     CannotCalculateReferralAmountDueToSlotsMismatch,
 }

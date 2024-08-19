@@ -198,6 +198,11 @@ impl Reserve {
         self.collateral.exchange_rate(total_liquidity)
     }
 
+    pub fn collateral_exchange_rate_ceil(&self) -> LendingResult<CollateralExchangeRate> {
+        let total_liquidity = self.liquidity.total_supply()?;
+        self.collateral.exchange_rate(total_liquidity)
+    }
+
     pub fn accrue_interest(&mut self, current_slot: Slot, referral_fee_bps: u16) -> Result<()> {
         let slots_elapsed = self.last_update.slots_elapsed(current_slot)?;
         if slots_elapsed > 0 {
@@ -697,8 +702,22 @@ impl CollateralExchangeRate {
         collateral_amount / self.0
     }
 
+    pub fn fraction_liquidity_to_collateral(&self, liquidity_amount: Fraction) -> Fraction {
+        self.0 * liquidity_amount
+    }
+
+    pub fn liquidity_to_collateral_fraction(&self, liquidity_amount: u64) -> Fraction {
+        self.0 * u128::from(liquidity_amount)
+    }
+
     pub fn liquidity_to_collateral(&self, liquidity_amount: u64) -> u64 {
-        (self.0 * u128::from(liquidity_amount)).to_floor()
+        self.liquidity_to_collateral_fraction(liquidity_amount)
+            .to_floor()
+    }
+
+    pub fn liquidity_to_collateral_ceil(&self, liquidity_amount: u64) -> u64 {
+        self.liquidity_to_collateral_fraction(liquidity_amount)
+            .to_ceil()
     }
 }
 
@@ -731,8 +750,12 @@ pub struct ReserveConfig {
     pub status: u8,
     pub asset_tier: u8,
     pub host_fixed_interest_rate_bps: u16,
-    pub multiplier_side_boost: [u8; 2],
-    pub multiplier_tag_boost: [u8; 8],
+    #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
+    #[derivative(Debug = "ignore")]
+    pub reserved_2: [u8; 2],
+    #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
+    #[derivative(Debug = "ignore")]
+    pub reserved_3: [u8; 8],
     pub protocol_take_rate_pct: u8,
     pub protocol_liquidation_fee_pct: u8,
     pub loan_to_value_pct: u8,
@@ -804,12 +827,19 @@ pub enum ReserveStatus {
 
 #[derive(BorshDeserialize, BorshSerialize, PartialEq, Eq, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[zero_copy]
 #[repr(C)]
 pub struct WithdrawalCaps {
     pub config_capacity: i64,
+    #[cfg_attr(
+        all(feature = "serde", not(feature = "serialize_caps_interval_values")),
+        serde(skip)
+    )]
     pub current_total: i64,
+    #[cfg_attr(
+        all(feature = "serde", not(feature = "serialize_caps_interval_values")),
+        serde(skip)
+    )]
     pub last_interval_start_timestamp: u64,
     pub config_interval_length_seconds: u64,
 }

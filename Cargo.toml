@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "programs/*"
-]
+members = ["programs/*"]
 
 [profile.release]
 overflow-checks = true
@@ -28,9 +26,7 @@ solana-banks-interface = "~1.17.18"
 solana-address-lookup-table-program = "~1.17.18"
 solana-account-decoder = "~1.17.18"
 spl-token = { version = "3.5.0", features = ["no-entrypoint"] }
-spl-associated-token-account = { version = "1.1.3", features = [
-    "no-entrypoint",
-] }
+spl-associated-token-account = { version = "1.1.3", features = ["no-entrypoint"] }
 
 # Serialization/Deserialization
 # Override anchor to use borsh with the const-generics feature
@@ -40,6 +36,3 @@ bytemuck = { version = "1.4.0", features = ["min_const_generics", "derive"] }
 
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
-
-[patch.crates-io]
-solana-program-test = { git = "https://github.com/hubbleprotocol/solana.git", branch = "anchor_0.29_compat" }
