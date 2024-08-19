@@ -58,7 +58,12 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub risk_council: Pubkey,
 
-    pub multiplier_points_tag_boost: [u8; 8],
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_deserializing, skip_serializing, default)
+    )]
+    #[derivative(Debug = "ignore")]
+    pub reserved1: [u8; 8],
 
     pub elevation_groups: [ElevationGroup; 32],
     #[cfg_attr(
@@ -114,7 +119,7 @@ impl Default for LendingMarket {
             global_allowed_borrow_value: GLOBAL_ALLOWED_BORROW_VALUE,
             global_unhealthy_borrow_value: GLOBAL_UNHEALTHY_BORROW_VALUE,
             min_full_liquidation_value_threshold: LIQUIDATION_CLOSE_VALUE,
-            multiplier_points_tag_boost: [1; 8],
+            reserved1: [0; 8],
             referral_fee_bps: 0,
             price_refresh_trigger_to_max_age_pct: 0,
             elevation_groups: [ElevationGroup::default(); 32],
@@ -133,7 +138,6 @@ impl LendingMarket {
         self.bump_seed = params.bump_seed as u64;
         self.lending_market_owner = params.lending_market_owner;
         self.quote_currency = params.quote_currency;
-        self.multiplier_points_tag_boost = [1; 8];
     }
 
     pub fn get_elevation_group(

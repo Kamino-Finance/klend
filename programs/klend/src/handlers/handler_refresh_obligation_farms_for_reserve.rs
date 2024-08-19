@@ -15,7 +15,6 @@ pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Resu
     let farm_kind: ReserveFarmKind = mode.try_into().unwrap();
 
     msg!("RefreshObligationFarmsForReserve {:?}", farm_kind);
-    let market = ctx.accounts.lending_market.load()?;
     let reserve = &mut ctx.accounts.reserve.load()?;
     let reserve_address: Pubkey = *ctx.accounts.reserve.to_account_info().key;
 
@@ -28,22 +27,15 @@ pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Resu
         return Err(LendingError::NoFarmForReserve.into());
     }
 
-    let (quantity, side_boost, asset_product_boost, market_product_boost) =
-        if ctx.accounts.obligation.data_is_empty() {
-            (0, 0, 0, 0)
-        } else {
-            let obligation_account: FatAccountLoader<Obligation> =
-                FatAccountLoader::try_from(&ctx.accounts.obligation).unwrap();
-            let obligation = obligation_account.load()?;
+    let amount = if ctx.accounts.obligation.data_is_empty() {
+        0
+    } else {
+        let obligation_account: FatAccountLoader<Obligation> =
+            FatAccountLoader::try_from(&ctx.accounts.obligation).unwrap();
+        let obligation = obligation_account.load()?;
 
-            let amount = amount_for_obligation(&obligation, &reserve_address, farm_kind);
-            let (side_boost, tag_boost, product_boost) =
-                boosts_for_obligation(reserve, &obligation, &market, mode);
-
-            (amount, side_boost, tag_boost, product_boost)
-        };
-
-    let amount = quantity * side_boost * asset_product_boost * market_product_boost;
+        amount_for_obligation(&obligation, &reserve_address, farm_kind)
+    };
 
     msg!(
         "RefreshObligationFarmsForReserve amount {} slot {}",
@@ -98,22 +90,6 @@ pub struct RefreshObligationFarmsForReserve<'info> {
     pub farms_program: Program<'info, Farms>,
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
-}
-
-fn boosts_for_obligation(
-    reserve: &Reserve,
-    obligation: &Obligation,
-    market: &LendingMarket,
-    mode: u8,
-) -> (u64, u64, u64) {
-    let side: usize = mode.into();
-    let tag: usize = obligation.tag.try_into().unwrap();
-
-    let side_boost: u64 = reserve.config.multiplier_side_boost[side].into();
-    let tag_boost: u64 = reserve.config.multiplier_tag_boost[tag].into();
-    let product_boost: u64 = market.multiplier_points_tag_boost[tag].into();
-
-    (side_boost, tag_boost, product_boost)
 }
 
 fn amount_for_obligation(

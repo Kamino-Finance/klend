@@ -68,10 +68,10 @@ impl std::fmt::Debug for TokenInfo {
 impl TokenInfo {
     pub fn validate_token_info_config(
         &self,
-        pyth_info: &Option<AccountInfo>,
-        switchboard_price_info: &Option<AccountInfo>,
-        switchboard_twap_info: &Option<AccountInfo>,
-        scope_prices_info: &Option<AccountInfo>,
+        pyth_info: Option<&AccountInfo>,
+        switchboard_price_info: Option<&AccountInfo>,
+        switchboard_twap_info: Option<&AccountInfo>,
+        scope_prices_info: Option<&AccountInfo>,
     ) -> Result<()> {
         require!(self.is_valid(), LendingError::InvalidOracleConfig);
         require!(self.is_twap_config_valid(), LendingError::InvalidTwapConfig);
@@ -126,7 +126,7 @@ impl TokenInfo {
     }
 
     #[inline]
-    pub fn check_pyth_acc_matches(&self, pyth_info: &Option<AccountInfo>) -> bool {
+    pub fn check_pyth_acc_matches(&self, pyth_info: Option<&AccountInfo>) -> bool {
         if self.pyth_configuration.is_enabled() {
             matches!(pyth_info, Some(a) if *a.key == self.pyth_configuration.price)
         } else {
@@ -137,8 +137,8 @@ impl TokenInfo {
     #[inline]
     pub fn check_switchboard_acc_matches(
         &self,
-        switchboard_price_info: &Option<AccountInfo>,
-        switchboard_twap_info: &Option<AccountInfo>,
+        switchboard_price_info: Option<&AccountInfo>,
+        switchboard_twap_info: Option<&AccountInfo>,
     ) -> bool {
         if self.switchboard_configuration.is_enabled() {
             matches!(
@@ -155,7 +155,7 @@ impl TokenInfo {
     }
 
     #[inline]
-    pub fn check_scope_acc_matches(&self, scope_prices_info: &Option<AccountInfo>) -> bool {
+    pub fn check_scope_acc_matches(&self, scope_prices_info: Option<&AccountInfo>) -> bool {
         if self.scope_configuration.is_enabled() {
             matches!(scope_prices_info, Some(a) if *a.key == self.scope_configuration.price_feed)
         } else {

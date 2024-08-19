@@ -406,6 +406,25 @@ pub fn post_transfer_vault_balance_liquidity_reserve_checks(
                 LendingError::ReserveAccountingMismatch
             );
         }
+        LendingAction::SubstractiveSigned(amount_transferred) => {
+            let expected_reserve_vault_balance =
+                u64::try_from(initial_reserve_vault_balance as i64 - amount_transferred)
+                    .map_err(|_| LendingError::MathOverflow)?;
+            require_eq!(
+                expected_reserve_vault_balance,
+                final_reserve_vault_balance,
+                LendingError::ReserveVaultBalanceMismatch
+            );
+
+            let expected_reserve_available_liquidity =
+                u64::try_from(initial_reserve_available_liquidity as i64 - amount_transferred)
+                    .map_err(|_| LendingError::MathOverflow)?;
+            require_eq!(
+                expected_reserve_available_liquidity,
+                final_reserve_available_liquidity,
+                LendingError::ReserveAccountingMismatch
+            );
+        }
     }
 
     Ok(())

@@ -20,6 +20,7 @@ default = []
 serde = ["dep:serde", "fixed/serde-str"]
 staging = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+serialize_caps_interval_values = []
 
 [dependencies]
 anchor-lang.workspace = true
@@ -38,16 +39,12 @@ switchboard-itf = { git = "https://github.com/Kamino-Finance/scope.git", branch 
 scope = { git = "https://github.com/Kamino-Finance/scope.git", package = "scope-types", branch = "anchor_0.29_idl" }
 pyth-sdk-solana = "0.9.0"
 
-farms = { git = "https://github.com/Kamino-Finance/kfarms.git", features = [
-    "no-entrypoint",
-] }
+farms = { git = "https://github.com/Kamino-Finance/kfarms.git", features = ["no-entrypoint"] }
 
 
 derivative = "2.2.0"
 num_enum = "0.7.0"
-strum = { git = "https://github.com/hubbleprotocol/strum", features = [
-    "derive",
-], branch = "checked_arithmetics" }
+strum = { git = "https://github.com/hubbleprotocol/strum", features = ["derive"], branch = "checked_arithmetics" }
 
 static_assertions = "1.1.0"
 
@@ -61,4 +58,3 @@ uint = "0.9.5"
 serde = { workspace = true, optional = true }
 
 bitflags = "2.4.1"
-

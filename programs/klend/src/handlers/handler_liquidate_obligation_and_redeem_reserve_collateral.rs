@@ -190,9 +190,9 @@ pub fn process(
                 .to_account_info()
                 .key
         {
-            withdraw_liquidity_amount - repay_amount
+            withdraw_liquidity_amount as i64 - repay_amount as i64
         } else {
-            withdraw_liquidity_amount
+            withdraw_liquidity_amount as i64
         };
 
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
@@ -205,7 +205,7 @@ pub fn process(
             withdraw_reserve.liquidity.available_amount,
             initial_withdraw_reserve_token_balance,
             initial_withdraw_reserve_available_amount,
-            LendingAction::Subtractive(net_withdrawal_amount),
+            LendingAction::SubstractiveSigned(net_withdrawal_amount),
         )?;
     }
     let repay_reserve = &ctx.accounts.repay_reserve.load()?;
