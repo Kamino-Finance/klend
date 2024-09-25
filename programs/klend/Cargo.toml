@@ -3,7 +3,7 @@ name = "kamino_lending"
 version = "0.1.0"
 description = "Kamino lending Solana program"
 edition = "2021"
-license = "Apache-2.0"
+license = "BUSL-1.1"
 publish = false
 
 
