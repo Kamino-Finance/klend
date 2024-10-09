@@ -125,7 +125,7 @@ pub const DIVVY_ID_MAINNET: Pubkey = pubkey!("dvyFwAPniptQNb1ey4eM12L8iLHrzdiDsP
 
 pub const EXPONENT_ID_MAINNET: Pubkey = pubkey!("XPK1ndTK1xrgRg99ifvdPP1exrx8D1mRXTuxBkkroCx");
 
-pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 12] = [
+pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 13] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_DEV, 1),
