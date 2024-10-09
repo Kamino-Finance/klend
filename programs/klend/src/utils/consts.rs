@@ -123,6 +123,8 @@ pub const BESTLEND_ID_MAINNET: Pubkey = pubkey!("bestdGyQeo7mgaSRNgEYdtjhsryNbP8
 
 pub const DIVVY_ID_MAINNET: Pubkey = pubkey!("dvyFwAPniptQNb1ey4eM12L8iLHrzdiDsPPDndd6xAR");
 
+pub const EXPONENT_ID_MAINNET: Pubkey = pubkey!("XPK1ndTK1xrgRg99ifvdPP1exrx8D1mRXTuxBkkroCx");
+
 pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 12] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
@@ -136,6 +138,7 @@ pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 12] = [
     CpiWhitelistedAccount::new(KAMINO_VAULT_STAGING, 1),
     CpiWhitelistedAccount::new(KAMINO_VAULT_MAINNET, 1),
     CpiWhitelistedAccount::new(DIVVY_ID_MAINNET, 1),
+    CpiWhitelistedAccount::new(EXPONENT_ID_MAINNET, 3),
 ];
 
 pub struct CpiWhitelistedAccount {
