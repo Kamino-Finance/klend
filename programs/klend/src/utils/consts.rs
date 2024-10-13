@@ -142,7 +142,7 @@ pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 14] = [
     CpiWhitelistedAccount::new(KAMINO_VAULT_MAINNET, 1),
     CpiWhitelistedAccount::new(DIVVY_ID_MAINNET, 1),
     CpiWhitelistedAccount::new(EXPONENT_INTEGRATION_ID_MAINNET, 2),
-    CpiWhitelistedAccount::new(EXPONENT_CORE_ID_MAINNET, 4)
+    CpiWhitelistedAccount::new(EXPONENT_CORE_ID_MAINNET, 3)
 ];
 
 pub struct CpiWhitelistedAccount {
