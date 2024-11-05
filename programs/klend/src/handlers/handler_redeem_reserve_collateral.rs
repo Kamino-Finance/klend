@@ -7,7 +7,7 @@ use anchor_spl::token::Token;
 use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
 
 use crate::{
-    check_cpi, gen_signer_seeds,
+    gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, RedeemReserveCollateralAccounts, Reserve},
     utils::{seeds, token_transfer},
@@ -15,7 +15,6 @@ use crate::{
 };
 
 pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) -> Result<()> {
-    check_cpi!(ctx);
     lending_checks::redeem_reserve_collateral_checks(&RedeemReserveCollateralAccounts {
         user_source_collateral: ctx.accounts.user_source_collateral.clone(),
         user_destination_liquidity: ctx.accounts.user_destination_liquidity.clone(),

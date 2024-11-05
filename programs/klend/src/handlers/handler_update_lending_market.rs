@@ -30,12 +30,14 @@ pub fn process(
         UpdateLendingMarketMode::UpdateOwner => {
             let value: [u8; 32] = value[0..32].try_into().unwrap();
             let value = Pubkey::from(value);
+            msg!("Prv value is {:?}", market.lending_market_owner_cached);
+            msg!("New value is {:?}", value);
             market.lending_market_owner_cached = value;
-            msg!("Value is {:?}", value);
         }
         UpdateLendingMarketMode::UpdateEmergencyMode => {
             let emergency_mode = value[0];
-            msg!("Value is {:?}", emergency_mode);
+            msg!("Prv value is {:?}", market.emergency_mode);
+            msg!("New value is {:?}", emergency_mode);
             if emergency_mode == 0 {
                 market.emergency_mode = 0
             } else if emergency_mode == 1 {
@@ -46,7 +48,11 @@ pub fn process(
         }
         UpdateLendingMarketMode::UpdateLiquidationCloseFactor => {
             let liquidation_close_factor = value[0];
-            msg!("Value is {:?}", liquidation_close_factor);
+            msg!(
+                "Prv value is {:?}",
+                market.liquidation_max_debt_close_factor_pct
+            );
+            msg!("New value is {:?}", liquidation_close_factor);
             if !(5..=100).contains(&liquidation_close_factor) {
                 return err!(LendingError::InvalidFlag);
             }
@@ -54,7 +60,11 @@ pub fn process(
         }
         UpdateLendingMarketMode::UpdateLiquidationMaxValue => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!("Value is {:?}", value);
+            msg!(
+                "Prv value is {:?}",
+                market.max_liquidatable_debt_market_value_at_once
+            );
+            msg!("New value is {:?}", value);
             if value == 0 {
                 return err!(LendingError::InvalidFlag);
             }
@@ -62,17 +72,23 @@ pub fn process(
         }
         UpdateLendingMarketMode::UpdateGlobalAllowedBorrow => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!("Value is {:?}", value);
+            msg!("Prv value is {:?}", market.global_allowed_borrow_value);
+            msg!("New value is {:?}", value);
             market.global_allowed_borrow_value = value;
         }
         UpdateLendingMarketMode::UpdateGlobalUnhealthyBorrow => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!("Value is {:?}", value);
+            msg!("Prv value is {:?}", market.global_unhealthy_borrow_value);
+            msg!("New value is {:?}", value);
             market.global_unhealthy_borrow_value = value;
         }
         UpdateLendingMarketMode::UpdateMinFullLiquidationThreshold => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!("Value is {:?}", value);
+            msg!(
+                "Prv value is {:?}",
+                market.min_full_liquidation_value_threshold
+            );
+            msg!("New value is {:?}", value);
             if value == 0 {
                 return err!(LendingError::InvalidFlag);
             }
@@ -81,12 +97,17 @@ pub fn process(
         UpdateLendingMarketMode::UpdateRiskCouncil => {
             let value: [u8; 32] = value[0..32].try_into().unwrap();
             let value = Pubkey::from(value);
+            msg!("Prv value is {:?}", market.risk_council);
+            msg!("New value is {:?}", value);
             market.risk_council = value;
-            msg!("Value is {:?}", value);
         }
         UpdateLendingMarketMode::UpdateInsolvencyRiskLtv => {
             let insolvency_risk_ltv = value[0];
-            msg!("Value is {:?}", insolvency_risk_ltv);
+            msg!(
+                "Prv value is {:?}",
+                market.insolvency_risk_unhealthy_ltv_pct
+            );
+            msg!("New value is {:?}", value);
 
             if !(5..=100).contains(&insolvency_risk_ltv) {
                 return err!(LendingError::InvalidFlag);
@@ -96,7 +117,6 @@ pub fn process(
         UpdateLendingMarketMode::UpdateElevationGroup => {
             let elevation_group: ElevationGroup =
                 BorshDeserialize::deserialize(&mut &value[..]).unwrap();
-            msg!("Value is {:?}", elevation_group);
 
             if elevation_group.id > MAX_NUM_ELEVATION_GROUPS {
                 return err!(LendingError::InvalidElevationGroupConfig);
@@ -132,11 +152,17 @@ pub fn process(
                 return err!(LendingError::InvalidElevationGroupConfig);
             }
 
+            let prev_elevation_group = market.get_elevation_group(elevation_group.id);
+
+            msg!("Prev value is {:?}", prev_elevation_group);
+            msg!("New value is {:?}", elevation_group);
+
             market.set_elevation_group(elevation_group)?;
         }
         UpdateLendingMarketMode::UpdateReferralFeeBps => {
             let value = u16::from_le_bytes(value[..2].try_into().unwrap());
-            msg!("Value is {:?}", value);
+            msg!("Prev value is {:?}", market.referral_fee_bps);
+            msg!("New value is {:?}", value);
             if value > FULL_BPS {
                 msg!("Referral fee bps must be in range [0, 10000]");
                 return err!(LendingError::InvalidConfig);
@@ -148,7 +174,11 @@ pub fn process(
         }
         UpdateLendingMarketMode::UpdatePriceRefreshTriggerToMaxAgePct => {
             let value = value[0];
-            msg!("Value is {:?}", value);
+            msg!(
+                "Prev value is {:?}",
+                market.price_refresh_trigger_to_max_age_pct
+            );
+            msg!("New value is {:?}", value);
             if value > 100 {
                 msg!("Price refresh trigger to max age pct must be in range [0, 100]");
                 return err!(LendingError::InvalidConfig);
@@ -210,6 +240,14 @@ pub fn process(
         }
         UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints => {
             panic!("Deprecated field")
+        }
+        UpdateLendingMarketMode::UpdateName => {
+            let name_bytes = &value[0..market.name.len()];
+            let name = std::str::from_utf8(name_bytes).unwrap();
+            let previous_name = std::str::from_utf8(&market.name).unwrap();
+            msg!("Prev Value is {}", previous_name.trim_end_matches('\0'));
+            msg!("New Value is {}", name.trim_end_matches('\0'));
+            market.name.copy_from_slice(name_bytes);
         }
     }
 

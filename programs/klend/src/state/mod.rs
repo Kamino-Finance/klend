@@ -144,6 +144,7 @@ pub enum UpdateLendingMarketConfigValue {
     U128(u128),
     Pubkey(Pubkey),
     ElevationGroup(ElevationGroup),
+    Name([u8; 32]),
 }
 
 impl UpdateLendingMarketConfigValue {
@@ -152,37 +153,33 @@ impl UpdateLendingMarketConfigValue {
         match self {
             UpdateLendingMarketConfigValue::Bool(v) => {
                 val[0] = *v as u8;
-                val
             }
             UpdateLendingMarketConfigValue::U8(v) => {
                 val[0] = *v;
-                val
             }
             UpdateLendingMarketConfigValue::U16(v) => {
                 val[..2].copy_from_slice(&v.to_le_bytes());
-                val
             }
             UpdateLendingMarketConfigValue::U64(v) => {
                 val[..8].copy_from_slice(&v.to_le_bytes());
-                val
             }
             UpdateLendingMarketConfigValue::U128(v) => {
                 val[..16].copy_from_slice(&v.to_le_bytes());
-                val
             }
             UpdateLendingMarketConfigValue::Pubkey(v) => {
                 val[..32].copy_from_slice(v.as_ref());
-                val
             }
             UpdateLendingMarketConfigValue::ElevationGroup(v) => {
                 val[..72].copy_from_slice(v.try_to_vec().unwrap().as_slice());
-                val
             }
             UpdateLendingMarketConfigValue::U8Array(value) => {
                 val[..8].copy_from_slice(value);
-                val
+            }
+            UpdateLendingMarketConfigValue::Name(v) => {
+                val[..v.len()].copy_from_slice(v);
             }
         }
+        val
     }
 }
 
@@ -217,6 +214,7 @@ pub enum UpdateLendingMarketMode {
     UpdateMinNetValueObligationPostAction = 15,
     UpdateMinValueSkipPriorityLiqCheck = 16,
     UpdatePaddingFields = 17,
+    UpdateName = 18,
 }
 
 #[cfg(feature = "serde")]

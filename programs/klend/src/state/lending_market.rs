@@ -83,17 +83,20 @@ pub struct LendingMarket {
 
     pub min_value_skip_liquidation_ltv_bf_checks: u64,
 
+    #[cfg_attr(feature = "serde", serde(with = "serde_utf_string", default))]
+    pub name: [u8; 32],
+
     #[cfg_attr(
         feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_padding_177")
+        serde(skip_deserializing, skip_serializing, default = "default_padding_173")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 177],
+    pub padding1: [u64; 173],
 }
 
 #[cfg(feature = "serde")]
-fn default_padding_177() -> [u64; 177] {
-    [0; 177]
+fn default_padding_173() -> [u64; 173] {
+    [0; 173]
 }
 
 #[cfg(feature = "serde")]
@@ -126,7 +129,8 @@ impl Default for LendingMarket {
             min_value_skip_liquidation_ltv_bf_checks: 0,
             elevation_group_padding: [0; 90],
             min_net_value_in_obligation_sf: MIN_NET_VALUE_IN_OBLIGATION.to_bits(),
-            padding1: [0; 177],
+            name: [0; 32],
+            padding1: [0; 173],
         }
     }
 }
@@ -142,14 +146,14 @@ impl LendingMarket {
 
     pub fn get_elevation_group(
         &self,
-        index: u8,
+        id: u8,
     ) -> std::result::Result<Option<&ElevationGroup>, LendingError> {
-        if index == ELEVATION_GROUP_NONE {
+        if id == ELEVATION_GROUP_NONE {
             Ok(None)
         } else {
             Ok(Some(
                 self.elevation_groups
-                    .get(index as usize - 1)
+                    .get(id as usize - 1)
                     .ok_or(LendingError::InvalidElevationGroup)?,
             ))
         }
