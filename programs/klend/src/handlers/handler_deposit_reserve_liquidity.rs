@@ -8,7 +8,7 @@ use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
 use lending_operations::refresh_reserve;
 
 use crate::{
-    check_cpi, gen_signer_seeds,
+    gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{seeds, token_transfer},
@@ -16,7 +16,6 @@ use crate::{
 };
 
 pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> Result<()> {
-    check_cpi!(ctx);
     lending_checks::deposit_reserve_liquidity_checks(
         &crate::state::nested_accounts::DepositReserveLiquidityAccounts {
             lending_market: ctx.accounts.lending_market.clone(),

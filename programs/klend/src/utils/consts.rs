@@ -129,7 +129,10 @@ pub const EXPONENT_INTEGRATION_ID_MAINNET: Pubkey =
 pub const EXPONENT_CORE_ID_MAINNET: Pubkey =
     pubkey!("ExponentnaRg3CQbW6dqQNZKXp7gtZ9DGMp1cwC4HAS7");
 
-pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 14] = [
+pub const AGRO_ID_MAINNET: Pubkey = pubkey!("AgroFiE3bX7j4Tvfa7YAoFLqjjb35Bw6eed5BuYukPEn");
+pub const AGRO_STAGING_ID_MAINNET: Pubkey = pubkey!("E7jPY6J5s2uAxAjJQX5tqoASkmFr6TYxVoMm97hPLNZ1");
+
+pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 16] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_DEV, 1),
@@ -144,6 +147,8 @@ pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 14] = [
     CpiWhitelistedAccount::new(DIVVY_ID_MAINNET, 1),
     CpiWhitelistedAccount::new(EXPONENT_INTEGRATION_ID_MAINNET, 2),
     CpiWhitelistedAccount::new(EXPONENT_CORE_ID_MAINNET, 3),
+    CpiWhitelistedAccount::new(AGRO_ID_MAINNET, 1),
+    CpiWhitelistedAccount::new(AGRO_STAGING_ID_MAINNET, 1),
 ];
 
 pub struct CpiWhitelistedAccount {

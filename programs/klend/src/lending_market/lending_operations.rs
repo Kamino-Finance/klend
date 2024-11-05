@@ -1293,10 +1293,14 @@ where
 
     let slot = clock.slot;
 
-    if withdraw_reserve_ref.config.loan_to_value_pct == 0
-        || withdraw_reserve_ref.config.liquidation_threshold_pct == 0
-    {
-        xmsg!("Max LTV of the withdraw reserve is 0 and can't be used for liquidation");
+    let elevation_group = get_elevation_group(obligation.elevation_group, lending_market)?;
+    let (_, collateral_liquidation_threshold_pct) =
+        get_max_ltv_and_liquidation_threshold(&withdraw_reserve_ref, elevation_group)?;
+
+    if collateral_liquidation_threshold_pct == 0 {
+        xmsg!(
+            "Liquidation threshold of the withdraw reserve is 0 and can't be used for liquidation"
+        );
         return err!(LendingError::CollateralNonLiquidatable);
     }
 
@@ -1326,11 +1330,7 @@ where
     let is_debt_reserve_highest_borrow_factor =
         repay_reserve_ref.config.borrow_factor_pct >= obligation.highest_borrow_factor_pct;
 
-    let elevation_group = get_elevation_group(obligation.elevation_group, lending_market)?;
-    let (_, collateral_liquidation_threshold) =
-        get_max_ltv_and_liquidation_threshold(&withdraw_reserve_ref, elevation_group)?;
-
-    let is_collateral_reserve_lowest_liquidation_ltv = collateral_liquidation_threshold as u64
+    let is_collateral_reserve_lowest_liquidation_ltv = collateral_liquidation_threshold_pct as u64
         <= obligation.lowest_reserve_deposit_liquidation_ltv;
 
     let CalculateLiquidationResult {
@@ -1840,8 +1840,8 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             let str_name = std::str::from_utf8(&value).unwrap();
             let cached = reserve.config.token_info.name;
             let cached_name = std::str::from_utf8(&cached).unwrap();
-            msg!("Prev token name was {}", cached_name);
-            msg!("Setting token name to {}", str_name);
+            msg!("Prev token name was {}", cached_name.trim_end_matches('\0'));
+            msg!("Setting token name to {}", str_name.trim_end_matches('\0'));
             reserve.config.token_info.name = value;
         }
         UpdateConfigMode::UpdateTokenInfoPriceMaxAge => {
