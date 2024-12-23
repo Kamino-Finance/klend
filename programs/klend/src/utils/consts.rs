@@ -62,6 +62,10 @@ pub const MIN_NET_VALUE_IN_OBLIGATION: Fraction = fraction!(0.000001);
 
 pub const DUST_LAMPORT_THRESHOLD: u64 = 1;
 
+pub const MAX_PRICE_DECIMALS_U256: u32 = 36;
+
+pub const TARGET_PRICE_DECIMALS: u32 = MAX_PRICE_DECIMALS_U256 / 2;
+
 pub fn ten_pow(x: usize) -> u64 {
     const POWERS_OF_TEN: [u64; 20] = [
         1,

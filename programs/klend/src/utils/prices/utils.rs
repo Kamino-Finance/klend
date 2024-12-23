@@ -6,10 +6,10 @@ use crate::{
 
 pub(crate) fn price_to_fraction<T>(price: Price<T>) -> Fraction
 where
-    T: Into<U128> + Copy,
+    T: Into<U256> + Copy,
 {
     let Price { value, exp } = price;
-    let value: U256 = value.into().into();
+    let value: U256 = value.into();
     let decimal = ten_pow(exp);
 
     let value_bf = BigFraction::from_num(value);
@@ -19,8 +19,14 @@ where
         .expect("Failed to convert Price stored on BigFraction to Fraction")
 }
 
-fn ten_pow(exponent: u32) -> U128 {
+pub(super) fn ten_pow(exponent: u32) -> U128 {
     let value: u128 = match exponent {
+        36 => 1_000_000_000_000_000_000_000_000_000_000_000_000,
+        35 => 100_000_000_000_000_000_000_000_000_000_000_000,
+        34 => 10_000_000_000_000_000_000_000_000_000_000_000,
+        33 => 1_000_000_000_000_000_000_000_000_000_000_000,
+        32 => 100_000_000_000_000_000_000_000_000_000_000,
+        31 => 10_000_000_000_000_000_000_000_000_000_000,
         30 => 1_000_000_000_000_000_000_000_000_000_000,
         29 => 100_000_000_000_000_000_000_000_000_000,
         28 => 10_000_000_000_000_000_000_000_000_000,
