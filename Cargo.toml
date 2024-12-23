@@ -20,7 +20,6 @@ anchor-spl = { version = "0.29.0", features = ["dex", "token"] }
 # Solana
 solana-program = "~1.17.18"
 solana-sdk = "~1.17.18"
-solana-program-test = "=1.17.18"
 solana-banks-client = "~1.17.18"
 solana-banks-interface = "~1.17.18"
 solana-address-lookup-table-program = "~1.17.18"
