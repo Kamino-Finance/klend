@@ -398,8 +398,8 @@ pub enum LendingError {
     ObligationCollateralLtvZero,
     #[msg("Seeds must be default pubkeys for tag 0, and mint addresses for tag 1 or 2")]
     InvalidObligationSeedsValue,
-    #[msg("Obligation id must be 0")]
-    InvalidObligationId,
+    #[msg("[DEPRECATED] Obligation id must be 0")]
+    DeprecatedInvalidObligationId,
     #[msg("Invalid borrow rate curve point")]
     InvalidBorrowRateCurvePoint,
     #[msg("Invalid utilization rate")]

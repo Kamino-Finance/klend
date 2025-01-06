@@ -13,8 +13,6 @@ use crate::{
 pub fn process(ctx: Context<InitObligation>, args: InitObligationArgs) -> Result<()> {
     let clock = &Clock::get()?;
 
-    require!(args.id == 0, LendingError::InvalidObligationId);
-
     check_obligation_seeds(
         args.tag,
         &ctx.accounts.seed1_account,
