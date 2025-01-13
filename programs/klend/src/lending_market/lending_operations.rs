@@ -283,7 +283,7 @@ where
     let new_utilization_rate = borrow_reserve.liquidity.utilization_rate()?;
     let utilization_limit = borrow_reserve
         .config
-        .utilization_limit_block_borrowing_above;
+        .utilization_limit_block_borrowing_above_pct;
     if new_utilization_rate >= Fraction::from_percent(utilization_limit) && utilization_limit != 0 {
         msg!(
             "Borrowing above utilization rate is disabled, current {}, new {}, limit {}",
@@ -2091,10 +2091,10 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
-        UpdateConfigMode::UpdateBlockBorrowingAboveUtilization => {
+        UpdateConfigMode::UpdateBlockBorrowingAboveUtilizationPct => {
             let new = value[0];
-            let prv = reserve.config.utilization_limit_block_borrowing_above;
-            reserve.config.utilization_limit_block_borrowing_above = new;
+            let prv = reserve.config.utilization_limit_block_borrowing_above_pct;
+            reserve.config.utilization_limit_block_borrowing_above_pct = new;
             msg!("Prv Value is {:?}", prv);
             msg!("New Value is {:?}", new);
         }
@@ -2125,6 +2125,7 @@ pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, valu
 
 pub mod utils {
     use anchor_lang::require_neq;
+    use num_enum::TryFromPrimitive;
 
     use super::*;
     use crate::{
@@ -2945,6 +2946,10 @@ pub mod utils {
         market: &LendingMarket,
         reserve_address: Pubkey,
     ) -> Result<()> {
+        if ReserveStatus::try_from_primitive(config.status).is_err() {
+            msg!("Invalid reserve status");
+            return err!(LendingError::InvalidConfig);
+        }
         if config.loan_to_value_pct >= 100 {
             msg!("Loan to value ratio must be in range [0, 100)");
             return err!(LendingError::InvalidConfig);
@@ -2960,7 +2965,7 @@ pub mod utils {
             return err!(LendingError::InvalidConfig);
         }
         if u128::from(config.fees.borrow_fee_sf) >= FRACTION_ONE_SCALED {
-            msg!("Borrow fee must be in range [0, 100%]");
+            msg!("Borrow fee must be in range [0, 100%)");
             return err!(LendingError::InvalidConfig);
         }
         if config.protocol_liquidation_fee_pct > 100 {
@@ -3023,18 +3028,28 @@ pub mod utils {
                 if elevation_group.debt_reserve != reserve_address {
                     if elevation_group.max_liquidation_bonus_bps > config.max_liquidation_bonus_bps
                     {
-                        msg!("Invalid max liquidation bonus, elevation id liquidation bonus must be less than the config's");
+                        msg!("Invalid max liquidation bonus in elevation group {elevation_group_id}, elevation group's liquidation bonus must be less than the config's",);
                         return err!(LendingError::InvalidConfig);
                     }
 
                     if elevation_group.liquidation_threshold_pct < config.liquidation_threshold_pct
                     {
-                        msg!("Invalid liquidation threshold, elevation id liquidation threshold must be greater than the config's");
+                        msg!("Invalid liquidation threshold in elevation group {elevation_group_id}, elevation id liquidation threshold must be greater than the config's",);
                         return err!(LendingError::InvalidConfig);
                     }
 
                     if elevation_group.ltv_pct < config.loan_to_value_pct {
-                        msg!("Invalid ltv ratio, cannot be bigger than the ltv ratio");
+                        msg!("Invalid ltv ratio in elevation group {elevation_group_id}, cannot be bigger than the reserve's ltv ratio",);
+                        return err!(LendingError::InvalidConfig);
+                    }
+
+                    if elevation_group.ltv_pct > elevation_group.liquidation_threshold_pct {
+                        msg!("Invalid ltv ratio in elevation group {elevation_group_id}, cannot be bigger than the liquidation threshold",);
+                        return err!(LendingError::InvalidConfig);
+                    }
+
+                    if elevation_group.liquidation_threshold_pct > 100 {
+                        msg!("Invalid liquidation threshold in elevation group {elevation_group_id}, must be less than 100%",);
                         return err!(LendingError::InvalidConfig);
                     }
                 }
@@ -3044,6 +3059,11 @@ pub mod utils {
                     return err!(LendingError::InvalidConfig);
                 }
             }
+        }
+
+        if config.utilization_limit_block_borrowing_above_pct > 100 {
+            msg!("Utilization limit to block borrows above cannot be bigger than 100%");
+            return err!(LendingError::InvalidConfig);
         }
 
         config.borrow_rate_curve.validate()?;

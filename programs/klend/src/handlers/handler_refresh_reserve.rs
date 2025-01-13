@@ -38,7 +38,7 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
             ctx.accounts.switchboard_price_oracle.as_ref(),
             ctx.accounts.switchboard_twap_oracle.as_ref(),
             ctx.accounts.scope_prices.as_ref(),
-            clock.unix_timestamp,
+            clock,
         )?
     } else {
         None

@@ -1,69 +1,88 @@
+use crate::{
+    utils::{
+        prices::{
+            types::{TimestampedPrice, TimestampedPriceWithTwap},
+            utils::price_to_fraction,
+            CONFIDENCE_FACTOR,
+        },
+        FatAccountLoader, NULL_PUBKEY,
+    },
+    LendingError,
+};
 use anchor_lang::{
     err, error,
     prelude::{msg, AccountInfo},
     Result,
 };
-use switchboard_itf::accounts::AggregatorAccountData;
-
-use super::{utils::price_to_fraction, CONFIDENCE_FACTOR};
-use crate::{
-    utils::{
-        prices::types::{TimestampedPrice, TimestampedPriceWithTwap},
-        FatAccountLoader, NULL_PUBKEY,
-    },
-    LendingError,
-};
+use sbod_itf::accounts::PullFeedAccountData;
+use solana_program::clock::{Clock, DEFAULT_MS_PER_SLOT};
 
 pub(super) fn get_switchboard_price_and_twap(
     switchboard_price_feed_info: &AccountInfo,
     switchboard_twap_feed_info: Option<&AccountInfo>,
+    clock: &Clock,
 ) -> Result<TimestampedPriceWithTwap> {
-    let price = get_switchboard_price(switchboard_price_feed_info)?;
+    let price = get_switchboard_price(switchboard_price_feed_info, clock)?;
     let twap = switchboard_twap_feed_info
         .as_ref()
-        .map(|account| get_switchboard_price(account))
+        .map(|account| get_switchboard_price(account, clock))
         .transpose()?;
     Ok(TimestampedPriceWithTwap { price, twap })
 }
 
-fn get_switchboard_price(switchboard_feed_info: &AccountInfo) -> Result<TimestampedPrice> {
+fn get_switchboard_price(
+    switchboard_feed_info: &AccountInfo,
+    clock: &Clock,
+) -> Result<TimestampedPrice> {
     if *switchboard_feed_info.key == NULL_PUBKEY {
         return err!(LendingError::NoPriceFound);
     }
-    let feed_acc: FatAccountLoader<'_, AggregatorAccountData> =
+    let feed_acc: FatAccountLoader<'_, PullFeedAccountData> =
         FatAccountLoader::try_from(switchboard_feed_info)?;
     let feed = feed_acc.load()?;
-    let timestamp = u64::try_from(feed.latest_confirmed_round.round_open_timestamp).unwrap();
+
+    let last_updated_slot = feed.result.slot;
+
+    let elapsed_slots = clock.slot.saturating_sub(last_updated_slot);
+    let timestamp = u64::try_from(clock.unix_timestamp)
+        .unwrap_or(0)
+        .saturating_sub(elapsed_slots * DEFAULT_MS_PER_SLOT / 1000);
 
     let price_switchboard_desc = feed
-        .get_result()
+        .result
+        .value()
         .ok_or(error!(LendingError::SwitchboardV2Error))?;
 
-    if price_switchboard_desc.mantissa <= 0 {
-        msg!("Switchboard oracle price is negative which is not allowed");
+    if price_switchboard_desc.mantissa() <= 0 {
+        msg!("Switchboard oracle price is zero or negative which is not allowed");
         return err!(LendingError::PriceIsZero);
     }
+    let price_switchboard_desc_mantissa = u128::try_from(price_switchboard_desc.mantissa())
+        .expect("a `<= 0` check above guarantees this");
+    let price_switchboard_desc_scale = price_switchboard_desc.scale();
 
-    let stdev_mantissa = feed.latest_confirmed_round.std_deviation.mantissa;
-    let stdev_scale = feed.latest_confirmed_round.std_deviation.scale;
+    let stdev = feed
+        .result
+        .std_dev()
+        .ok_or(error!(LendingError::SwitchboardV2Error))?;
+    let stdev_mantissa = u128::try_from(stdev.mantissa()).map_err(|_| {
+        msg!("Switchboard standard deviation is negative which is against its math definition");
+        error!(LendingError::SwitchboardV2Error)
+    })?;
+    let stdev_scale = stdev.scale();
 
     let price_load = Box::new(move || {
         validate_switchboard_confidence(
-            price_switchboard_desc.mantissa,
-            price_switchboard_desc.scale,
+            price_switchboard_desc_mantissa,
+            price_switchboard_desc_scale,
             stdev_mantissa,
             stdev_scale,
             CONFIDENCE_FACTOR,
         )?;
 
-        let base_value = u128::try_from(price_switchboard_desc.mantissa).map_err(|_| {
-            msg!("Switchboard oracle price is negative which is not allowed");
-            error!(LendingError::InvalidOracleConfig)
-        })?;
-
         let base_price = super::Price {
-            value: base_value,
-            exp: price_switchboard_desc.scale,
+            value: price_switchboard_desc_mantissa,
+            exp: price_switchboard_desc_scale,
         };
 
         Ok(price_to_fraction(base_price))
@@ -76,26 +95,26 @@ fn get_switchboard_price(switchboard_feed_info: &AccountInfo) -> Result<Timestam
 }
 
 fn validate_switchboard_confidence(
-    price_mantissa: i128,
+    price_mantissa: u128,
     price_scale: u32,
-    stdev_mantissa: i128,
+    stdev_mantissa: u128,
     stdev_scale: u32,
     oracle_confidence_factor: u64,
 ) -> Result<()> {
-    let (scale_op, scale_diff): (&dyn Fn(i128, i128) -> Option<i128>, _) =
+    let (scale_op, scale_diff): (&dyn Fn(u128, u128) -> Option<u128>, _) =
         if price_scale >= stdev_scale {
             (
-                &i128::checked_mul,
+                &u128::checked_mul,
                 price_scale.checked_sub(stdev_scale).unwrap(),
             )
         } else {
             (
-                &i128::checked_div,
+                &u128::checked_div,
                 stdev_scale.checked_sub(price_scale).unwrap(),
             )
         };
 
-    let scaling_factor = 10_i128
+    let scaling_factor = 10_u128
         .checked_pow(scale_diff)
         .ok_or_else(|| error!(LendingError::MathOverflow))?;
 

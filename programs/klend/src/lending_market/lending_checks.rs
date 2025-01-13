@@ -257,7 +257,6 @@ pub fn withdraw_obligation_collateral_checks(
         msg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
-
     if withdraw_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
         msg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
         return err!(LendingError::InvalidAccountInput);
