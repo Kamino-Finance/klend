@@ -127,7 +127,7 @@ pub enum UpdateConfigMode {
     UpdateFarmCollateral = 40,
     UpdateFarmDebt = 41,
     UpdateDisableUsageAsCollateralOutsideEmode = 42,
-    UpdateBlockBorrowingAboveUtilization = 43,
+    UpdateBlockBorrowingAboveUtilizationPct = 43,
     UpdateBlockPriceUsage = 44,
     UpdateBorrowLimitOutsideElevationGroup = 45,
     UpdateBorrowLimitsInElevationGroupAgainstThisReserve = 46,

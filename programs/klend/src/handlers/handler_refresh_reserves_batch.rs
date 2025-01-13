@@ -82,7 +82,7 @@ pub fn process(ctx: Context<RefreshReservesBatch>, skip_price_updates: bool) -> 
                     switchboard_price_oracle,
                     switchboard_twap_oracle,
                     scope_prices,
-                    clock.unix_timestamp,
+                    clock,
                 )?
             } else {
                 None

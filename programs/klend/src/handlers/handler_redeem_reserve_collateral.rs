@@ -115,6 +115,7 @@ pub struct RedeemReserveCollateral<'info> {
     pub user_source_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut,
         token::mint = reserve.load()?.liquidity.mint_pubkey,
+        token::authority = owner
     )]
     pub user_destination_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 

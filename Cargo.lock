@@ -1008,12 +1008,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dyn-clone"
-version = "1.0.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "545b22097d44f8a9581187cdf93de7a71e4722bf51200cfaba810865b49a495d"
-
-[[package]]
 name = "ed25519"
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1105,11 +1099,20 @@ dependencies = [
  "num-derive 0.3.3",
  "num-traits",
  "num_enum 0.5.11",
- "scope-types",
+ "scope-types 1.0.0 (git+https://github.com/Kamino-Finance/scope.git?branch=anchor_0.29_idl)",
  "solana-security-txt",
  "spl-token 4.0.0",
  "static_assertions",
  "uint",
+]
+
+[[package]]
+name = "fast-math"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2465292146cdfc2011350fe3b1c616ac83cf0faeedb33463ba1c332ed8948d66"
+dependencies = [
+ "ieee754",
 ]
 
 [[package]]
@@ -1340,6 +1343,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "ieee754"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9007da9cacbd3e6343da136e98b0d2df013f553d35bdec8b518f07bea768e19c"
+
+[[package]]
 name = "im"
 version = "15.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1422,14 +1431,14 @@ dependencies = [
  "fixed",
  "fixed-macro",
  "num_enum 0.7.1",
- "pyth-sdk-solana",
- "scope-types",
+ "pyth-solana-receiver-sdk",
+ "sbod-itf",
+ "scope-types 1.0.0 (git+https://github.com/Kamino-Finance/scope.git)",
  "serde",
  "solana-program",
  "solana-security-txt",
  "static_assertions",
  "strum",
- "switchboard-itf",
  "uint",
 ]
 
@@ -1580,6 +1589,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "num"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1587,6 +1610,15 @@ checksum = "608e7659b5c3d7cba262d894801b9ec9d00de989e8a82bd4bef91d08da45cdc0"
 dependencies = [
  "autocfg",
  "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23c6602fda94a57c990fe0df199a035d83576b496aa29f4e634a8ac6004e68a6"
+dependencies = [
  "num-traits",
 ]
 
@@ -1619,6 +1651,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
 dependencies = [
  "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-iter"
+version = "0.1.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d869c01cc0c455284163fd0092f1f93835385ccab5a98a0dcc497b2f8bf055a9"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
+dependencies = [
+ "autocfg",
+ "num-bigint",
+ "num-integer",
  "num-traits",
 ]
 
@@ -1859,32 +1914,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyth-sdk"
-version = "0.8.0"
+name = "pyth-solana-receiver-sdk"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e7aeef4d5f0a9c98ff5af2ddd84a8b89919c512188305b497a9eb9afa97a949"
+checksum = "186d107c507e71a4528405eccefc6b3b7177a10ad6dd4bde531604debf87f091"
 dependencies = [
- "borsh 0.10.3",
- "borsh-derive 0.10.3",
- "getrandom 0.2.11",
+ "anchor-lang",
  "hex",
- "schemars",
- "serde",
+ "pythnet-sdk",
+ "solana-program",
 ]
 
 [[package]]
-name = "pyth-sdk-solana"
-version = "0.9.0"
+name = "pythnet-sdk"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875de47128e93a881ede3ad97aa5a4dc32397995277ff5e599eed8bba8d43334"
+checksum = "498d20fd330277697aaee92f341bdabdb4695b10e05f054157a18ad8b7746a17"
 dependencies = [
+ "anchor-lang",
+ "bincode",
  "borsh 0.10.3",
- "borsh-derive 0.10.3",
  "bytemuck",
- "num-derive 0.3.3",
- "num-traits",
- "pyth-sdk",
+ "byteorder",
+ "fast-math",
+ "hex",
+ "rustc_version",
  "serde",
+ "sha3 0.10.8",
+ "slow_primes",
  "solana-program",
  "thiserror",
 ]
@@ -2150,33 +2207,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98a01dab6acf992653be49205bdd549f32f17cb2803e8eacf1560bf97259aae8"
 
 [[package]]
-name = "schemars"
-version = "0.8.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+name = "sbod-itf"
+version = "0.1.0"
+source = "git+https://github.com/Kamino-Finance/scope.git#f20bb11b6bf332434c5e25239b342d2b66a6bd40"
 dependencies = [
- "dyn-clone",
- "schemars_derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "schemars_derive"
-version = "0.8.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde_derive_internals",
- "syn 1.0.109",
+ "anchor-lang",
+ "bytemuck",
+ "rust_decimal",
+ "solana-program",
+ "static_assertions",
 ]
 
 [[package]]
 name = "scope-types"
 version = "1.0.0"
 source = "git+https://github.com/Kamino-Finance/scope.git?branch=anchor_0.29_idl#0c8f7925aad9f5cf30b6715f2bef0ece9235d87a"
+dependencies = [
+ "anchor-lang",
+ "bytemuck",
+ "cfg-if",
+ "num_enum 0.7.1",
+ "solana-program",
+]
+
+[[package]]
+name = "scope-types"
+version = "1.0.0"
+source = "git+https://github.com/Kamino-Finance/scope.git#f20bb11b6bf332434c5e25239b342d2b66a6bd40"
 dependencies = [
  "anchor-lang",
  "bytemuck",
@@ -2230,17 +2287,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.48",
-]
-
-[[package]]
-name = "serde_derive_internals"
-version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -2366,6 +2412,15 @@ checksum = "16d69225bde7a69b235da73377861095455d298f2b970996eec25ddbb42b3d1e"
 dependencies = [
  "bitmaps",
  "typenum",
+]
+
+[[package]]
+name = "slow_primes"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58267dd2fbaa6dceecba9e3e106d2d90a2b02497c0e8b01b8759beccf5113938"
+dependencies = [
+ "num",
 ]
 
 [[package]]
@@ -2872,7 +2927,7 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 [[package]]
 name = "strum"
 version = "0.24.0"
-source = "git+https://github.com/hubbleprotocol/strum?branch=checked_arithmetics#95f44367da40546bc94f4ff565268f45fb68ed5e"
+source = "git+https://github.com/Kamino-Finance/strum?branch=checked_arithmetics#95f44367da40546bc94f4ff565268f45fb68ed5e"
 dependencies = [
  "strum_macros",
 ]
@@ -2880,7 +2935,7 @@ dependencies = [
 [[package]]
 name = "strum_macros"
 version = "0.24.0"
-source = "git+https://github.com/hubbleprotocol/strum?branch=checked_arithmetics#95f44367da40546bc94f4ff565268f45fb68ed5e"
+source = "git+https://github.com/Kamino-Finance/strum?branch=checked_arithmetics#95f44367da40546bc94f4ff565268f45fb68ed5e"
 dependencies = [
  "heck 0.4.1",
  "proc-macro2",
@@ -2894,16 +2949,6 @@ name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
-
-[[package]]
-name = "switchboard-itf"
-version = "0.1.0"
-source = "git+https://github.com/Kamino-Finance/scope.git?branch=anchor_0.29_idl#0c8f7925aad9f5cf30b6715f2bef0ece9235d87a"
-dependencies = [
- "anchor-lang",
- "bytemuck",
- "rust_decimal",
-]
 
 [[package]]
 name = "syn"

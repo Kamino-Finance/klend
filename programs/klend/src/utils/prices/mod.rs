@@ -5,7 +5,7 @@ mod switchboard;
 mod types;
 mod utils;
 
-use anchor_lang::{prelude::*, solana_program::clock};
+use anchor_lang::prelude::*;
 use types::{Price, TimestampedPrice};
 
 use self::{
@@ -31,7 +31,7 @@ pub fn get_price(
     switchboard_price_feed_info: Option<&AccountInfo>,
     switchboard_price_twap_info: Option<&AccountInfo>,
     scope_prices_info: Option<&AccountInfo>,
-    unix_timestamp: clock::UnixTimestamp,
+    clock: &Clock,
 ) -> Result<Option<GetPriceResult>> {
     let price = get_most_recent_price_and_twap(
         token_info,
@@ -39,9 +39,10 @@ pub fn get_price(
         switchboard_price_feed_info,
         switchboard_price_twap_info,
         scope_prices_info,
+        clock,
     )?;
 
-    Ok(get_validated_price(price, token_info, unix_timestamp))
+    Ok(get_validated_price(price, token_info, clock.unix_timestamp))
 }
 
 fn get_most_recent_price_and_twap(
@@ -50,6 +51,7 @@ fn get_most_recent_price_and_twap(
     switchboard_price_feed_info: Option<&AccountInfo>,
     switchboard_price_twap_info: Option<&AccountInfo>,
     scope_prices_info: Option<&AccountInfo>,
+    clock: &Clock,
 ) -> Result<TimestampedPriceWithTwap> {
     let pyth_price = if token_info.pyth_configuration.is_enabled() {
         pyth_price_account_info.and_then(|a| get_pyth_price_and_twap(a).ok())
@@ -64,8 +66,9 @@ fn get_most_recent_price_and_twap(
     };
 
     let switchboard_price = if token_info.switchboard_configuration.is_enabled() {
-        switchboard_price_feed_info
-            .and_then(|a| get_switchboard_price_and_twap(a, switchboard_price_twap_info_opt).ok())
+        switchboard_price_feed_info.and_then(|a| {
+            get_switchboard_price_and_twap(a, switchboard_price_twap_info_opt, clock).ok()
+        })
     } else {
         None
     };

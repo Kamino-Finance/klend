@@ -100,7 +100,8 @@ pub struct WithdrawObligationCollateral<'info> {
     pub reserve_source_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut,
-        token::mint = withdraw_reserve.load()?.collateral.mint_pubkey
+        token::mint = withdraw_reserve.load()?.collateral.mint_pubkey,
+        token::authority = owner
     )]
     pub user_destination_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
 

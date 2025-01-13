@@ -362,3 +362,9 @@ impl Display for FractionDisplay<'_> {
         write!(formater, "{i}.{f_p:0>4}")
     }
 }
+
+impl std::fmt::Debug for FractionDisplay<'_> {
+    fn fmt(&self, formater: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formater, "{}", self)
+    }
+}

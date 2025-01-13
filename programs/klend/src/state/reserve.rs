@@ -503,7 +503,11 @@ impl ReserveLiquidity {
         self.borrowed_amount_sf = borrowed_amount_f
             .checked_sub(safe_settle_amount)
             .ok_or_else(|| {
-                msg!("Borrowed amount cannot be less than settle amount");
+                msg!(
+                    "Borrowed amount {} cannot be less than settle amount {}",
+                    borrowed_amount_f.to_display(),
+                    safe_settle_amount.to_display()
+                );
                 LendingError::MathOverflow
             })?
             .to_bits();
@@ -515,13 +519,23 @@ impl ReserveLiquidity {
         self.available_amount = self
             .available_amount
             .checked_sub(withdraw_amount)
-            .ok_or(LendingError::MathOverflow)?;
+            .ok_or_else(|| {
+                msg!(
+                    "Available amount {} cannot be less than withdraw amount {withdraw_amount}",
+                    self.available_amount
+                );
+                LendingError::MathOverflow
+            })?;
         let accumulated_protocol_fees_f = Fraction::from_bits(self.accumulated_protocol_fees_sf);
         let withdraw_amount_f = Fraction::from_num(withdraw_amount);
         self.accumulated_protocol_fees_sf = accumulated_protocol_fees_f
             .checked_sub(withdraw_amount_f)
             .ok_or_else(|| {
-                msg!("Accumulated protocol fees cannot be less than withdraw amount");
+                msg!(
+                    "Accumulated protocol fees {} cannot be less than withdraw amount {}",
+                    accumulated_protocol_fees_f.to_display(),
+                    withdraw_amount_f.to_display()
+                );
                 error!(LendingError::MathOverflow)
             })?
             .to_bits();
@@ -596,7 +610,10 @@ impl ReserveLiquidity {
         self.available_amount = self
             .available_amount
             .checked_sub(withdraw_amount)
-            .ok_or(LendingError::MathOverflow)?;
+            .ok_or_else(|| {
+                msg!("Available amount {} cannot be less than withdraw amount on referrer fees {withdraw_amount}", self.available_amount);
+                LendingError::MathOverflow
+            })?;
 
         let accumulated_referrer_fees_f = Fraction::from_bits(self.accumulated_referrer_fees_sf);
 
@@ -605,7 +622,11 @@ impl ReserveLiquidity {
         let new_accumulated_referrer_fees_f = accumulated_referrer_fees_f
             .checked_sub(withdraw_amount_f)
             .ok_or_else(|| {
-                msg!("Accumulated referrer fees cannot be less than withdraw amount");
+                msg!(
+                    "Accumulated referrer fees {} cannot be less than withdraw amount {}",
+                    accumulated_referrer_fees_f.to_display(),
+                    withdraw_amount_f.to_display()
+                );
                 error!(LendingError::MathOverflow)
             })?;
 
@@ -617,7 +638,11 @@ impl ReserveLiquidity {
         let new_referrer_amount_unclaimed_f = referrer_amount_unclaimed_f
             .checked_sub(withdraw_amount_f)
             .ok_or_else(|| {
-                msg!("Unclaimed referrer fees cannot be less than withdraw amount");
+                msg!(
+                    "Unclaimed referrer fees {} cannot be less than withdraw amount {}",
+                    referrer_amount_unclaimed_f.to_display(),
+                    withdraw_amount_f.to_display()
+                );
                 error!(LendingError::MathOverflow)
             })?;
 
@@ -674,7 +699,14 @@ impl ReserveCollateral {
         self.mint_total_supply = self
             .mint_total_supply
             .checked_sub(collateral_amount)
-            .ok_or(LendingError::MathOverflow)?;
+            .ok_or_else(|| {
+                msg!(
+                    "Mint total supply {} cannot be less than collateral amount {}",
+                    self.mint_total_supply,
+                    collateral_amount
+                );
+                LendingError::MathOverflow
+            })?;
         Ok(())
     }
 
@@ -779,7 +811,7 @@ pub struct ReserveConfig {
     pub elevation_groups: [u8; 20],
     pub disable_usage_as_coll_outside_emode: u8,
 
-    pub utilization_limit_block_borrowing_above: u8,
+    pub utilization_limit_block_borrowing_above_pct: u8,
 
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]

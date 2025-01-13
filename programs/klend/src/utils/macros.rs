@@ -129,10 +129,16 @@ macro_rules! xmsg {
     ($($arg:tt)*) => (::anchor_lang::prelude::msg!($($arg)*));
 }
 
-#[cfg(all(not(target_arch = "bpf")))]
+#[cfg(all(not(target_arch = "bpf"), not(feature = "tracing")))]
 #[macro_export]
 macro_rules! xmsg {
     ($($arg:tt)*) => (println!($($arg)*));
+}
+
+#[cfg(all(not(target_arch = "bpf"), feature = "tracing"))]
+#[macro_export]
+macro_rules! xmsg {
+    ($($arg:tt)*) => (tracing::info!($($arg)*));
 }
 
 #[cfg(not(target_arch = "bpf"))]
@@ -419,6 +425,46 @@ macro_rules! prop_assert_fuzzy_bps_diff {
             expected_str = stringify!($expected),
             expected_value = $expected,
             bps_value = $bps_diff
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! prop_assert_fuzzy_eq_fraction {
+    ($left:expr, $right:expr $(,)?) => {
+        $crate::prop_assert_fuzzy_eq_fraction!($left, $right, 0.0001);
+    };
+    ($left:expr, $right:expr, $epsilon_rate:expr $(,)?) => {
+        let left_val: Fraction = $left;
+        let right_val: Fraction = $right;
+        let diff = left_val.abs_diff(right_val);
+        let epsilon_rate: Fraction = $crate::fraction::fraction!($epsilon_rate);
+        let epsilon_max_diff_right = right_val * epsilon_rate;
+        let epsilon_max_diff_left = left_val * epsilon_rate;
+
+        ::proptest::prop_assert!(diff <= epsilon_max_diff_right && diff <= epsilon_max_diff_left,
+            "assertion failed: `(left ~= right)` \
+                \n  left: `{}`,\
+                \n right: `{}`,\
+                \n eps  : `{}`\n",
+            left_val, right_val, epsilon_rate
+        );
+    };
+    ($left:expr, $right:expr, $epsilon_rate:expr, $($arg:tt)+) => {
+        let left_val: Fraction = $left;
+        let right_val: Fraction = $right;
+        let diff = left_val.abs_diff(right_val);
+        let epsilon_rate: Fraction = $crate::fraction::fraction!($epsilon_rate);
+        let epsilon_max_diff_right = right_val * epsilon_rate;
+        let epsilon_max_diff_left = left_val * epsilon_rate;
+
+        ::proptest::prop_assert!(diff <= epsilon_max_diff_right && diff <= epsilon_max_diff_left,
+            "assertion failed: `(left ~= right)` \
+                \n  left: `{}`,\
+                \n right: `{}`,\
+                \n eps  : `{}`,\
+                \n reason: `{}`\n",
+            left_val, right_val, epsilon_rate, std::fmt::format(format_args!($($arg)+))
         );
     };
 }

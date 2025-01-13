@@ -32,6 +32,8 @@ pub fn process(ctx: Context<WithdrawReferrerFees>) -> Result<()> {
     let withdraw_amount =
         lending_operations::withdraw_referrer_fees(reserve, clock.slot, referrer_token_state)?;
 
+    msg!("Withdrawing referrer fees: {}", withdraw_amount);
+
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.reserve_liquidity_mint.to_account_info(),

@@ -3,6 +3,7 @@ use anchor_lang::{prelude::*, Accounts};
 use crate::{
     lending_market::lending_operations,
     state::{LendingMarket, Reserve, UpdateConfigMode},
+    utils::Fraction,
     LendingError,
 };
 
@@ -32,11 +33,15 @@ pub fn process(
     lending_operations::update_reserve_config(reserve, mode, value);
 
     if skip_validation {
+        let reserve_is_used = reserve.liquidity.available_amount > 0
+            || reserve.liquidity.total_borrow() > Fraction::ZERO
+            || reserve.collateral.mint_total_supply > 0;
+
+        let reserve_blocks_deposits = reserve.config.deposit_limit == 0;
+        let reserve_blocks_borrows = reserve.config.borrow_limit == 0;
+
         require!(
-            !matches!(
-                mode,
-                UpdateConfigMode::UpdateDepositLimit | UpdateConfigMode::UpdateBorrowLimit
-            ),
+            !reserve_is_used && reserve_blocks_deposits && reserve_blocks_borrows,
             LendingError::InvalidConfig
         );
         msg!("WARNING! Skipping validation of the config");
