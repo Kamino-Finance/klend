@@ -200,7 +200,7 @@ pub enum UpdateLendingMarketMode {
     UpdateEmergencyMode = 1,
     UpdateLiquidationCloseFactor = 2,
     UpdateLiquidationMaxValue = 3,
-    UpdateGlobalUnhealthyBorrow = 4,
+    DeprecatedUpdateGlobalUnhealthyBorrow = 4,
     UpdateGlobalAllowedBorrow = 5,
     UpdateRiskCouncil = 6,
     UpdateMinFullLiquidationThreshold = 7,
@@ -212,9 +212,10 @@ pub enum UpdateLendingMarketMode {
     UpdateAutodeleverageEnabled = 13,
     UpdateBorrowingDisabled = 14,
     UpdateMinNetValueObligationPostAction = 15,
-    UpdateMinValueSkipPriorityLiqCheck = 16,
-    UpdatePaddingFields = 17,
-    UpdateName = 18,
+    UpdateMinValueLtvSkipPriorityLiqCheck = 16,
+    UpdateMinValueBfSkipPriorityLiqCheck = 17,
+    UpdatePaddingFields = 18,
+    UpdateName = 19,
 }
 
 #[cfg(feature = "serde")]

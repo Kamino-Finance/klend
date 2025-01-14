@@ -76,11 +76,8 @@ pub fn process(
             msg!("New value is {:?}", value);
             market.global_allowed_borrow_value = value;
         }
-        UpdateLendingMarketMode::UpdateGlobalUnhealthyBorrow => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!("Prv value is {:?}", market.global_unhealthy_borrow_value);
-            msg!("New value is {:?}", value);
-            market.global_unhealthy_borrow_value = value;
+        UpdateLendingMarketMode::DeprecatedUpdateGlobalUnhealthyBorrow => {
+            panic!("Deprecated field")
         }
         UpdateLendingMarketMode::UpdateMinFullLiquidationThreshold => {
             let value = u64::from_le_bytes(value[..8].try_into().unwrap());
@@ -221,17 +218,27 @@ pub fn process(
             );
             market.min_net_value_in_obligation_sf = min_net_value_in_obligation_sf;
         }
-        UpdateLendingMarketMode::UpdateMinValueSkipPriorityLiqCheck => {
-            let min_value_skip_liquidation_ltv_bf_checks =
+        UpdateLendingMarketMode::UpdateMinValueLtvSkipPriorityLiqCheck => {
+            let min_value_skip_liquidation_ltv_checks =
                 u64::from_le_bytes(value[..8].try_into().unwrap());
             msg!(
                 "Prev Value is {}",
-                market.min_value_skip_liquidation_ltv_bf_checks
+                market.min_value_skip_liquidation_ltv_checks
             );
-            msg!("New Value is {}", min_value_skip_liquidation_ltv_bf_checks);
+            msg!("New Value is {}", min_value_skip_liquidation_ltv_checks);
 
-            market.min_value_skip_liquidation_ltv_bf_checks =
-                min_value_skip_liquidation_ltv_bf_checks;
+            market.min_value_skip_liquidation_ltv_checks = min_value_skip_liquidation_ltv_checks;
+        }
+        UpdateLendingMarketMode::UpdateMinValueBfSkipPriorityLiqCheck => {
+            let min_value_skip_liquidation_bf_checks =
+                u64::from_le_bytes(value[..8].try_into().unwrap());
+            msg!(
+                "Prev Value is {}",
+                market.min_value_skip_liquidation_bf_checks
+            );
+            msg!("New Value is {}", min_value_skip_liquidation_bf_checks);
+
+            market.min_value_skip_liquidation_bf_checks = min_value_skip_liquidation_bf_checks;
         }
         UpdateLendingMarketMode::UpdatePaddingFields => {
             msg!("Prev Value is {:?}", market.reserved1);
