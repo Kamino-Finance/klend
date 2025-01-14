@@ -54,6 +54,7 @@ pub fn process(ctx: Context<RefreshObligation>) -> Result<()> {
             });
 
     lending_operations::refresh_obligation(
+        &crate::ID,
         obligation,
         lending_market,
         clock.slot,

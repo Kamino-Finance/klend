@@ -230,11 +230,8 @@ pub mod kamino_lending {
         handler_request_elevation_group::process(ctx, elevation_group)
     }
 
-    pub fn init_referrer_token_state(
-        ctx: Context<InitReferrerTokenState>,
-        referrer: Pubkey,
-    ) -> Result<()> {
-        handler_init_referrer_token_state::process(ctx, referrer)
+    pub fn init_referrer_token_state(ctx: Context<InitReferrerTokenState>) -> Result<()> {
+        handler_init_referrer_token_state::process(ctx)
     }
 
     pub fn init_user_metadata(

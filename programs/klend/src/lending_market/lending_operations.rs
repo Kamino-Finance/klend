@@ -344,6 +344,14 @@ pub fn deposit_obligation_collateral(
         return err!(LendingError::ReserveStale);
     }
 
+    if obligation
+        .last_update
+        .is_stale(slot, PriceStatusFlags::NONE)?
+    {
+        msg!("Obligation is stale and must be refreshed in the current slot");
+        return err!(LendingError::ObligationStale);
+    }
+
     if deposit_reserve.config.disable_usage_as_coll_outside_emode > 0
         && obligation.elevation_group == ELEVATION_GROUP_NONE
         && obligation.borrow_factor_adjusted_debt_value_sf > 0
@@ -616,6 +624,13 @@ where
         msg!("Repay reserve is stale and must be refreshed in the current slot");
         return err!(LendingError::ReserveStale);
     }
+    if obligation
+        .last_update
+        .is_stale(clock.slot, PriceStatusFlags::NONE)?
+    {
+        msg!("Obligation is stale and must be refreshed in the current slot");
+        return err!(LendingError::ObligationStale);
+    }
 
     let (liquidity, liquidity_index) =
         obligation.find_liquidity_in_borrows_mut(repay_reserve_pk)?;
@@ -673,7 +688,9 @@ where
     Ok(repay_amount)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn request_elevation_group<'info, T, U>(
+    program_id: &Pubkey,
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
     slot: Slot,
@@ -725,6 +742,7 @@ where
         borrowed_amount_in_elevation_group,
         ..
     } = refresh_obligation_borrows(
+        program_id,
         obligation,
         lending_market,
         slot,
@@ -735,6 +753,7 @@ where
 
     let RefreshObligationDepositsResult {
         allowed_borrow_value_f: allowed_borrow_value,
+        borrowing_disabled,
         ..
     } = refresh_obligation_deposits(
         obligation,
@@ -762,6 +781,7 @@ where
     );
 
     obligation.elevation_group = new_elevation_group;
+    obligation.borrowing_disabled = borrowing_disabled.into();
     obligation.last_update.mark_stale();
 
     utils::check_elevation_group_borrow_limit_constraints(
@@ -950,7 +970,7 @@ where
         let (coll_ltv_pct, coll_liquidation_threshold_pct) =
             get_max_ltv_and_liquidation_threshold(&deposit_reserve, elevation_group)?;
 
-        if market_value_f >= lending_market.min_value_skip_liquidation_ltv_bf_checks
+        if market_value_f >= lending_market.min_value_skip_liquidation_ltv_checks
             && coll_liquidation_threshold_pct > 0
         {
             lowest_deposit_liquidation_ltv_threshold =
@@ -997,6 +1017,7 @@ where
 }
 
 pub fn refresh_obligation_borrows<'info, T, U>(
+    program_id: &Pubkey,
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
     slot: u64,
@@ -1076,6 +1097,7 @@ where
         }
 
         accumulate_referrer_fees(
+            program_id,
             borrow_reserve_info_key,
             borrow_reserve,
             &obligation.referrer,
@@ -1095,7 +1117,7 @@ where
 
         let borrow_factor_f = borrow_reserve.borrow_factor_f(elevation_group.is_some());
 
-        if market_value_f >= lending_market.min_value_skip_liquidation_ltv_bf_checks {
+        if market_value_f >= lending_market.min_value_skip_liquidation_bf_checks {
             highest_borrow_factor_f = highest_borrow_factor_f.max(borrow_factor_f);
         }
 
@@ -1140,6 +1162,7 @@ where
 }
 
 pub fn refresh_obligation<'info, T, U>(
+    program_id: &Pubkey,
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
     slot: Slot,
@@ -1160,6 +1183,7 @@ where
         borrowed_amount_in_elevation_group,
         highest_borrow_factor_pct,
     } = refresh_obligation_borrows(
+        program_id,
         obligation,
         lending_market,
         slot,
@@ -1197,11 +1221,7 @@ where
     )
     .to_bits();
 
-    obligation.unhealthy_borrow_value_sf = min(
-        unhealthy_borrow_value,
-        Fraction::from(lending_market.global_unhealthy_borrow_value),
-    )
-    .to_bits();
+    obligation.unhealthy_borrow_value_sf = unhealthy_borrow_value.to_bits();
 
     obligation.lowest_reserve_deposit_liquidation_ltv =
         lowest_deposit_liquidation_ltv_threshold.into();
@@ -1611,6 +1631,7 @@ pub fn add_referrer_fee(
 
 #[allow(clippy::too_many_arguments)]
 pub fn accumulate_referrer_fees<'info, T>(
+    program_id: &Pubkey,
     borrow_reserve_info_key: Pubkey,
     borrow_reserve: &mut Reserve,
     obligation_referrer: &Pubkey,
@@ -1660,6 +1681,7 @@ where
             .map_err(|_| error!(LendingError::InvalidAccountInput))?;
 
         validate_referrer_token_state(
+            program_id,
             referrer_token_state,
             referrer_token_state_loader.get_pubkey(),
             borrow_reserve.liquidity.mint_pubkey,
@@ -2396,6 +2418,10 @@ pub mod utils {
                     );
                 } else {
                 }
+            }
+
+            if !obligation.borrows_empty() {
+                check_non_elevation_group_borrowing_enabled(obligation)?;
             }
 
             require!(

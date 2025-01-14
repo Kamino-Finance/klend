@@ -430,6 +430,7 @@ pub fn post_transfer_vault_balance_liquidity_reserve_checks(
 }
 
 pub fn validate_referrer_token_state(
+    program_id: &Pubkey,
     referrer_token_state: &ReferrerTokenState,
     referrer_token_state_key: Pubkey,
     mint: Pubkey,
@@ -453,7 +454,7 @@ pub fn validate_referrer_token_state(
             reserve_key.as_ref(),
             &[referrer_token_state.bump.try_into().unwrap()],
         ],
-        &crate::ID,
+        program_id,
     )
     .unwrap();
 

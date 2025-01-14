@@ -45,6 +45,7 @@ pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> 
             });
 
     lending_operations::request_elevation_group(
+        &crate::ID,
         obligation,
         &lending_market,
         slot,
