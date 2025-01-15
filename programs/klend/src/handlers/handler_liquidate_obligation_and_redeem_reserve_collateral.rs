@@ -3,8 +3,12 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use anchor_spl::{token, token::Token, token_interface};
+use anchor_spl::{
+    token,
+    token::Token,
+    token_interface,
+    token_interface::{Mint, TokenAccount, TokenInterface},
+};
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
@@ -27,9 +31,9 @@ pub fn process(
     );
 
     check_refresh_ixs!(
-        ctx,
-        withdraw_reserve,
-        repay_reserve,
+        ctx.accounts,
+        ctx.accounts.withdraw_reserve,
+        ctx.accounts.repay_reserve,
         ReserveFarmKind::Collateral,
         ReserveFarmKind::Debt
     );

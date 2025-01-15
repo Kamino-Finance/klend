@@ -5,7 +5,6 @@ use anchor_lang::{
     require_eq, Key, Result, ToAccountInfo,
 };
 
-use crate::utils::constraints;
 use crate::{
     handlers::*,
     state::{
@@ -13,7 +12,9 @@ use crate::{
         WithdrawObligationCollateralAccounts,
         WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
     },
-    utils::{seeds::BASE_SEED_REFERRER_TOKEN_STATE, FatAccountLoader, PROGRAM_VERSION},
+    utils::{
+        constraints, seeds::BASE_SEED_REFERRER_TOKEN_STATE, FatAccountLoader, PROGRAM_VERSION,
+    },
     LendingAction, LendingError, Obligation, ReferrerTokenState, Reserve, ReserveStatus,
 };
 

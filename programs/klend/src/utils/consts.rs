@@ -9,6 +9,12 @@ pub const SLOTS_PER_HOUR: u64 = SLOTS_PER_MINUTE * 60;
 pub const SLOTS_PER_DAY: u64 = SLOTS_PER_HOUR * 24;
 pub const SLOTS_PER_YEAR: u64 = SLOTS_PER_DAY * 365;
 
+pub const SECONDS_PER_YEAR: f64 = 365.242_199 * 24.0 * 60.0 * 60.0;
+pub const SECONDS_PER_YEAR_U64: u64 = 31556925;
+pub const SECONDS_PER_MINUTE: u64 = 60;
+pub const SECONDS_PER_HOUR: u64 = SECONDS_PER_MINUTE * 60;
+pub const SECONDS_PER_DAY: u64 = SECONDS_PER_HOUR * 24;
+
 pub const PROGRAM_VERSION: u8 = 1;
 
 pub const FULL_BPS: u16 = 10_000;
@@ -26,9 +32,13 @@ pub const MAX_LIQUIDATABLE_VALUE_AT_ONCE: u64 = 500_000;
 
 pub const MIN_AUTODELEVERAGE_BONUS_BPS: u64 = 50;
 
+pub const NO_DELEVERAGING_MARKER: u8 = u8::MAX;
+
 pub const MAX_OBLIGATION_RESERVES: u64 = 20;
 
 pub const CLOSE_TO_INSOLVENCY_RISKY_LTV: u8 = 95;
+
+pub const MAX_MGMT_FEE_BPS: u64 = 1000;
 
 pub const NULL_PUBKEY: solana_program::pubkey::Pubkey =
     solana_program::pubkey::Pubkey::new_from_array([
@@ -39,7 +49,7 @@ pub const NULL_PUBKEY: solana_program::pubkey::Pubkey =
 pub const LENDING_MARKET_SIZE: usize = 4656;
 pub const RESERVE_SIZE: usize = 8616;
 pub const OBLIGATION_SIZE: usize = 3336;
-pub const RESERVE_CONFIG_SIZE: usize = 912;
+pub const RESERVE_CONFIG_SIZE: usize = 920;
 pub const REFERRER_TOKEN_STATE_SIZE: usize = 352;
 pub const USER_METADATA_SIZE: usize = 1024;
 pub const REFERRER_STATE_SIZE: usize = 64;

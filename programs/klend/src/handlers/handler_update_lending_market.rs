@@ -256,6 +256,17 @@ pub fn process(
             msg!("New Value is {}", name.trim_end_matches('\0'));
             market.name.copy_from_slice(name_bytes);
         }
+        UpdateLendingMarketMode::UpdateIndividualAutodeleverageMarginCallPeriodSecs => {
+            let new_value = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let current_value = &mut market.individual_autodeleverage_margin_call_period_secs;
+            msg!("Prv value is {}", current_value);
+            if new_value == 0 {
+                msg!("Individual deleveraging margin call period cannot be set to 0");
+                return err!(LendingError::InvalidConfig);
+            }
+            msg!("New value is {}", new_value);
+            *current_value = new_value;
+        }
     }
 
     Ok(())

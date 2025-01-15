@@ -3,8 +3,7 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::Token;
-use anchor_spl::token_interface::TokenAccount;
+use anchor_spl::{token::Token, token_interface::TokenAccount};
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
@@ -16,7 +15,11 @@ use crate::{
 
 pub fn process(ctx: Context<WithdrawObligationCollateral>, collateral_amount: u64) -> Result<()> {
     let close_obligation = {
-        check_refresh_ixs!(ctx, withdraw_reserve, ReserveFarmKind::Collateral);
+        check_refresh_ixs!(
+            ctx.accounts,
+            ctx.accounts.withdraw_reserve,
+            ReserveFarmKind::Collateral
+        );
 
         lending_checks::withdraw_obligation_collateral_checks(
             &WithdrawObligationCollateralAccounts {
@@ -44,6 +47,7 @@ pub fn process(ctx: Context<WithdrawObligationCollateral>, collateral_amount: u6
             collateral_amount,
             clock.slot,
             ctx.accounts.withdraw_reserve.key(),
+            false,
         )?;
 
         let authority_signer_seeds =

@@ -1,11 +1,10 @@
 use anchor_lang::{prelude::*, Accounts};
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
-use crate::utils::constraints;
 use crate::{
     gen_signer_seeds,
     state::{LendingMarket, Reserve},
-    utils::{seeds, token_transfer},
+    utils::{constraints, seeds, token_transfer},
 };
 
 pub fn process(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {

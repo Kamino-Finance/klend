@@ -1,8 +1,9 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token::Token;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use anchor_spl::{
+    token::Token,
+    token_interface::{Mint, TokenAccount, TokenInterface},
+};
 
-use crate::utils::constraints;
 use crate::{
     state::{
         reserve::{
@@ -11,7 +12,7 @@ use crate::{
         },
         LendingMarket, Reserve, ReserveConfig,
     },
-    utils::seeds,
+    utils::{constraints, seeds},
     LendingError, ReserveStatus,
 };
 

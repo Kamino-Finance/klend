@@ -1,12 +1,12 @@
 use anchor_lang::{prelude::*, Accounts};
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
-use crate::utils::constraints;
 use crate::{
     gen_signer_seeds,
     lending_market::lending_operations,
     state::{LendingMarket, Reserve},
     utils::{
+        constraints,
         seeds::{self, BASE_SEED_REFERRER_TOKEN_STATE},
         token_transfer,
     },

@@ -23,8 +23,9 @@ pub fn process(ctx: Context<RefreshObligation>) -> Result<()> {
 
     if ctx.remaining_accounts.len() != expected_remaining_accounts {
         msg!(
-            "expected_remaining_accounts={} obligation.has_referrer()={} reserves_count={} borrow_count={}",
+            "expected_remaining_accounts={}, actual_remaining_accounts {} obligation.has_referrer()={} reserves_count={} borrow_count={}",
             expected_remaining_accounts,
+            ctx.remaining_accounts.len(),
             obligation.has_referrer(),
             reserves_count,
             borrow_count

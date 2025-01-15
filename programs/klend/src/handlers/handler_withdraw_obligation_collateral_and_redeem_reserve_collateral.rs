@@ -3,8 +3,10 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::Token;
-use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
+use anchor_spl::{
+    token::Token,
+    token_interface::{self, Mint, TokenAccount, TokenInterface},
+};
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
@@ -17,9 +19,17 @@ use crate::{
 pub fn process(
     ctx: Context<WithdrawObligationCollateralAndRedeemReserveCollateral>,
     collateral_amount: u64,
+    skip_farm_check: bool,
+    permissive_withdraw_max: bool,
 ) -> Result<()> {
     let close_obligation = {
-        check_refresh_ixs!(ctx, withdraw_reserve, ReserveFarmKind::Collateral);
+        if !skip_farm_check {
+            check_refresh_ixs!(
+                ctx.accounts,
+                ctx.accounts.withdraw_reserve,
+                ReserveFarmKind::Collateral
+            );
+        }
 
         lending_checks::withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
             &WithdrawObligationCollateralAndRedeemReserveCollateralAccounts {
@@ -50,6 +60,7 @@ pub fn process(
             collateral_amount,
             clock.slot,
             ctx.accounts.withdraw_reserve.key(),
+            permissive_withdraw_max,
         )?;
         let withdraw_liquidity_amount = lending_operations::redeem_reserve_collateral(
             reserve,
@@ -103,7 +114,6 @@ pub fn process(
 
 #[derive(Accounts)]
 pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
-    #[account(mut)]
     pub owner: Signer<'info>,
 
     #[account(mut,

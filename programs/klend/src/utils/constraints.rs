@@ -25,18 +25,20 @@ where
 }
 
 pub mod token_2022 {
-    use crate::{xmsg, LendingError};
     use anchor_lang::err;
-    use anchor_spl::token::spl_token;
-    use anchor_spl::token_2022::spl_token_2022;
-    use anchor_spl::token_2022::spl_token_2022::extension::confidential_transfer::EncryptedBalance;
-    use anchor_spl::token_interface::spl_token_2022::extension::ExtensionType;
-    use anchor_spl::token_interface::spl_token_2022::extension::{
-        BaseStateWithExtensions, StateWithExtensions,
+    use anchor_spl::{
+        token::spl_token,
+        token_2022::{
+            spl_token_2022, spl_token_2022::extension::confidential_transfer::EncryptedBalance,
+        },
+        token_interface::spl_token_2022::extension::{
+            BaseStateWithExtensions, ExtensionType, StateWithExtensions,
+        },
     };
     use bytemuck::Zeroable;
-    use solana_program::account_info::AccountInfo;
-    use solana_program::pubkey::Pubkey;
+    use solana_program::{account_info::AccountInfo, pubkey::Pubkey};
+
+    use crate::{xmsg, LendingError};
 
     const VALID_LIQUIDITY_TOKEN_EXTENSIONS: &[ExtensionType] = &[
         ExtensionType::ConfidentialTransferFeeConfig,
