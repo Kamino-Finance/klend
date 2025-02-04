@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub fn process(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
-    check_refresh_ixs!(ctx, reserve, ReserveFarmKind::Debt);
+    check_refresh_ixs!(ctx.accounts, ctx.accounts.reserve, ReserveFarmKind::Debt);
 
     let clock = Clock::get()?;
 

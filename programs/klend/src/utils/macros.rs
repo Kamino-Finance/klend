@@ -34,49 +34,37 @@ macro_rules! check_cpi {
 
 #[macro_export]
 macro_rules! check_refresh_ixs {
-    ($ctx:expr, $reserve:ident, $mode:expr) => {{
-        let _reserve = $ctx.accounts.$reserve.load()?;
+    ($ctx_accounts:expr, $reserve:expr, $mode:expr) => {{
+        let _reserve = $reserve.load()?;
         $crate::utils::check_refresh(
-            &$ctx.accounts.instruction_sysvar_account,
-            &[($ctx.accounts.$reserve.to_account_info().key(), &_reserve)],
-            &$ctx.accounts.obligation.to_account_info().key(),
+            &$ctx_accounts.instruction_sysvar_account,
+            &[($reserve.key(), &_reserve)],
+            &$ctx_accounts.obligation.to_account_info().key(),
             &[$mode],
         )?;
     }};
-    ($ctx:expr, $reserve_one:ident, $reserve_two:ident, $mode_one:expr, $mode_two:expr) => {{
-        let _reserve_one = $ctx.accounts.$reserve_one.load()?;
-        let _reserve_two = $ctx.accounts.$reserve_two.load()?;
+    ($ctx_accounts:expr, $reserve_one:expr, $reserve_two:expr, $mode_one:expr, $mode_two:expr) => {{
+        let _reserve_one = $reserve_one.load()?;
+        let _reserve_two = $reserve_two.load()?;
 
-        if $ctx.accounts.$reserve_one.key() == $ctx.accounts.$reserve_two.key() {
+        if $reserve_one.key() == $reserve_two.key() {
             $crate::utils::check_refresh(
-                &$ctx.accounts.instruction_sysvar_account,
+                &$ctx_accounts.instruction_sysvar_account,
                 &[
-                    (
-                        $ctx.accounts.$reserve_one.to_account_info().key(),
-                        &_reserve_one,
-                    ),
-                    (
-                        $ctx.accounts.$reserve_one.to_account_info().key(),
-                        &_reserve_one,
-                    ),
+                    ($reserve_one.key(), &_reserve_one),
+                    ($reserve_one.key(), &_reserve_one),
                 ],
-                &$ctx.accounts.obligation.to_account_info().key(),
+                &$ctx_accounts.obligation.to_account_info().key(),
                 &[$mode_one, $mode_two],
             )?;
         } else {
             $crate::utils::check_refresh(
-                &$ctx.accounts.instruction_sysvar_account,
+                &$ctx_accounts.instruction_sysvar_account,
                 &[
-                    (
-                        $ctx.accounts.$reserve_one.to_account_info().key(),
-                        &_reserve_one,
-                    ),
-                    (
-                        $ctx.accounts.$reserve_two.to_account_info().key(),
-                        &_reserve_two,
-                    ),
+                    ($reserve_one.key(), &_reserve_one),
+                    ($reserve_two.key(), &_reserve_two),
                 ],
-                &$ctx.accounts.obligation.to_account_info().key(),
+                &$ctx_accounts.obligation.to_account_info().key(),
                 &[$mode_one, $mode_two],
             )?;
         }

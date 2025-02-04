@@ -116,11 +116,11 @@ pub enum UpdateConfigMode {
     UpdateDepositWithdrawalCapCurrentTotal = 29,
     UpdateBadDebtLiquidationBonusBps = 30,
     UpdateMinLiquidationBonusBps = 31,
-    DeleveragingMarginCallPeriod = 32,
+    UpdateDeleveragingMarginCallPeriod = 32,
     UpdateBorrowFactor = 33,
     UpdateAssetTier = 34,
     UpdateElevationGroup = 35,
-    DeleveragingThresholdSlotsPerBps = 36,
+    UpdateDeleveragingThresholdDecreaseBpsPerDay = 36,
     DeprecatedUpdateMultiplierSideBoost = 37,
     DeprecatedUpdateMultiplierTagBoost = 38,
     UpdateReserveStatus = 39,
@@ -132,6 +132,8 @@ pub enum UpdateConfigMode {
     UpdateBorrowLimitOutsideElevationGroup = 45,
     UpdateBorrowLimitsInElevationGroupAgainstThisReserve = 46,
     UpdateHostFixedInterestRateBps = 47,
+    UpdateAutodeleverageEnabled = 48,
+    UpdateDeleveragingBonusIncreaseBpsPerDay = 49,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -194,6 +196,7 @@ impl UpdateLendingMarketConfigValue {
     Copy,
     Debug,
 )]
+#[cfg_attr(feature = "serde", derive(EnumIter))]
 #[repr(u64)]
 pub enum UpdateLendingMarketMode {
     UpdateOwner = 0,
@@ -216,6 +219,20 @@ pub enum UpdateLendingMarketMode {
     UpdateMinValueBfSkipPriorityLiqCheck = 17,
     UpdatePaddingFields = 18,
     UpdateName = 19,
+    UpdateIndividualAutodeleverageMarginCallPeriodSecs = 20,
+}
+
+#[cfg(feature = "serde")]
+pub mod serde_iter {
+    use strum::IntoEnumIterator;
+
+    use super::*;
+    impl UpdateLendingMarketMode {
+        pub fn iter_without_deprecated() -> impl Iterator<Item = Self> {
+            Self::iter()
+                .filter(|mode| *mode != UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints)
+        }
+    }
 }
 
 #[cfg(feature = "serde")]

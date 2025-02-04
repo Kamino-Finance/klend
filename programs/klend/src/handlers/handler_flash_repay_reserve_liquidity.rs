@@ -58,7 +58,7 @@ pub fn process(
             lending_market,
             reserve,
             liquidity_amount,
-            Clock::get()?.slot,
+            u64::try_from(Clock::get()?.unix_timestamp).unwrap(),
             referrer_token_state_loader,
         )?;
 

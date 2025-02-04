@@ -1,12 +1,15 @@
+use std::convert::TryFrom;
+
+use anchor_lang::prelude::*;
+use pyth_solana_receiver_sdk::price_update::{
+    Price as PythPrice, PriceFeedMessage, PriceUpdateV2, VerificationLevel,
+};
+
 use super::{
     types::{Price, TimestampedPriceWithTwap},
     utils, TimestampedPrice,
 };
 use crate::LendingError;
-use anchor_lang::prelude::*;
-use pyth_solana_receiver_sdk::price_update::Price as PythPrice;
-use pyth_solana_receiver_sdk::price_update::{PriceFeedMessage, PriceUpdateV2, VerificationLevel};
-use std::convert::TryFrom;
 
 pub(super) fn get_pyth_price_and_twap(
     pyth_price_info: &AccountInfo,

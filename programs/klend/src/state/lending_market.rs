@@ -92,17 +92,19 @@ pub struct LendingMarket {
 
     pub min_value_skip_liquidation_bf_checks: u64,
 
+    pub individual_autodeleverage_margin_call_period_secs: u64,
+
     #[cfg_attr(
         feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_padding_173")
+        serde(skip_deserializing, skip_serializing, default = "default_padding_171")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 172],
+    pub padding1: [u64; 171],
 }
 
 #[cfg(feature = "serde")]
-fn default_padding_173() -> [u64; 172] {
-    [0; 172]
+fn default_padding_171() -> [u64; 171] {
+    [0; 171]
 }
 
 #[cfg(feature = "serde")]
@@ -137,7 +139,8 @@ impl Default for LendingMarket {
             elevation_group_padding: [0; 90],
             min_net_value_in_obligation_sf: MIN_NET_VALUE_IN_OBLIGATION.to_bits(),
             name: [0; 32],
-            padding1: [0; 172],
+            individual_autodeleverage_margin_call_period_secs: 0,
+            padding1: [0; 171],
         }
     }
 }
@@ -178,6 +181,10 @@ impl LendingMarket {
 
     pub fn is_borrowing_disabled(&self) -> bool {
         self.borrow_disabled != false as u8
+    }
+
+    pub fn is_autodeleverage_enabled(&self) -> bool {
+        self.autodeleverage_enabled != false as u8
     }
 }
 

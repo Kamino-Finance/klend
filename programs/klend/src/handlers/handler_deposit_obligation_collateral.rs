@@ -3,8 +3,7 @@ use anchor_lang::{
     solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
     Accounts,
 };
-use anchor_spl::token::Token;
-use anchor_spl::token_interface::TokenAccount;
+use anchor_spl::{token::Token, token_interface::TokenAccount};
 
 use crate::{
     check_refresh_ixs,
@@ -15,7 +14,11 @@ use crate::{
 };
 
 pub fn process(ctx: Context<DepositObligationCollateral>, collateral_amount: u64) -> Result<()> {
-    check_refresh_ixs!(ctx, deposit_reserve, ReserveFarmKind::Collateral);
+    check_refresh_ixs!(
+        ctx.accounts,
+        ctx.accounts.deposit_reserve,
+        ReserveFarmKind::Collateral
+    );
     lending_checks::deposit_obligation_collateral_checks(&DepositObligationCollateralAccounts {
         obligation: ctx.accounts.obligation.clone(),
         deposit_reserve: ctx.accounts.deposit_reserve.clone(),

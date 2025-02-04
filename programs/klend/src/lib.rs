@@ -75,12 +75,19 @@ pub mod kamino_lending {
         handler_redeem_fees::process(ctx)
     }
 
+    pub fn withdraw_protocol_fee(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
+        handler_withdraw_protocol_fees::process(ctx, amount)
+    }
+
     pub fn socialize_loss(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
         handler_socialize_loss::process(ctx, liquidity_amount)
     }
 
-    pub fn withdraw_protocol_fee(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
-        handler_withdraw_protocol_fees::process(ctx, amount)
+    pub fn mark_obligation_for_deleveraging(
+        ctx: Context<MarkObligationForDeleveraging>,
+        autodeleverage_target_ltv_pct: u8,
+    ) -> Result<()> {
+        handler_mark_obligation_for_deleveraging::process(ctx, autodeleverage_target_ltv_pct)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
@@ -164,7 +171,16 @@ pub mod kamino_lending {
         ctx: Context<RepayObligationLiquidity>,
         liquidity_amount: u64,
     ) -> Result<()> {
-        handler_repay_obligation_liquidity::process(ctx, liquidity_amount)
+        handler_repay_obligation_liquidity::process(ctx, liquidity_amount, false)
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.repay_accounts.lending_market))]
+    pub fn repay_and_withdraw_and_redeem(
+        ctx: Context<RepayAndWithdraw>,
+        repay_amount: u64,
+        withdraw_collateral_amount: u64,
+    ) -> Result<()> {
+        handler_repay_and_withdraw_redeem::process(ctx, repay_amount, withdraw_collateral_amount)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
@@ -183,6 +199,8 @@ pub mod kamino_lending {
         handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::process(
             ctx,
             collateral_amount,
+            false,
+            false,
         )
     }
 
@@ -501,6 +519,14 @@ pub enum LendingError {
     DepositDisabledOutsideElevationGroup,
     #[msg("Cannot calculate referral amount due to slots mismatch")]
     CannotCalculateReferralAmountDueToSlotsMismatch,
+    #[msg("Obligation owners must match")]
+    ObligationOwnersMustMatch,
+    #[msg("Obligations must match")]
+    ObligationsMustMatch,
+    #[msg("Lending markets must match")]
+    LendingMarketsMustMatch,
+    #[msg("Obligation is already marked for deleveraging")]
+    ObligationAlreadyMarkedForDeleveraging,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

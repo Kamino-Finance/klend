@@ -50,7 +50,8 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
         price_res,
         lending_market.referral_fee_bps,
     )?;
-    lending_operations::refresh_reserve_limit_timestamps(reserve, clock.slot)?;
+    let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+    lending_operations::refresh_reserve_limit_timestamps(reserve, timestamp);
 
     msg!(
         "Token: {} Price: {}",

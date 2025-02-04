@@ -1,3 +1,11 @@
+use anchor_lang::{
+    err, error,
+    prelude::{msg, AccountInfo},
+    Result,
+};
+use sbod_itf::accounts::PullFeedAccountData;
+use solana_program::clock::{Clock, DEFAULT_MS_PER_SLOT};
+
 use crate::{
     utils::{
         prices::{
@@ -9,13 +17,6 @@ use crate::{
     },
     LendingError,
 };
-use anchor_lang::{
-    err, error,
-    prelude::{msg, AccountInfo},
-    Result,
-};
-use sbod_itf::accounts::PullFeedAccountData;
-use solana_program::clock::{Clock, DEFAULT_MS_PER_SLOT};
 
 pub(super) fn get_switchboard_price_and_twap(
     switchboard_price_feed_info: &AccountInfo,

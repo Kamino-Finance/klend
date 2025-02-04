@@ -21,7 +21,11 @@ pub fn process<'info>(
     liquidity_amount: u64,
 ) -> Result<()> {
     msg!("liquidity_amount {}", liquidity_amount);
-    check_refresh_ixs!(ctx, borrow_reserve, ReserveFarmKind::Debt);
+    check_refresh_ixs!(
+        ctx.accounts,
+        ctx.accounts.borrow_reserve,
+        ReserveFarmKind::Debt
+    );
     lending_checks::borrow_obligation_liquidity_checks(&ctx)?;
 
     let borrow_reserve = &mut ctx.accounts.borrow_reserve.load_mut()?;

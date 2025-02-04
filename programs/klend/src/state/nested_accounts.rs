@@ -1,6 +1,8 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token::Token;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use anchor_spl::{
+    token::Token,
+    token_interface::{Mint, TokenAccount, TokenInterface},
+};
 
 use super::{obligation::Obligation, LendingMarket, Reserve};
 

@@ -13,8 +13,18 @@ use crate::{
     xmsg, LendingAction, ReserveFarmKind,
 };
 
-pub fn process(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) -> Result<()> {
-    check_refresh_ixs!(ctx, repay_reserve, ReserveFarmKind::Debt);
+pub fn process(
+    ctx: Context<RepayObligationLiquidity>,
+    liquidity_amount: u64,
+    skip_farm_check: bool,
+) -> Result<()> {
+    if !skip_farm_check {
+        check_refresh_ixs!(
+            ctx.accounts,
+            ctx.accounts.repay_reserve,
+            ReserveFarmKind::Debt
+        );
+    }
     lending_checks::repay_obligation_liquidity_checks(&ctx)?;
 
     let clock = Clock::get()?;

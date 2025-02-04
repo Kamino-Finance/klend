@@ -9,7 +9,7 @@ use derivative::Derivative;
 use super::LastUpdate;
 use crate::{
     utils::{BigFraction, Fraction, FractionExtra, ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256},
-    xmsg, AssetTier, BigFractionBytes, LendingError, LendingResult,
+    xmsg, AssetTier, BigFractionBytes, LendingError,
 };
 
 static_assertions::const_assert_eq!(OBLIGATION_SIZE, std::mem::size_of::<Obligation>());
@@ -46,13 +46,17 @@ pub struct Obligation {
 
     pub borrowing_disabled: u8,
 
+    pub autodeleverage_target_ltv_pct: u8,
+
     #[derivative(Debug = "ignore")]
-    pub reserved: [u8; 7],
+    pub reserved: [u8; 6],
 
     pub highest_borrow_factor_pct: u64,
 
+    pub autodeleverage_margin_call_started_timestamp: u64,
+
     #[derivative(Debug = "ignore")]
-    pub padding_3: [u64; 126],
+    pub padding_3: [u64; 125],
 }
 
 impl Default for Obligation {
@@ -77,9 +81,11 @@ impl Default for Obligation {
             has_debt: 0,
             borrowing_disabled: 0,
             highest_borrow_factor_pct: 0,
-            reserved: [0; 7],
-            padding_3: [0; 126],
+            reserved: [0; 6],
+            padding_3: [0; 125],
             referrer: Pubkey::default(),
+            autodeleverage_target_ltv_pct: 0,
+            autodeleverage_margin_call_started_timestamp: 0,
         }
     }
 }
@@ -164,7 +170,7 @@ impl Obligation {
             / Fraction::from_bits(self.deposited_value_sf)
     }
 
-    pub fn repay(&mut self, settle_amount: Fraction, liquidity_index: usize) -> Result<()> {
+    pub fn repay(&mut self, settle_amount: Fraction, liquidity_index: usize) {
         let liquidity = &mut self.borrows[liquidity_index];
         if settle_amount == Fraction::from_bits(liquidity.borrowed_amount_sf) {
             self.borrows[liquidity_index] = ObligationLiquidity::default();
@@ -172,7 +178,6 @@ impl Obligation {
         } else {
             liquidity.repay(settle_amount);
         }
-        Ok(())
     }
 
     pub fn withdraw(
@@ -191,23 +196,39 @@ impl Obligation {
         }
     }
 
-    pub fn max_withdraw_value(&self, withdraw_collateral_ltv_pct: u8) -> LendingResult<Fraction> {
-        let allowed_borrow_value = Fraction::from_bits(self.allowed_borrow_value_sf);
+    pub fn max_withdraw_value(
+        &self,
+        obligation_collateral: &ObligationCollateral,
+        reserve_max_ltv_pct: u8,
+        reserve_liq_threshold_pct: u8,
+        permissive_withdraw_max: bool,
+    ) -> Fraction {
+        let (highest_allowed_borrow_value, withdraw_collateral_ltv_pct) = if permissive_withdraw_max
+        {
+            (
+                Fraction::from_bits(self.unhealthy_borrow_value_sf),
+                reserve_liq_threshold_pct,
+            )
+        } else {
+            (
+                Fraction::from_bits(self.allowed_borrow_value_sf),
+                reserve_max_ltv_pct,
+            )
+        };
+
         let borrow_factor_adjusted_debt_value =
             Fraction::from_bits(self.borrow_factor_adjusted_debt_value_sf);
 
-        if allowed_borrow_value <= borrow_factor_adjusted_debt_value {
-            return Ok(Fraction::ZERO);
+        if highest_allowed_borrow_value <= borrow_factor_adjusted_debt_value {
+            return Fraction::ZERO;
         }
 
         if withdraw_collateral_ltv_pct == 0 {
-            return Ok(Fraction::from_bits(self.deposited_value_sf));
+            return Fraction::from_bits(obligation_collateral.market_value_sf);
         }
 
-        Ok(
-            allowed_borrow_value.saturating_sub(borrow_factor_adjusted_debt_value) * 100_u128
-                / u128::from(withdraw_collateral_ltv_pct),
-        )
+        highest_allowed_borrow_value.saturating_sub(borrow_factor_adjusted_debt_value) * 100_u128
+            / u128::from(withdraw_collateral_ltv_pct)
     }
 
     pub fn remaining_borrow_value(&self) -> Fraction {
@@ -407,6 +428,23 @@ impl Obligation {
         } else {
             self.has_debt = 1;
         }
+    }
+
+    pub fn is_marked_for_deleveraging(&self) -> bool {
+        self.autodeleverage_margin_call_started_timestamp != 0
+    }
+
+    pub fn mark_for_deleveraging(&mut self, current_timestamp: u64, target_ltv_pct: u8) {
+        if current_timestamp == 0 {
+            panic!("value reserved for non-marked state");
+        }
+        self.autodeleverage_margin_call_started_timestamp = current_timestamp;
+        self.autodeleverage_target_ltv_pct = target_ltv_pct;
+    }
+
+    pub fn unmark_for_deleveraging(&mut self) {
+        self.autodeleverage_margin_call_started_timestamp = 0;
+        self.autodeleverage_target_ltv_pct = 0;
     }
 }
 
