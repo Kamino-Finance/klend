@@ -9,29 +9,45 @@ use crate::{
     LendingError, Reserve, ReserveFarmKind,
 };
 
-pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Result<()> {
+pub fn process_refresh_obligation_farms_for_reserve(
+    ctx: Context<RefreshObligationFarmsForReserve>,
+    mode: u8,
+) -> Result<()> {
     constraints::check_remaining_accounts(&ctx)?;
-    lending_checks::refresh_obligation_farms_for_reserve_checks(&ctx)?;
     let farm_kind: ReserveFarmKind = mode.try_into().unwrap();
+    process_impl_refresh_obligation_farms_for_reserve(&ctx.accounts.base_accounts, farm_kind)
+}
 
-    msg!("RefreshObligationFarmsForReserve {:?}", farm_kind);
-    let reserve = &mut ctx.accounts.reserve.load()?;
-    let reserve_address: Pubkey = *ctx.accounts.reserve.to_account_info().key;
-
-    let farm_address = reserve.get_farm(farm_kind);
-    require!(
-        farm_address == ctx.accounts.reserve_farm_state.key(),
+pub(crate) fn process_impl_refresh_obligation_farms_for_reserve(
+    account_ctx: &RefreshObligationFarmsForReserveBase,
+    farm_kind: ReserveFarmKind,
+) -> Result<()> {
+    lending_checks::refresh_obligation_farms_for_reserve_checks(account_ctx)?;
+    require_keys_eq!(
+        account_ctx.obligation_farm_user_state.load()?.delegatee,
+        account_ctx.obligation.key(),
         LendingError::InvalidAccountInput
     );
+
+    msg!("RefreshObligationFarmsForReserve {:?}", farm_kind);
+    let reserve = &account_ctx.reserve.load()?;
+    let reserve_address: Pubkey = *account_ctx.reserve.to_account_info().key;
+
+    let farm_address = reserve.get_farm(farm_kind);
     if farm_address == Pubkey::default() {
         return Err(LendingError::NoFarmForReserve.into());
     }
+    require_keys_eq!(
+        farm_address,
+        account_ctx.reserve_farm_state.key(),
+        LendingError::InvalidAccountInput
+    );
 
-    let amount = if ctx.accounts.obligation.data_is_empty() {
+    let amount = if account_ctx.obligation.data_is_empty() {
         0
     } else {
         let obligation_account: FatAccountLoader<Obligation> =
-            FatAccountLoader::try_from(&ctx.accounts.obligation).unwrap();
+            FatAccountLoader::try_from(&account_ctx.obligation).unwrap();
         let obligation = obligation_account.load()?;
 
         amount_for_obligation(&obligation, &reserve_address, farm_kind)
@@ -43,14 +59,13 @@ pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Resu
         Clock::get()?.slot,
     );
 
-    if ctx
-        .accounts
+    if account_ctx
         .obligation_farm_user_state
         .load()?
         .active_stake_scaled
         != u128::from(amount)
     {
-        farms_ixs::cpi_set_stake_delegated(&ctx, reserve, farm_kind, amount)?;
+        farms_ixs::cpi_set_stake_delegated(account_ctx, reserve, farm_kind, amount)?;
     } else {
         msg!("Farm stake is unchanged, skipping update");
     }
@@ -60,15 +75,21 @@ pub fn process(ctx: Context<RefreshObligationFarmsForReserve>, mode: u8) -> Resu
 
 #[derive(Accounts)]
 pub struct RefreshObligationFarmsForReserve<'info> {
-    #[account(mut)]
+    #[account()]
     pub crank: Signer<'info>,
-    #[account(
-        constraint = obligation_farm_user_state.load()?.delegatee == obligation.key() @ LendingError::InvalidAccountInput
-    )]
+
+    pub base_accounts: RefreshObligationFarmsForReserveBase<'info>,
+
+    pub farms_program: Program<'info, Farms>,
+    pub rent: Sysvar<'info, Rent>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RefreshObligationFarmsForReserveBase<'info> {
     pub obligation: AccountInfo<'info>,
 
     #[account(
-        mut,
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
@@ -80,16 +101,18 @@ pub struct RefreshObligationFarmsForReserve<'info> {
     #[account(mut)]
     pub reserve_farm_state: AccountInfo<'info>,
 
-    #[account(mut,
-        constraint = obligation_farm_user_state.load()?.delegatee == obligation.key() @ LendingError::InvalidAccountInput,
-    )]
+    #[account(mut)]
     pub obligation_farm_user_state: AccountLoader<'info, FarmsUserState>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
+}
 
-    pub farms_program: Program<'info, Farms>,
-    pub rent: Sysvar<'info, Rent>,
-    pub system_program: Program<'info, System>,
+#[derive(Accounts)]
+pub struct OptionalObligationFarmsAccounts<'info> {
+    #[account(mut)]
+    pub obligation_farm_user_state: Option<AccountLoader<'info, FarmsUserState>>,
+    #[account(mut)]
+    pub reserve_farm_state: Option<AccountInfo<'info>>,
 }
 
 fn amount_for_obligation(

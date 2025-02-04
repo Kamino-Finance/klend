@@ -1,5 +1,5 @@
 #![allow(clippy::result_large_err)]
-
+#![allow(deprecated)]
 use anchor_lang::prelude::*;
 
 mod handlers;
@@ -32,7 +32,6 @@ solana_security_txt::security_txt! {
 
 #[program]
 pub mod kamino_lending {
-
     use super::*;
 
     pub fn init_lending_market(
@@ -79,8 +78,16 @@ pub mod kamino_lending {
         handler_withdraw_protocol_fees::process(ctx, amount)
     }
 
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     pub fn socialize_loss(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
-        handler_socialize_loss::process(ctx, liquidity_amount)
+        handler_socialize_loss::process_v1(ctx, liquidity_amount)
+    }
+
+    pub fn socialize_loss_v2(ctx: Context<SocializeLossV2>, liquidity_amount: u64) -> Result<()> {
+        handler_socialize_loss::process_v2(ctx, liquidity_amount)
     }
 
     pub fn mark_obligation_for_deleveraging(
@@ -129,49 +136,99 @@ pub mod kamino_lending {
         handler_init_obligation_farms_for_reserve::process(ctx, mode)
     }
 
-    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    #[access_control(emergency_mode_disabled(&ctx.accounts.base_accounts.lending_market))]
     pub fn refresh_obligation_farms_for_reserve(
         ctx: Context<RefreshObligationFarmsForReserve>,
         mode: u8,
     ) -> Result<()> {
-        handler_refresh_obligation_farms_for_reserve::process(ctx, mode)
+        handler_refresh_obligation_farms_for_reserve::process_refresh_obligation_farms_for_reserve(
+            ctx, mode,
+        )
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_obligation(ctx: Context<RefreshObligation>) -> Result<()> {
-        handler_refresh_obligation::process(ctx)
+        handler_refresh_obligation::process(ctx, MaxReservesAsCollateralCheck::Perform)
     }
 
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn deposit_obligation_collateral(
         ctx: Context<DepositObligationCollateral>,
         collateral_amount: u64,
     ) -> Result<()> {
-        handler_deposit_obligation_collateral::process(ctx, collateral_amount)
+        handler_deposit_obligation_collateral::process_v1(ctx, collateral_amount)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.deposit_accounts.lending_market))]
+    pub fn deposit_obligation_collateral_v2(
+        ctx: Context<DepositObligationCollateralV2>,
+        collateral_amount: u64,
+    ) -> Result<()> {
+        handler_deposit_obligation_collateral::process_v2(ctx, collateral_amount)
+    }
+
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn withdraw_obligation_collateral(
         ctx: Context<WithdrawObligationCollateral>,
         collateral_amount: u64,
     ) -> Result<()> {
-        handler_withdraw_obligation_collateral::process(ctx, collateral_amount)
+        handler_withdraw_obligation_collateral::process_v1(ctx, collateral_amount)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.withdraw_accounts.lending_market))]
+    pub fn withdraw_obligation_collateral_v2(
+        ctx: Context<WithdrawObligationCollateralV2>,
+        collateral_amount: u64,
+    ) -> Result<()> {
+        handler_withdraw_obligation_collateral::process_v2(ctx, collateral_amount)
+    }
+
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn borrow_obligation_liquidity<'info>(
         ctx: Context<'_, '_, '_, 'info, BorrowObligationLiquidity<'info>>,
         liquidity_amount: u64,
     ) -> Result<()> {
-        handler_borrow_obligation_liquidity::process(ctx, liquidity_amount)
+        handler_borrow_obligation_liquidity::process_v1(ctx, liquidity_amount)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.borrow_accounts.lending_market))]
+    pub fn borrow_obligation_liquidity_v2<'info>(
+        ctx: Context<'_, '_, '_, 'info, BorrowObligationLiquidityV2<'info>>,
+        liquidity_amount: u64,
+    ) -> Result<()> {
+        handler_borrow_obligation_liquidity::process_v2(ctx, liquidity_amount)
+    }
+
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn repay_obligation_liquidity(
         ctx: Context<RepayObligationLiquidity>,
         liquidity_amount: u64,
     ) -> Result<()> {
-        handler_repay_obligation_liquidity::process(ctx, liquidity_amount, false)
+        handler_repay_obligation_liquidity::process_v1(ctx, liquidity_amount)
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.repay_accounts.lending_market))]
+    pub fn repay_obligation_liquidity_v2(
+        ctx: Context<RepayObligationLiquidityV2>,
+        liquidity_amount: u64,
+    ) -> Result<()> {
+        handler_repay_obligation_liquidity::process_v2(ctx, liquidity_amount)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.repay_accounts.lending_market))]
@@ -183,27 +240,72 @@ pub mod kamino_lending {
         handler_repay_and_withdraw_redeem::process(ctx, repay_amount, withdraw_collateral_amount)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.deposit_accounts.lending_market))]
+    pub fn deposit_and_withdraw(
+        ctx: Context<DepositAndWithdraw>,
+        liquidity_amount: u64,
+        withdraw_collateral_amount: u64,
+    ) -> Result<()> {
+        handler_deposit_and_withdraw::process(ctx, liquidity_amount, withdraw_collateral_amount)
+    }
+
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn deposit_reserve_liquidity_and_obligation_collateral(
         ctx: Context<DepositReserveLiquidityAndObligationCollateral>,
         liquidity_amount: u64,
     ) -> Result<()> {
-        handler_deposit_reserve_liquidity_and_obligation_collateral::process(ctx, liquidity_amount)
+        handler_deposit_reserve_liquidity_and_obligation_collateral::process_v1(
+            ctx,
+            liquidity_amount,
+        )
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.deposit_accounts.lending_market))]
+    pub fn deposit_reserve_liquidity_and_obligation_collateral_v2(
+        ctx: Context<DepositReserveLiquidityAndObligationCollateralV2>,
+        liquidity_amount: u64,
+    ) -> Result<()> {
+        handler_deposit_reserve_liquidity_and_obligation_collateral::process_v2(
+            ctx,
+            liquidity_amount,
+        )
+    }
+
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn withdraw_obligation_collateral_and_redeem_reserve_collateral(
         ctx: Context<WithdrawObligationCollateralAndRedeemReserveCollateral>,
         collateral_amount: u64,
     ) -> Result<()> {
-        handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::process(
+        handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::process_v1(
             ctx,
             collateral_amount,
-            false,
-            false,
+        )?;
+        Ok(())
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.withdraw_accounts.lending_market))]
+    pub fn withdraw_obligation_collateral_and_redeem_reserve_collateral_v2(
+        ctx: Context<WithdrawObligationCollateralAndRedeemReserveCollateralV2>,
+        collateral_amount: u64,
+    ) -> Result<()> {
+        handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::process_v2(
+            ctx,
+            collateral_amount,
         )
     }
 
+    #[deprecated(
+        since = "1.8.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn liquidate_obligation_and_redeem_reserve_collateral(
         ctx: Context<LiquidateObligationAndRedeemReserveCollateral>,
@@ -211,7 +313,22 @@ pub mod kamino_lending {
         min_acceptable_received_liquidity_amount: u64,
         max_allowed_ltv_override_percent: u64,
     ) -> Result<()> {
-        handler_liquidate_obligation_and_redeem_reserve_collateral::process(
+        handler_liquidate_obligation_and_redeem_reserve_collateral::process_v1(
+            ctx,
+            liquidity_amount,
+            min_acceptable_received_liquidity_amount,
+            max_allowed_ltv_override_percent,
+        )
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.liquidation_accounts.lending_market))]
+    pub fn liquidate_obligation_and_redeem_reserve_collateral_v2(
+        ctx: Context<LiquidateObligationAndRedeemReserveCollateralV2>,
+        liquidity_amount: u64,
+        min_acceptable_received_liquidity_amount: u64,
+        max_allowed_ltv_override_percent: u64,
+    ) -> Result<()> {
+        handler_liquidate_obligation_and_redeem_reserve_collateral::process_v2(
             ctx,
             liquidity_amount,
             min_acceptable_received_liquidity_amount,
@@ -526,7 +643,17 @@ pub enum LendingError {
     #[msg("Lending markets must match")]
     LendingMarketsMustMatch,
     #[msg("Obligation is already marked for deleveraging")]
-    ObligationAlreadyMarkedForDeleveraging,
+    ObligationCurrentlyMarkedForDeleveraging,
+    #[msg("Maximum withdrawable value of this collateral is zero, LTV needs improved")]
+    MaximumWithdrawValueZero,
+    #[msg("No max LTV 0 assets allowed in deposits for repay and withdraw")]
+    ZeroMaxLtvAssetsInDeposits,
+    #[msg("The operation must prioritize the collateral with the lowest LTV")]
+    MinLtvAssetsPriority,
+    #[msg("Cannot get the obligation liquidatable")]
+    WorseLTVThanUnhealthyLTV,
+    #[msg("Farm accounts to refresh are missing")]
+    FarmAccountsMissing,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

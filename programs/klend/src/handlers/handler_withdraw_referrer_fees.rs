@@ -64,7 +64,7 @@ pub struct WithdrawReferrerFees<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
-    #[account(mut,
+    #[account(
         address = reserve.load()?.liquidity.mint_pubkey,
         mint::token_program = token_program,
     )]

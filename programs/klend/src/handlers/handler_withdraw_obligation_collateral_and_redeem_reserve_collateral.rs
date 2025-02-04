@@ -10,47 +10,80 @@ use anchor_spl::{
 
 use crate::{
     check_refresh_ixs, gen_signer_seeds,
+    handler_refresh_obligation_farms_for_reserve::*,
     lending_market::{lending_checks, lending_operations},
+    refresh_farms,
     state::{obligation::Obligation, LendingMarket, Reserve},
     utils::{close_account_loader, seeds, token_transfer},
-    LendingAction, ReserveFarmKind, WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
+    LendingAction, LtvMaxWithdrawalCheck, ReserveFarmKind,
+    WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
 };
 
-pub fn process(
+pub fn process_v1(
     ctx: Context<WithdrawObligationCollateralAndRedeemReserveCollateral>,
     collateral_amount: u64,
-    skip_farm_check: bool,
-    permissive_withdraw_max: bool,
 ) -> Result<()> {
-    let close_obligation = {
-        if !skip_farm_check {
-            check_refresh_ixs!(
-                ctx.accounts,
-                ctx.accounts.withdraw_reserve,
-                ReserveFarmKind::Collateral
-            );
-        }
+    check_refresh_ixs!(
+        ctx.accounts,
+        ctx.accounts.withdraw_reserve,
+        ReserveFarmKind::Collateral
+    );
 
+    let _ = process_impl(
+        ctx.accounts,
+        collateral_amount,
+        LtvMaxWithdrawalCheck::MaxLtv,
+    )?;
+
+    Ok(())
+}
+
+pub fn process_v2(
+    ctx: Context<WithdrawObligationCollateralAndRedeemReserveCollateralV2>,
+    collateral_amount: u64,
+) -> Result<()> {
+    process_impl(
+        &ctx.accounts.withdraw_accounts,
+        collateral_amount,
+        LtvMaxWithdrawalCheck::MaxLtv,
+    )?;
+    refresh_farms!(
+        ctx.accounts.withdraw_accounts,
+        [(
+            ctx.accounts.withdraw_accounts.withdraw_reserve,
+            ctx.accounts.farms_accounts,
+            Collateral,
+        )]
+    );
+    Ok(())
+}
+
+pub(super) fn process_impl(
+    accounts: &WithdrawObligationCollateralAndRedeemReserveCollateral,
+    collateral_amount: u64,
+    ltv_max_withdrawal_check: LtvMaxWithdrawalCheck,
+) -> Result<bool> {
+    let close_obligation = {
         lending_checks::withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
             &WithdrawObligationCollateralAndRedeemReserveCollateralAccounts {
-                user_destination_liquidity: ctx.accounts.user_destination_liquidity.clone(),
-                withdraw_reserve: ctx.accounts.withdraw_reserve.clone(),
-                reserve_liquidity_mint: ctx.accounts.reserve_liquidity_mint.clone(),
+                user_destination_liquidity: accounts.user_destination_liquidity.clone(),
+                withdraw_reserve: accounts.withdraw_reserve.clone(),
+                reserve_liquidity_mint: accounts.reserve_liquidity_mint.clone(),
             },
         )?;
 
-        let reserve = &mut ctx.accounts.withdraw_reserve.load_mut()?;
+        let reserve = &mut accounts.withdraw_reserve.load_mut()?;
 
-        let obligation = &mut ctx.accounts.obligation.load_mut()?;
-        let lending_market = &ctx.accounts.lending_market.load()?;
-        let lending_market_key = ctx.accounts.lending_market.key();
+        let obligation = &mut accounts.obligation.load_mut()?;
+        let lending_market = &accounts.lending_market.load()?;
+        let lending_market_key = accounts.lending_market.key();
         let clock = &Clock::get()?;
 
         let authority_signer_seeds =
             gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
         let initial_reserve_token_balance = token_interface::accessor::amount(
-            &ctx.accounts.reserve_liquidity_supply.to_account_info(),
+            &accounts.reserve_liquidity_supply.to_account_info(),
         )?;
         let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
         let withdraw_obligation_amount = lending_operations::withdraw_obligation_collateral(
@@ -59,8 +92,8 @@ pub fn process(
             obligation,
             collateral_amount,
             clock.slot,
-            ctx.accounts.withdraw_reserve.key(),
-            permissive_withdraw_max,
+            accounts.withdraw_reserve.key(),
+            ltv_max_withdrawal_check,
         )?;
         let withdraw_liquidity_amount = lending_operations::redeem_reserve_collateral(
             reserve,
@@ -75,25 +108,23 @@ pub fn process(
         );
 
         token_transfer::withdraw_and_redeem_reserve_collateral_transfer(
-            ctx.accounts.collateral_token_program.to_account_info(),
-            ctx.accounts.liquidity_token_program.to_account_info(),
-            ctx.accounts.reserve_liquidity_mint.to_account_info(),
-            ctx.accounts.reserve_collateral_mint.to_account_info(),
-            ctx.accounts.reserve_source_collateral.to_account_info(),
-            ctx.accounts.reserve_liquidity_supply.to_account_info(),
-            ctx.accounts.user_destination_liquidity.to_account_info(),
-            ctx.accounts.lending_market_authority.clone(),
+            accounts.collateral_token_program.to_account_info(),
+            accounts.liquidity_token_program.to_account_info(),
+            accounts.reserve_liquidity_mint.to_account_info(),
+            accounts.reserve_collateral_mint.to_account_info(),
+            accounts.reserve_source_collateral.to_account_info(),
+            accounts.reserve_liquidity_supply.to_account_info(),
+            accounts.user_destination_liquidity.to_account_info(),
+            accounts.lending_market_authority.clone(),
             authority_signer_seeds,
             withdraw_obligation_amount,
             withdraw_liquidity_amount,
-            ctx.accounts.reserve_liquidity_mint.decimals,
+            accounts.reserve_liquidity_mint.decimals,
         )?;
 
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
-            token_interface::accessor::amount(
-                &ctx.accounts.reserve_liquidity_supply.to_account_info(),
-            )
-            .unwrap(),
+            token_interface::accessor::amount(&accounts.reserve_liquidity_supply.to_account_info())
+                .unwrap(),
             reserve.liquidity.available_amount,
             initial_reserve_token_balance,
             initial_reserve_available_liquidity,
@@ -103,17 +134,14 @@ pub fn process(
         obligation.deposits_empty() && obligation.borrows_empty()
     };
 
-    close_account_loader(
-        close_obligation,
-        &ctx.accounts.owner,
-        &ctx.accounts.obligation,
-    )?;
+    close_account_loader(close_obligation, &accounts.owner, &accounts.obligation)?;
 
-    Ok(())
+    Ok(close_obligation)
 }
 
 #[derive(Accounts)]
 pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
+    #[account(mut)]
     pub owner: Signer<'info>,
 
     #[account(mut,
@@ -132,7 +160,7 @@ pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
     #[account(mut, has_one = lending_market)]
     pub withdraw_reserve: AccountLoader<'info, Reserve>,
 
-    #[account(mut,
+    #[account(
         address = withdraw_reserve.load()?.liquidity.mint_pubkey,
         mint::token_program = liquidity_token_program,
     )]
@@ -162,4 +190,11 @@ pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
 
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawObligationCollateralAndRedeemReserveCollateralV2<'info> {
+    pub withdraw_accounts: WithdrawObligationCollateralAndRedeemReserveCollateral<'info>,
+    pub farms_accounts: OptionalObligationFarmsAccounts<'info>,
+    pub farms_program: Program<'info, farms::program::Farms>,
 }

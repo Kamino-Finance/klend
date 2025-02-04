@@ -9,8 +9,6 @@ pub const SLOTS_PER_HOUR: u64 = SLOTS_PER_MINUTE * 60;
 pub const SLOTS_PER_DAY: u64 = SLOTS_PER_HOUR * 24;
 pub const SLOTS_PER_YEAR: u64 = SLOTS_PER_DAY * 365;
 
-pub const SECONDS_PER_YEAR: f64 = 365.242_199 * 24.0 * 60.0 * 60.0;
-pub const SECONDS_PER_YEAR_U64: u64 = 31556925;
 pub const SECONDS_PER_MINUTE: u64 = 60;
 pub const SECONDS_PER_HOUR: u64 = SECONDS_PER_MINUTE * 60;
 pub const SECONDS_PER_DAY: u64 = SECONDS_PER_HOUR * 24;
@@ -37,8 +35,6 @@ pub const NO_DELEVERAGING_MARKER: u8 = u8::MAX;
 pub const MAX_OBLIGATION_RESERVES: u64 = 20;
 
 pub const CLOSE_TO_INSOLVENCY_RISKY_LTV: u8 = 95;
-
-pub const MAX_MGMT_FEE_BPS: u64 = 1000;
 
 pub const NULL_PUBKEY: solana_program::pubkey::Pubkey =
     solana_program::pubkey::Pubkey::new_from_array([

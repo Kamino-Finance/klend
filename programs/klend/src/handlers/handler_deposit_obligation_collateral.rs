@@ -5,34 +5,58 @@ use anchor_lang::{
 };
 use anchor_spl::{token::Token, token_interface::TokenAccount};
 
+use super::OptionalObligationFarmsAccounts;
 use crate::{
     check_refresh_ixs,
+    handler_refresh_obligation_farms_for_reserve::*,
     lending_market::{lending_checks, lending_operations},
+    refresh_farms,
     state::{obligation::Obligation, DepositObligationCollateralAccounts, LendingMarket, Reserve},
-    utils::token_transfer,
-    ReserveFarmKind,
+    utils::{seeds, token_transfer},
+    MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
-pub fn process(ctx: Context<DepositObligationCollateral>, collateral_amount: u64) -> Result<()> {
+pub fn process_v1(ctx: Context<DepositObligationCollateral>, collateral_amount: u64) -> Result<()> {
     check_refresh_ixs!(
         ctx.accounts,
         ctx.accounts.deposit_reserve,
         ReserveFarmKind::Collateral
     );
+    process_impl(ctx.accounts, collateral_amount)
+}
+
+pub fn process_v2(
+    ctx: Context<DepositObligationCollateralV2>,
+    collateral_amount: u64,
+) -> Result<()> {
+    process_impl(&ctx.accounts.deposit_accounts, collateral_amount)?;
+    refresh_farms!(
+        ctx.accounts.deposit_accounts,
+        ctx.accounts.lending_market_authority,
+        [(
+            ctx.accounts.deposit_accounts.deposit_reserve,
+            ctx.accounts.farms_accounts,
+            Collateral,
+        )],
+    );
+    Ok(())
+}
+
+fn process_impl(accounts: &DepositObligationCollateral, collateral_amount: u64) -> Result<()> {
     lending_checks::deposit_obligation_collateral_checks(&DepositObligationCollateralAccounts {
-        obligation: ctx.accounts.obligation.clone(),
-        deposit_reserve: ctx.accounts.deposit_reserve.clone(),
-        reserve_destination_collateral: ctx.accounts.reserve_destination_collateral.clone(),
-        user_source_collateral: ctx.accounts.user_source_collateral.clone(),
-        obligation_owner: ctx.accounts.owner.clone(),
-        token_program: ctx.accounts.token_program.clone(),
+        obligation: accounts.obligation.clone(),
+        deposit_reserve: accounts.deposit_reserve.clone(),
+        reserve_destination_collateral: accounts.reserve_destination_collateral.clone(),
+        user_source_collateral: accounts.user_source_collateral.clone(),
+        obligation_owner: accounts.owner.clone(),
+        token_program: accounts.token_program.clone(),
     })?;
 
     let clock = Clock::get()?;
 
-    let lending_market = &ctx.accounts.lending_market.load()?;
-    let deposit_reserve = &mut ctx.accounts.deposit_reserve.load_mut()?;
-    let obligation = &mut ctx.accounts.obligation.load_mut()?;
+    let lending_market = &accounts.lending_market.load()?;
+    let deposit_reserve = &mut accounts.deposit_reserve.load_mut()?;
+    let obligation = &mut accounts.obligation.load_mut()?;
 
     lending_operations::refresh_reserve(
         deposit_reserve,
@@ -47,7 +71,8 @@ pub fn process(ctx: Context<DepositObligationCollateral>, collateral_amount: u64
         obligation,
         clock.slot,
         collateral_amount,
-        ctx.accounts.deposit_reserve.key(),
+        accounts.deposit_reserve.key(),
+        MaxReservesAsCollateralCheck::Perform,
     )?;
 
     msg!(
@@ -56,12 +81,10 @@ pub fn process(ctx: Context<DepositObligationCollateral>, collateral_amount: u64
     );
 
     token_transfer::deposit_obligation_collateral_transfer(
-        ctx.accounts.user_source_collateral.to_account_info(),
-        ctx.accounts
-            .reserve_destination_collateral
-            .to_account_info(),
-        ctx.accounts.owner.to_account_info(),
-        ctx.accounts.token_program.to_account_info(),
+        accounts.user_source_collateral.to_account_info(),
+        accounts.reserve_destination_collateral.to_account_info(),
+        accounts.owner.to_account_info(),
+        accounts.token_program.to_account_info(),
         collateral_amount,
     )?;
 
@@ -99,4 +122,16 @@ pub struct DepositObligationCollateral<'info> {
 
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct DepositObligationCollateralV2<'info> {
+    pub deposit_accounts: DepositObligationCollateral<'info>,
+    #[account(
+        seeds = [seeds::LENDING_MARKET_AUTH, deposit_accounts.lending_market.key().as_ref()],
+        bump = deposit_accounts.lending_market.load()?.bump_seed as u8,
+    )]
+    pub lending_market_authority: AccountInfo<'info>,
+    pub farms_accounts: OptionalObligationFarmsAccounts<'info>,
+    pub farms_program: Program<'info, farms::program::Farms>,
 }

@@ -6,7 +6,7 @@ use std::{
 use anchor_lang::{account, err, prelude::*, solana_program::clock::Slot, Result};
 use derivative::Derivative;
 
-use super::LastUpdate;
+use super::{LastUpdate, LtvMaxWithdrawalCheck};
 use crate::{
     utils::{BigFraction, Fraction, FractionExtra, ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256},
     xmsg, AssetTier, BigFractionBytes, LendingError,
@@ -48,8 +48,10 @@ pub struct Obligation {
 
     pub autodeleverage_target_ltv_pct: u8,
 
+    pub lowest_reserve_deposit_max_ltv_pct: u8,
+
     #[derivative(Debug = "ignore")]
-    pub reserved: [u8; 6],
+    pub reserved: [u8; 5],
 
     pub highest_borrow_factor_pct: u64,
 
@@ -81,7 +83,8 @@ impl Default for Obligation {
             has_debt: 0,
             borrowing_disabled: 0,
             highest_borrow_factor_pct: 0,
-            reserved: [0; 6],
+            lowest_reserve_deposit_max_ltv_pct: 0,
+            reserved: [0; 5],
             padding_3: [0; 125],
             referrer: Pubkey::default(),
             autodeleverage_target_ltv_pct: 0,
@@ -201,20 +204,20 @@ impl Obligation {
         obligation_collateral: &ObligationCollateral,
         reserve_max_ltv_pct: u8,
         reserve_liq_threshold_pct: u8,
-        permissive_withdraw_max: bool,
+        ltv_max_withdrawal_check: LtvMaxWithdrawalCheck,
     ) -> Fraction {
-        let (highest_allowed_borrow_value, withdraw_collateral_ltv_pct) = if permissive_withdraw_max
-        {
-            (
-                Fraction::from_bits(self.unhealthy_borrow_value_sf),
-                reserve_liq_threshold_pct,
-            )
-        } else {
-            (
-                Fraction::from_bits(self.allowed_borrow_value_sf),
-                reserve_max_ltv_pct,
-            )
-        };
+        let (highest_allowed_borrow_value, withdraw_collateral_ltv_pct) =
+            if ltv_max_withdrawal_check == LtvMaxWithdrawalCheck::LiquidationThreshold {
+                (
+                    Fraction::from_bits(self.unhealthy_borrow_value_sf),
+                    reserve_liq_threshold_pct,
+                )
+            } else {
+                (
+                    Fraction::from_bits(self.allowed_borrow_value_sf),
+                    reserve_max_ltv_pct,
+                )
+            };
 
         let borrow_factor_adjusted_debt_value =
             Fraction::from_bits(self.borrow_factor_adjusted_debt_value_sf);
@@ -418,6 +421,18 @@ impl Obligation {
         }
     }
 
+    pub fn get_bf_adjusted_debt_value(&self) -> Fraction {
+        Fraction::from_bits(self.borrow_factor_adjusted_debt_value_sf)
+    }
+
+    pub fn get_allowed_borrow_value(&self) -> Fraction {
+        Fraction::from_bits(self.allowed_borrow_value_sf)
+    }
+
+    pub fn get_unhealthy_borrow_value(&self) -> Fraction {
+        Fraction::from_bits(self.unhealthy_borrow_value_sf)
+    }
+
     pub fn has_referrer(&self) -> bool {
         self.referrer != Pubkey::default()
     }
@@ -445,6 +460,17 @@ impl Obligation {
     pub fn unmark_for_deleveraging(&mut self) {
         self.autodeleverage_margin_call_started_timestamp = 0;
         self.autodeleverage_target_ltv_pct = 0;
+    }
+
+    pub fn check_not_marked_for_deleveraging(&self) -> Result<()> {
+        if self.is_marked_for_deleveraging() {
+            msg!(
+                "Obligation marked for deleveraging since {}",
+                self.autodeleverage_margin_call_started_timestamp
+            );
+            return err!(LendingError::ObligationCurrentlyMarkedForDeleveraging);
+        }
+        Ok(())
     }
 }
 

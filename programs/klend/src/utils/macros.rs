@@ -34,7 +34,7 @@ macro_rules! check_cpi {
 
 #[macro_export]
 macro_rules! check_refresh_ixs {
-    ($ctx_accounts:expr, $reserve:expr, $mode:expr) => {{
+    ($ctx_accounts:expr, $reserve:expr, $mode:expr $(,)?) => {{
         let _reserve = $reserve.load()?;
         $crate::utils::check_refresh(
             &$ctx_accounts.instruction_sysvar_account,
@@ -43,7 +43,7 @@ macro_rules! check_refresh_ixs {
             &[$mode],
         )?;
     }};
-    ($ctx_accounts:expr, $reserve_one:expr, $reserve_two:expr, $mode_one:expr, $mode_two:expr) => {{
+    ($ctx_accounts:expr, $reserve_one:expr, $reserve_two:expr, $mode_one:expr, $mode_two:expr $(,)?) => {{
         let _reserve_one = $reserve_one.load()?;
         let _reserve_two = $reserve_two.load()?;
 
@@ -68,6 +68,28 @@ macro_rules! check_refresh_ixs {
                 &[$mode_one, $mode_two],
             )?;
         }
+    }};
+}
+
+#[macro_export]
+macro_rules! refresh_farms {
+    ($ctx_accounts:expr, [$(,)?]$(,)?) => {};
+    ($ctx_accounts:expr, $lending_market_authority:expr, [$(,)?]$(,)?) => {};
+    ($ctx_accounts:expr, [$($tail:tt)*]$(,)?) => {
+        refresh_farms!($ctx_accounts, $ctx_accounts.lending_market_authority, [$($tail)*]);
+    };
+    ($ctx_accounts:expr, $lending_market_authority:expr, [$(,)?($reserve:expr, $farm_accounts:expr, $mode:ident$(,)?) $($tail:tt)*]$(,)?) => {{
+        $crate::utils::cpi_refresh_farms::refresh_obligation_farms_for_reserve(
+            $crate::utils::cpi_refresh_farms::RefreshFarmsParams {
+                reserve: &$reserve,
+                farms_accounts: &$farm_accounts,
+                farm_kind: ReserveFarmKind::$mode,
+            },
+            &$ctx_accounts.obligation,
+            &$lending_market_authority,
+            &$ctx_accounts.lending_market,
+        )?;
+        refresh_farms!($ctx_accounts, $lending_market_authority, [$($tail)*]);
     }};
 }
 
