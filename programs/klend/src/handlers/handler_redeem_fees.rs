@@ -48,7 +48,7 @@ pub struct RedeemFees<'info> {
     #[account(mut,
         has_one = lending_market)]
     pub reserve: AccountLoader<'info, Reserve>,
-    #[account(mut,
+    #[account(
         address = reserve.load()?.liquidity.mint_pubkey,
         mint::token_program = token_program,
     )]

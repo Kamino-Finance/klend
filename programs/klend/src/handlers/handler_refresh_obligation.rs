@@ -4,10 +4,13 @@ use crate::{
     lending_market::lending_operations,
     state::{obligation::Obligation, LendingMarket},
     utils::FatAccountLoader,
-    LendingError, ReferrerTokenState, Reserve,
+    LendingError, MaxReservesAsCollateralCheck, ReferrerTokenState, Reserve,
 };
 
-pub fn process(ctx: Context<RefreshObligation>) -> Result<()> {
+pub fn process(
+    ctx: Context<RefreshObligation>,
+    max_reserves_as_collateral_check: MaxReservesAsCollateralCheck,
+) -> Result<()> {
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let clock = &Clock::get()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
@@ -59,6 +62,7 @@ pub fn process(ctx: Context<RefreshObligation>) -> Result<()> {
         obligation,
         lending_market,
         clock.slot,
+        max_reserves_as_collateral_check,
         deposit_reserves_iter,
         borrow_reserves_iter,
         referrer_token_states_iter,

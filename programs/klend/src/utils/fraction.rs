@@ -20,6 +20,8 @@ pub use uint_types::{U128, U256};
 
 pub const FRACTION_ONE_SCALED: u128 = Fraction::ONE.to_bits();
 
+pub const EPSILON: Fraction = Fraction::from_bits(1_000_000);
+
 pub fn pow_fraction(fraction: Fraction, power: u32) -> Option<Fraction> {
     if power == 0 {
         return Some(Fraction::ONE);
@@ -67,6 +69,8 @@ pub trait FractionExtra {
 
     fn mul_int_ratio(&self, numerator: impl Into<u128>, denominator: impl Into<u128>) -> Self;
     fn full_mul_int_ratio(&self, numerator: impl Into<U256>, denominator: impl Into<U256>) -> Self;
+
+    fn div_ceil(&self, denominator: &Self) -> Self;
 
     fn to_floor<Dst: FromFixed>(&self) -> Dst;
     fn to_ceil<Dst: FromFixed>(&self) -> Dst;
@@ -126,6 +130,16 @@ impl FractionExtra for Fraction {
             .try_into()
             .expect("Denominator is not big enough, the result doesn't fit in a Fraction.");
         Fraction::from_bits(sf_res)
+    }
+
+    #[inline]
+    fn div_ceil(&self, denum: &Self) -> Self {
+        let num_sf = self.to_bits();
+        let denum_sf = denum.to_bits();
+        let res_sf_u256 =
+            ((U256::from(num_sf) << Self::FRAC_NBITS) + U256::from(denum_sf - 1)) / denum_sf;
+        let res_sf = u128::try_from(res_sf_u256).expect("Overflow in div_ceil");
+        Self::from_bits(res_sf)
     }
 
     #[inline]

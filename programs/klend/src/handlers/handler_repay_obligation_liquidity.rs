@@ -7,34 +7,64 @@ use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
 
 use crate::{
     check_refresh_ixs,
+    handler_refresh_obligation_farms_for_reserve::*,
     lending_market::{lending_checks, lending_operations},
+    refresh_farms,
     state::{obligation::Obligation, LendingMarket, Reserve},
-    utils::{token_transfer, FatAccountLoader},
+    utils::{seeds, token_transfer, FatAccountLoader},
     xmsg, LendingAction, ReserveFarmKind,
 };
 
-pub fn process(
-    ctx: Context<RepayObligationLiquidity>,
+pub fn process_v1(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) -> Result<()> {
+    check_refresh_ixs!(
+        ctx.accounts,
+        ctx.accounts.repay_reserve,
+        ReserveFarmKind::Debt
+    );
+
+    process_impl(
+        ctx.accounts,
+        ctx.remaining_accounts.iter(),
+        liquidity_amount,
+    )
+}
+
+pub fn process_v2(ctx: Context<RepayObligationLiquidityV2>, liquidity_amount: u64) -> Result<()> {
+    process_impl(
+        &ctx.accounts.repay_accounts,
+        ctx.remaining_accounts.iter(),
+        liquidity_amount,
+    )?;
+    refresh_farms!(
+        ctx.accounts.repay_accounts,
+        ctx.accounts.lending_market_authority,
+        [(
+            ctx.accounts.repay_accounts.repay_reserve,
+            ctx.accounts.farms_accounts,
+            Debt,
+        ),],
+    );
+    Ok(())
+}
+
+pub(super) fn process_impl<'a, 'info>(
+    accounts: &RepayObligationLiquidity,
+    remaining_accounts: impl Iterator<Item = &'a AccountInfo<'info>>,
     liquidity_amount: u64,
-    skip_farm_check: bool,
-) -> Result<()> {
-    if !skip_farm_check {
-        check_refresh_ixs!(
-            ctx.accounts,
-            ctx.accounts.repay_reserve,
-            ReserveFarmKind::Debt
-        );
-    }
-    lending_checks::repay_obligation_liquidity_checks(&ctx)?;
+) -> Result<()>
+where
+    'info: 'a,
+{
+    lending_checks::repay_obligation_liquidity_checks(accounts)?;
 
     let clock = Clock::get()?;
 
-    let repay_reserve = &mut ctx.accounts.repay_reserve.load_mut()?;
-    let obligation = &mut ctx.accounts.obligation.load_mut()?;
-    let lending_market = &ctx.accounts.lending_market.load()?;
+    let repay_reserve = &mut accounts.repay_reserve.load_mut()?;
+    let obligation = &mut accounts.obligation.load_mut()?;
+    let lending_market = &accounts.lending_market.load()?;
 
     let initial_reserve_token_balance = token_interface::accessor::amount(
-        &ctx.accounts.reserve_destination_liquidity.to_account_info(),
+        &accounts.reserve_destination_liquidity.to_account_info(),
     )?;
     let initial_reserve_available_liquidity = repay_reserve.liquidity.available_amount;
 
@@ -43,9 +73,9 @@ pub fn process(
         obligation,
         &clock,
         liquidity_amount,
-        ctx.accounts.repay_reserve.key(),
+        accounts.repay_reserve.key(),
         lending_market,
-        ctx.remaining_accounts.iter().map(|a| {
+        remaining_accounts.map(|a| {
             FatAccountLoader::try_from(a).expect("Remaining account is not a valid deposit reserve")
         }),
     )?;
@@ -57,18 +87,18 @@ pub fn process(
     );
 
     token_transfer::repay_obligation_liquidity_transfer(
-        ctx.accounts.token_program.to_account_info(),
-        ctx.accounts.reserve_liquidity_mint.to_account_info(),
-        ctx.accounts.user_source_liquidity.to_account_info(),
-        ctx.accounts.reserve_destination_liquidity.to_account_info(),
-        ctx.accounts.owner.to_account_info(),
+        accounts.token_program.to_account_info(),
+        accounts.reserve_liquidity_mint.to_account_info(),
+        accounts.user_source_liquidity.to_account_info(),
+        accounts.reserve_destination_liquidity.to_account_info(),
+        accounts.owner.to_account_info(),
         repay_amount,
-        ctx.accounts.reserve_liquidity_mint.decimals,
+        accounts.reserve_liquidity_mint.decimals,
     )?;
 
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
         token_interface::accessor::amount(
-            &ctx.accounts.reserve_destination_liquidity.to_account_info(),
+            &accounts.reserve_destination_liquidity.to_account_info(),
         )
         .unwrap(),
         repay_reserve.liquidity.available_amount,
@@ -97,7 +127,7 @@ pub struct RepayObligationLiquidity<'info> {
     )]
     pub repay_reserve: AccountLoader<'info, Reserve>,
 
-    #[account(mut,
+    #[account(
         address = repay_reserve.load()?.liquidity.mint_pubkey,
         mint::token_program = token_program,
     )]
@@ -117,4 +147,16 @@ pub struct RepayObligationLiquidity<'info> {
 
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct RepayObligationLiquidityV2<'info> {
+    pub repay_accounts: RepayObligationLiquidity<'info>,
+    pub farms_accounts: OptionalObligationFarmsAccounts<'info>,
+    #[account(
+        seeds = [seeds::LENDING_MARKET_AUTH, repay_accounts.lending_market.key().as_ref()],
+        bump = repay_accounts.lending_market.load()?.bump_seed as u8,
+    )]
+    pub lending_market_authority: AccountInfo<'info>,
+    pub farms_program: Program<'info, farms::program::Farms>,
 }

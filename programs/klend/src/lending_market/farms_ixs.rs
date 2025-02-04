@@ -9,7 +9,7 @@ use crate::{
     handlers::{
         handler_init_farms_for_reserve::InitFarmsForReserve,
         handler_init_obligation_farms_for_reserve::InitObligationFarmsForReserve,
-        handler_refresh_obligation_farms_for_reserve::RefreshObligationFarmsForReserve,
+        handler_refresh_obligation_farms_for_reserve::RefreshObligationFarmsForReserveBase,
     },
     Reserve, ReserveFarmKind,
 };
@@ -101,19 +101,18 @@ pub fn cpi_initialize_farmer_delegated(
 }
 
 pub fn cpi_set_stake_delegated(
-    ctx: &Context<RefreshObligationFarmsForReserve>,
+    accounts_ctx: &RefreshObligationFarmsForReserveBase,
     reserve: &Reserve,
     mode: ReserveFarmKind,
     amount: u64,
 ) -> Result<()> {
-    let lending_market = ctx.accounts.lending_market.load()?;
-    let lending_market_key = ctx.accounts.lending_market.key();
+    let lending_market = accounts_ctx.lending_market.load()?;
+    let lending_market_key = accounts_ctx.lending_market.key();
     let farm = reserve.get_farm(mode);
-    let farmer = ctx.accounts.obligation_farm_user_state.key();
+    let farmer = accounts_ctx.obligation_farm_user_state.key();
 
     let accounts = farms::accounts::SetStakeDelegated {
-        delegate_authority: ctx
-            .accounts
+        delegate_authority: accounts_ctx
             .lending_market_authority
             .to_account_info()
             .key(),
@@ -125,7 +124,7 @@ pub fn cpi_set_stake_delegated(
     let data = farms::instruction::SetStakeDelegated { new_amount: amount }.data();
 
     let instruction = Instruction {
-        program_id: ctx.accounts.farms_program.key(),
+        program_id: farms::id(),
         accounts,
         data,
     };
@@ -133,7 +132,7 @@ pub fn cpi_set_stake_delegated(
     let lending_market_authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
-    let account_infos = ctx.accounts.to_account_infos();
+    let account_infos = accounts_ctx.to_account_infos();
 
     program::invoke_signed(
         &instruction,

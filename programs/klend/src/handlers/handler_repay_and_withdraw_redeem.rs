@@ -1,12 +1,15 @@
 use anchor_lang::{prelude::*, Accounts};
 
 use crate::{
-    check_refresh_ixs, handler_refresh_obligation,
+    handler_refresh_obligation,
+    handler_refresh_obligation_farms_for_reserve::*,
     handler_repay_obligation_liquidity::{self, *},
     handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::{self, *},
     lending_market::lending_operations,
-    utils::seeds::BASE_SEED_REFERRER_TOKEN_STATE,
-    LendingError, RefreshObligation, RefreshObligationBumps, ReserveFarmKind,
+    refresh_farms,
+    utils::seeds::pda,
+    LendingError, LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck, RefreshObligation,
+    RefreshObligationBumps, ReserveFarmKind,
 };
 
 pub fn process(
@@ -14,83 +17,81 @@ pub fn process(
     repay_amount: u64,
     withdraw_collateral_amount: u64,
 ) -> Result<()> {
-    panic!("This operation is not yet supported");
+    process_impl(
+        &ctx.accounts.repay_accounts,
+        &ctx.accounts.withdraw_accounts,
+        ctx.remaining_accounts,
+        ctx.program_id,
+        repay_amount,
+        withdraw_collateral_amount,
+    )?;
 
-    check_refresh_ixs!(
-        ctx.accounts.repay_accounts,
-        ctx.accounts.repay_accounts.repay_reserve,
-        ctx.accounts.withdraw_accounts.withdraw_reserve,
-        ReserveFarmKind::Debt,
-        ReserveFarmKind::Collateral
+    refresh_farms!(
+        ctx.accounts.withdraw_accounts,
+        [
+            (
+                ctx.accounts.withdraw_accounts.withdraw_reserve,
+                ctx.accounts.collateral_farms_accounts,
+                Collateral,
+            ),
+            (
+                ctx.accounts.repay_accounts.repay_reserve,
+                ctx.accounts.debt_farms_accounts,
+                Debt,
+            ),
+        ],
     );
 
-    require_keys_eq!(
-        ctx.accounts.repay_accounts.owner.key(),
-        ctx.accounts.withdraw_accounts.owner.key(),
-        LendingError::ObligationOwnersMustMatch
-    );
+    Ok(())
+}
 
-    require_keys_eq!(
-        ctx.accounts.repay_accounts.obligation.key(),
-        ctx.accounts.withdraw_accounts.obligation.key(),
-        LendingError::ObligationsMustMatch
-    );
-
-    require_keys_eq!(
-        ctx.accounts.repay_accounts.lending_market.key(),
-        ctx.accounts.withdraw_accounts.lending_market.key(),
-        LendingError::LendingMarketsMustMatch
-    );
-
-    let repay_reserve_key = ctx.accounts.repay_accounts.repay_reserve.key();
-    let withdraw_reserve_key = ctx.accounts.withdraw_accounts.withdraw_reserve.key();
+fn process_impl(
+    repay_accounts: &RepayObligationLiquidity,
+    withdraw_accounts: &WithdrawObligationCollateralAndRedeemReserveCollateral,
+    remaining_accounts: &[AccountInfo],
+    program_id: &Pubkey,
+    repay_amount: u64,
+    withdraw_collateral_amount: u64,
+) -> Result<()> {
+    let repay_reserve_key = repay_accounts.repay_reserve.key();
+    let withdraw_reserve_key = withdraw_accounts.withdraw_reserve.key();
+    let clock = Clock::get()?;
+    let lending_market = repay_accounts.lending_market.load()?;
 
     let previous_borrow_count;
     let deposit_count;
     let referrer;
-    let mut has_referrer = false;
+    let initial_ltv;
+    let has_referrer;
     {
-        let obligation = ctx.accounts.withdraw_accounts.obligation.load()?;
+        let obligation = withdraw_accounts.obligation.load()?;
 
         deposit_count = obligation.deposits_count();
         previous_borrow_count = obligation.borrows_count();
         referrer = obligation.referrer;
-
-        if referrer != Pubkey::default() {
-            has_referrer = true;
-        }
-
-        let deposit_reserves_iter: Vec<_> = ctx
-            .remaining_accounts
-            .iter()
-            .take(deposit_count)
-            .cloned()
-            .collect();
+        initial_ltv = obligation.loan_to_value();
+        has_referrer = obligation.has_referrer();
 
         drop(obligation);
-        let repay_ctx = Context {
-            program_id: ctx.program_id,
-            accounts: &mut ctx.accounts.repay_accounts,
-            remaining_accounts: deposit_reserves_iter.as_slice(),
-            bumps: RepayObligationLiquidityBumps {},
-        };
 
-        handler_repay_obligation_liquidity::process(repay_ctx, repay_amount, true)?;
+        let deposit_reserves_iter = remaining_accounts.iter().take(deposit_count);
+
+        handler_repay_obligation_liquidity::process_impl(
+            repay_accounts,
+            deposit_reserves_iter,
+            repay_amount,
+        )?;
     }
 
     let borrow_count_post_repay = {
-        let obligation = ctx.accounts.repay_accounts.obligation.load()?;
+        let obligation = repay_accounts.obligation.load()?;
         let borrow_count_post_repay = obligation.borrows_count();
         drop(obligation);
 
         if borrow_count_post_repay == previous_borrow_count
             || repay_reserve_key == withdraw_reserve_key
         {
-            let clock = Clock::get()?;
-
-            let lending_market = ctx.accounts.repay_accounts.lending_market.load()?;
-
-            let repay_reserve = &mut ctx.accounts.repay_accounts.repay_reserve.load_mut()?;
+            let repay_reserve = &mut repay_accounts.repay_reserve.load_mut()?;
 
             lending_operations::refresh_reserve(
                 repay_reserve,
@@ -103,72 +104,126 @@ pub fn process(
         borrow_count_post_repay
     };
 
-    {
-        let mut reserves_iter: Vec<AccountInfo>;
+    let mut remaining_accounts_post_repay = {
         let remaining_accounts = if previous_borrow_count == borrow_count_post_repay {
-            ctx.remaining_accounts
+            remaining_accounts.to_vec()
         } else {
-            let mut referrer_to_skip = Pubkey::default();
-            if has_referrer {
-                referrer_to_skip = Pubkey::find_program_address(
-                    &[
-                        BASE_SEED_REFERRER_TOKEN_STATE,
-                        &referrer.as_ref(),
-                        &repay_reserve_key.as_ref(),
-                    ],
-                    ctx.program_id,
-                )
-                .0;
-            }
-            let mut found_repay_reserve = false;
-            reserves_iter = ctx
-                .remaining_accounts
+            let referrer_to_skip = if has_referrer {
+                pda::referrer_token_state(referrer, repay_reserve_key).0
+            } else {
+                Pubkey::default()
+            };
+
+            let mut reserves_iter: Vec<AccountInfo> = remaining_accounts
                 .iter()
                 .rev()
-                .filter(|account| {
-                    if account.key() == referrer_to_skip {
-                        false
-                    } else if account.key() == repay_reserve_key && !found_repay_reserve {
-                        found_repay_reserve = true;
-                        false
+                .scan(false, |found_repay_reserve, account| {
+                    let is_repay_reserve = account.key() == repay_reserve_key;
+
+                    let accounts_to_include = account.key() != referrer_to_skip
+                        && (!is_repay_reserve || *found_repay_reserve);
+
+                    *found_repay_reserve = *found_repay_reserve || is_repay_reserve;
+
+                    if accounts_to_include {
+                        Some(Some(account.clone()))
                     } else {
-                        true
+                        Some(None)
                     }
                 })
-                .cloned()
-                .collect::<Vec<AccountInfo>>();
-
+                .flatten()
+                .collect::<Vec<_>>();
             reserves_iter.reverse();
-
-            reserves_iter.as_slice()
+            reserves_iter
         };
 
         let refresh_obligation_ctx = Context {
-            program_id: ctx.program_id,
+            program_id,
             accounts: &mut RefreshObligation {
-                obligation: ctx.accounts.repay_accounts.obligation.clone(),
-                lending_market: ctx.accounts.repay_accounts.lending_market.clone(),
+                obligation: repay_accounts.obligation.clone(),
+                lending_market: repay_accounts.lending_market.clone(),
             },
-            remaining_accounts,
+            remaining_accounts: remaining_accounts.as_slice(),
             bumps: RefreshObligationBumps {},
         };
 
-        handler_refresh_obligation::process(refresh_obligation_ctx)?;
-    }
+        handler_refresh_obligation::process(
+            refresh_obligation_ctx,
+            MaxReservesAsCollateralCheck::Perform,
+        )?;
 
-    {
-        let withdraw_ctx = Context {
-            program_id: ctx.program_id,
-            accounts: &mut ctx.accounts.withdraw_accounts,
-            remaining_accounts: ctx.remaining_accounts,
-            bumps: WithdrawObligationCollateralAndRedeemReserveCollateralBumps {},
+        remaining_accounts
+    };
+
+    let obligation_was_closed = {
+        handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::process_impl(
+            withdraw_accounts,
+            withdraw_collateral_amount,
+            LtvMaxWithdrawalCheck::LiquidationThreshold,
+        )?
+    };
+
+    if !obligation_was_closed {
+        let (final_deposit_amount, withdraw_reserve_key_is_repay_reserve) = {
+            let obligation = withdraw_accounts.obligation.load()?;
+            let final_deposit_amount = obligation
+                .find_collateral_in_deposits(withdraw_reserve_key)
+                .map_or(0, |collateral| collateral.deposited_amount);
+
+            let withdraw_reserve_key_is_repay_reserve = obligation
+                .find_liquidity_in_borrows(withdraw_reserve_key)
+                .is_ok();
+
+            (final_deposit_amount, withdraw_reserve_key_is_repay_reserve)
         };
 
-        handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::process(
-            withdraw_ctx,
-            withdraw_collateral_amount,
-            true,
-            true,
+        let is_full_withdrawal = final_deposit_amount == 0;
+
+        if !is_full_withdrawal || withdraw_reserve_key_is_repay_reserve {
+            let withdraw_reserve = &mut withdraw_accounts.withdraw_reserve.load_mut()?;
+            lending_operations::refresh_reserve(
+                withdraw_reserve,
+                &clock,
+                None,
+                lending_market.referral_fee_bps,
+            )?;
+        }
+
+        let remaining_accounts_post_withdrawal = if is_full_withdrawal {
+            let withdraw_reserve_index = remaining_accounts_post_repay
+                .iter()
+                .position(|account| account.key() == withdraw_reserve_key)
+                .unwrap();
+            remaining_accounts_post_repay.remove(withdraw_reserve_index);
+            remaining_accounts_post_repay
+        } else {
+            remaining_accounts_post_repay
+        };
+
+        let refresh_obligation_ctx = Context {
+            program_id,
+            accounts: &mut RefreshObligation {
+                obligation: repay_accounts.obligation.clone(),
+                lending_market: repay_accounts.lending_market.clone(),
+            },
+            remaining_accounts: remaining_accounts_post_withdrawal.as_slice(),
+            bumps: RefreshObligationBumps {},
+        };
+
+        handler_refresh_obligation::process(
+            refresh_obligation_ctx,
+            MaxReservesAsCollateralCheck::Perform,
+        )?;
+
+        let mut obligation = withdraw_accounts.obligation.load_mut()?;
+        obligation.last_update.mark_stale();
+
+        let withdraw_reserve = &withdraw_accounts.withdraw_reserve.load()?;
+
+        lending_operations::utils::post_repay_and_withdraw_obligation_enforcements(
+            &obligation,
+            withdraw_reserve,
+            initial_ltv,
         )?;
     }
 
@@ -177,6 +232,14 @@ pub fn process(
 
 #[derive(Accounts)]
 pub struct RepayAndWithdraw<'info> {
+    #[account(
+        constraint = repay_accounts.owner.key()          == withdraw_accounts.owner.key()          @ LendingError::ObligationOwnersMustMatch,
+        constraint = repay_accounts.obligation.key()     == withdraw_accounts.obligation.key()     @ LendingError::ObligationsMustMatch,
+        constraint = repay_accounts.lending_market.key() == withdraw_accounts.lending_market.key() @ LendingError::LendingMarketsMustMatch,
+    )]
     pub repay_accounts: RepayObligationLiquidity<'info>,
     pub withdraw_accounts: WithdrawObligationCollateralAndRedeemReserveCollateral<'info>,
+    pub collateral_farms_accounts: OptionalObligationFarmsAccounts<'info>,
+    pub debt_farms_accounts: OptionalObligationFarmsAccounts<'info>,
+    pub farms_program: Program<'info, farms::program::Farms>,
 }
