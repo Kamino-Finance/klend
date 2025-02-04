@@ -388,6 +388,14 @@ fn check_individual_autodeleverage_obligation(
     if !obligation.is_marked_for_deleveraging() {
         return None;
     }
+    if !lending_market.is_autodeleverage_enabled() {
+        xmsg!("Obligation is marked for auto-deleveraging, but the feature is disabled");
+        return None;
+    }
+    if lending_market.individual_autodeleverage_margin_call_period_secs == 0 {
+        xmsg!("Obligation is marked for auto-deleveraging, but the feature is misconfigured");
+        return None;
+    }
     let user_ltv = obligation.loan_to_value();
     let autodeleverage_target_ltv =
         Fraction::from_percent(obligation.autodeleverage_target_ltv_pct);
