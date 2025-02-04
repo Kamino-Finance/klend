@@ -2824,7 +2824,7 @@ pub mod utils {
 
             let new_unhealthy_ltv = new_unhealthy_borrow_value / new_total_deposited_mv;
 
-            if new_ltv >= new_unhealthy_ltv {
+            if new_ltv >= new_unhealthy_ltv && new_ltv != 0 {
                 msg!(
                     "Obligation new LTV/new unhealthy LTV after withdraw {:.2}/{:.2} of {}",
                     new_ltv.to_display(),
