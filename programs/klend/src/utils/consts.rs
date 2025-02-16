@@ -143,8 +143,10 @@ pub const EXPONENT_CORE_ID_MAINNET: Pubkey =
 
 pub const AGRO_ID_MAINNET: Pubkey = pubkey!("AgroFiE3bX7j4Tvfa7YAoFLqjjb35Bw6eed5BuYukPEn");
 pub const AGRO_STAGING_ID_MAINNET: Pubkey = pubkey!("E7jPY6J5s2uAxAjJQX5tqoASkmFr6TYxVoMm97hPLNZ1");
+pub const DAOS_FUN_DAO_V1_ID_MAINNET: Pubkey =
+    pubkey!("4FqThZWv3QKWkSyXCDmATpWkpEiCHq5yhkdGWpSEDAZM");
 
-pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 16] = [
+pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 17] = [
     CpiWhitelistedAccount::new(FLEX_LEND_ID_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_PROD, 1),
     CpiWhitelistedAccount::new(SQUADS_PROGRAM_ID_V3_MAINNET_DEV, 1),
@@ -161,6 +163,7 @@ pub const CPI_WHITELISTED_ACCOUNTS: [CpiWhitelistedAccount; 16] = [
     CpiWhitelistedAccount::new(EXPONENT_CORE_ID_MAINNET, 3),
     CpiWhitelistedAccount::new(AGRO_ID_MAINNET, 1),
     CpiWhitelistedAccount::new(AGRO_STAGING_ID_MAINNET, 1),
+    CpiWhitelistedAccount::new(DAOS_FUN_DAO_V1_ID_MAINNET, 1),
 ];
 
 pub struct CpiWhitelistedAccount {
