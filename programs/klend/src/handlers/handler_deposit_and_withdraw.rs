@@ -129,7 +129,8 @@ pub fn process(
         let mut obligation = ctx.accounts.withdraw_accounts.obligation.load_mut()?;
         obligation.last_update.mark_stale();
 
-        let withdraw_reserve = ctx.accounts.withdraw_accounts.withdraw_reserve.load()?;
+        let mut withdraw_reserve = ctx.accounts.withdraw_accounts.withdraw_reserve.load_mut()?;
+        withdraw_reserve.last_update.mark_stale();
         let lending_market = ctx.accounts.withdraw_accounts.lending_market.load()?;
 
         lending_operations::utils::post_deposit_and_withdraw_obligation_enforcements(

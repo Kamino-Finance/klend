@@ -14,7 +14,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{seeds, token_transfer},
-    LendingAction,
+    DepositLiquidityResult, LendingAction,
 };
 
 pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> Result<()> {
@@ -47,11 +47,13 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
     let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
-    let collateral_amount =
-        lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
+    let DepositLiquidityResult {
+        liquidity_amount,
+        collateral_amount,
+    } = lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
 
     msg!(
-        "pnl: Depositing in reserve {:?} liquidity {}",
+        "pnl: Depositing in reserve {} liquidity {}",
         ctx.accounts.reserve.key(),
         liquidity_amount
     );

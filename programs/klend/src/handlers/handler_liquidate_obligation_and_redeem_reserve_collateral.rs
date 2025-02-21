@@ -253,6 +253,8 @@ fn process_impl(
         )?;
     }
 
+    lending_checks::post_liquidate_repay_amount_check(liquidity_amount, repay_amount)?;
+
     Ok(())
 }
 

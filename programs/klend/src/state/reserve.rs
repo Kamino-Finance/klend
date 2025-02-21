@@ -17,12 +17,12 @@ use serde;
 
 #[cfg(feature = "serde")]
 use super::serde_bool_u8;
-use super::{LastUpdate, TokenInfo};
+use super::{DepositLiquidityResult, LastUpdate, TokenInfo};
 use crate::{
     fraction::FractionExtra,
     utils::{
         borrow_rate_curve::BorrowRateCurve, BigFraction, Fraction, INITIAL_COLLATERAL_RATE,
-        PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR,
+        PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
     },
     CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult, ReferrerTokenState,
 };
@@ -173,15 +173,39 @@ impl Reserve {
         }
     }
 
-    pub fn deposit_liquidity(&mut self, liquidity_amount: u64) -> Result<u64> {
+    pub fn compute_depositable_amount_and_minted_collateral(
+        &self,
+        liquidity_amount: u64,
+    ) -> Result<DepositLiquidityResult> {
         let collateral_amount = self
             .collateral_exchange_rate()
             .liquidity_to_collateral(liquidity_amount);
 
+        let liquidity_amount_to_deposit = self
+            .collateral_exchange_rate()
+            .collateral_to_liquidity_ceil(collateral_amount);
+
+        require_gte!(
+            liquidity_amount,
+            liquidity_amount_to_deposit,
+            LendingError::MathOverflow
+        );
+
+        Ok(DepositLiquidityResult {
+            liquidity_amount: liquidity_amount_to_deposit,
+            collateral_amount,
+        })
+    }
+
+    pub fn deposit_liquidity(
+        &mut self,
+        liquidity_amount: u64,
+        collateral_amount: u64,
+    ) -> Result<()> {
         self.liquidity.deposit(liquidity_amount)?;
         self.collateral.mint(collateral_amount)?;
 
-        Ok(collateral_amount)
+        Ok(())
     }
 
     pub fn redeem_collateral(&mut self, collateral_amount: u64) -> Result<u64> {
@@ -412,23 +436,33 @@ impl Default for ReserveLiquidity {
 
 impl ReserveLiquidity {
     pub fn new(params: NewReserveLiquidityParams) -> Self {
+        let NewReserveLiquidityParams {
+            mint_pubkey,
+            mint_decimals,
+            mint_token_program,
+            supply_vault,
+            fee_vault,
+            market_price_sf,
+            initial_amount_deposited_in_reserve,
+        } = params;
+
         Self {
-            mint_pubkey: params.mint_pubkey,
-            mint_decimals: params.mint_decimals as u64,
-            supply_vault: params.supply_vault,
-            fee_vault: params.fee_vault,
-            available_amount: 0,
+            mint_pubkey,
+            mint_decimals: mint_decimals.into(),
+            supply_vault,
+            fee_vault,
+            available_amount: initial_amount_deposited_in_reserve,
             borrowed_amount_sf: 0,
             cumulative_borrow_rate_bsf: BigFractionBytes::from(BigFraction::from(Fraction::ONE)),
             accumulated_protocol_fees_sf: 0,
-            market_price_sf: params.market_price_sf,
+            market_price_sf,
             deposit_limit_crossed_timestamp: 0,
             borrow_limit_crossed_timestamp: 0,
             accumulated_referrer_fees_sf: 0,
             pending_referrer_fees_sf: 0,
             absolute_referral_rate_sf: 0,
             market_price_last_updated_ts: 0,
-            token_program: params.mint_token_program,
+            token_program: mint_token_program,
             padding2: [0; 51],
             padding3: [0; 32],
         }
@@ -649,6 +683,7 @@ pub struct NewReserveLiquidityParams {
     pub supply_vault: Pubkey,
     pub fee_vault: Pubkey,
     pub market_price_sf: u128,
+    pub initial_amount_deposited_in_reserve: u64,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -664,10 +699,15 @@ pub struct ReserveCollateral {
 
 impl ReserveCollateral {
     pub fn new(params: NewReserveCollateralParams) -> Self {
+        let NewReserveCollateralParams {
+            mint_pubkey,
+            supply_vault,
+            initial_collateral_supply,
+        } = params;
         Self {
-            mint_pubkey: params.mint_pubkey,
-            mint_total_supply: 0,
-            supply_vault: params.supply_vault,
+            mint_pubkey,
+            mint_total_supply: initial_collateral_supply,
+            supply_vault,
             padding1: [0; 32],
             padding2: [0; 32],
         }
@@ -697,40 +737,101 @@ impl ReserveCollateral {
     }
 
     fn exchange_rate(&self, total_liquidity: Fraction) -> CollateralExchangeRate {
-        let rate = if self.mint_total_supply == 0 || total_liquidity == Fraction::ZERO {
+        if self.mint_total_supply == 0 || total_liquidity == Fraction::ZERO {
             INITIAL_COLLATERAL_RATE
         } else {
-            Fraction::from(self.mint_total_supply) / total_liquidity
-        };
-
-        CollateralExchangeRate(rate)
+            CollateralExchangeRate::from_supply_and_liquidity(
+                self.mint_total_supply,
+                total_liquidity,
+            )
+        }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CollateralExchangeRate(Fraction);
+#[derive(Clone, Copy, Debug)]
+pub struct CollateralExchangeRate {
+    collateral_supply: u128,
+    liquidity: Fraction,
+}
+
+impl Default for CollateralExchangeRate {
+    fn default() -> Self {
+        Self::ONE
+    }
+}
 
 impl CollateralExchangeRate {
+    pub const ONE: Self = Self {
+        collateral_supply: 1,
+        liquidity: Fraction::ONE,
+    };
+
+    pub fn from_supply_and_liquidity(collateral_supply: u64, liquidity: Fraction) -> Self {
+        Self {
+            collateral_supply: collateral_supply.into(),
+            liquidity,
+        }
+    }
+
     pub fn collateral_to_liquidity(&self, collateral_amount: u64) -> u64 {
         self.fraction_collateral_to_liquidity(collateral_amount.into())
             .to_floor()
     }
 
+    pub fn collateral_to_liquidity_ceil(&self, collateral_amount: u64) -> u64 {
+        let collateral_amount_u256 = U256::from(collateral_amount);
+        let liquidity_sbf = BigFraction::from(self.liquidity).0;
+        let collateral_supply_u256 = U256::from(self.collateral_supply);
+
+        let liquidity_ceil_sbf = collateral_amount_u256
+            .checked_mul(liquidity_sbf)
+            .and_then(|res| res.checked_add(collateral_supply_u256 - U256::one()))
+            .and_then(|res| res.checked_div(collateral_supply_u256))
+            .expect("collateral_to_liquidity_ceil: liquidity_amount overflow on calculation");
+
+        let liquidity_ceil_bf = BigFraction(liquidity_ceil_sbf);
+
+        let liquidity_ceil_f = Fraction::try_from(liquidity_ceil_bf).expect(
+            "collateral_to_liquidity_ceil: liquidity_amount overflow on fraction conversion",
+        );
+
+        liquidity_ceil_f.to_ceil()
+    }
+
     pub fn fraction_collateral_to_liquidity(&self, collateral_amount: Fraction) -> Fraction {
-        collateral_amount / self.0
+        (BigFraction::from(collateral_amount) * BigFraction::from(self.liquidity)
+            / self.collateral_supply)
+            .try_into()
+            .expect("fraction_collateral_to_liquidity: liquidity_amount overflow")
     }
 
     pub fn fraction_liquidity_to_collateral(&self, liquidity_amount: Fraction) -> Fraction {
-        self.0 * liquidity_amount
+        (BigFraction::from(liquidity_amount) * self.collateral_supply / self.liquidity)
+            .try_into()
+            .expect("fraction_liquidity_to_collateral: collateral_amount overflow")
     }
 
     pub fn liquidity_to_collateral_fraction(&self, liquidity_amount: u64) -> Fraction {
-        self.0 * u128::from(liquidity_amount)
+        (BigFraction::from_num(self.collateral_supply * u128::from(liquidity_amount))
+            / self.liquidity)
+            .try_into()
+            .expect("liquidity_to_collateral_fraction: collateral_amount overflow")
     }
 
     pub fn liquidity_to_collateral(&self, liquidity_amount: u64) -> u64 {
-        self.liquidity_to_collateral_fraction(liquidity_amount)
-            .to_floor()
+        let collateral_f = self.liquidity_to_collateral_fraction(liquidity_amount);
+        collateral_f.try_to_floor().unwrap_or_else(|| {
+            #[cfg(target_os = "solana")]
+            panic!(
+                "liquidity_to_collateral: collateral_amount overflow, collateral_f_scaled: {}",
+                collateral_f.to_bits()
+            );
+            #[cfg(not(target_os = "solana"))]
+            panic!(
+                "liquidity_to_collateral: collateral_amount overflow, collateral_f: {}",
+                collateral_f
+            );
+        })
     }
 
     pub fn liquidity_to_collateral_ceil(&self, liquidity_amount: u64) -> u64 {
@@ -739,21 +840,10 @@ impl CollateralExchangeRate {
     }
 }
 
-impl From<CollateralExchangeRate> for Fraction {
-    fn from(exchange_rate: CollateralExchangeRate) -> Self {
-        exchange_rate.0
-    }
-}
-
-impl From<Fraction> for CollateralExchangeRate {
-    fn from(fraction: Fraction) -> Self {
-        Self(fraction)
-    }
-}
-
 pub struct NewReserveCollateralParams {
     pub mint_pubkey: Pubkey,
     pub supply_vault: Pubkey,
+    pub initial_collateral_supply: u64,
 }
 
 static_assertions::const_assert_eq!(RESERVE_CONFIG_SIZE, std::mem::size_of::<ReserveConfig>());

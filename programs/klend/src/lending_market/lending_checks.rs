@@ -2,7 +2,7 @@ use anchor_lang::{
     accounts::account_loader::AccountLoader,
     err, error,
     prelude::{msg, Context, Pubkey},
-    require_eq, Key, Result, ToAccountInfo,
+    require_eq, require_gte, Key, Result, ToAccountInfo,
 };
 
 use crate::{
@@ -426,6 +426,15 @@ pub fn post_transfer_vault_balance_liquidity_reserve_checks(
         }
     }
 
+    Ok(())
+}
+
+pub fn post_liquidate_repay_amount_check(max_repay: u64, actual_repay: u64) -> Result<()> {
+    require_gte!(
+        max_repay,
+        actual_repay,
+        LendingError::InsufficientRepayAmount
+    );
     Ok(())
 }
 

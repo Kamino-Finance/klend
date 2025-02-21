@@ -40,6 +40,7 @@ use crate::{
     RefreshObligationDepositsResult, ReserveConfig, ReserveStatus, UpdateConfigMode,
     WithdrawResult,
 };
+use crate::{utils::zip_and_validate_same_length, DepositLiquidityResult};
 
 pub fn refresh_reserve(
     reserve: &mut Reserve,
@@ -108,7 +109,7 @@ pub fn deposit_reserve_liquidity(
     reserve: &mut Reserve,
     clock: &Clock,
     liquidity_amount: u64,
-) -> Result<u64> {
+) -> Result<DepositLiquidityResult> {
     if liquidity_amount == 0 {
         msg!("Liquidity amount provided cannot be zero");
         return err!(LendingError::InvalidAmount);
@@ -122,7 +123,10 @@ pub fn deposit_reserve_liquidity(
         return err!(LendingError::ReserveStale);
     }
 
-    let liquidity_amount_f = Fraction::from(liquidity_amount);
+    let deposit_result =
+        reserve.compute_depositable_amount_and_minted_collateral(liquidity_amount)?;
+
+    let liquidity_amount_f = Fraction::from(deposit_result.liquidity_amount);
     let deposit_limit_f = Fraction::from(reserve.config.deposit_limit);
     let reserve_liquidity_supply_f = reserve.liquidity.total_supply();
 
@@ -139,15 +143,18 @@ pub fn deposit_reserve_liquidity(
 
     sub_from_withdrawal_accum(
         &mut reserve.config.deposit_withdrawal_cap,
-        liquidity_amount,
+        deposit_result.liquidity_amount,
         u64::try_from(clock.unix_timestamp).unwrap(),
     )?;
 
-    let collateral_amount = reserve.deposit_liquidity(liquidity_amount)?;
+    reserve.deposit_liquidity(
+        deposit_result.liquidity_amount,
+        deposit_result.collateral_amount,
+    )?;
 
     reserve.last_update.mark_stale();
 
-    Ok(collateral_amount)
+    Ok(deposit_result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -857,23 +864,24 @@ fn check_ltv_not_worse_if_marked_for_deleveraging(
 fn reset_elevation_group_debts<'info, T>(
     obligation: &mut Obligation,
     elevation_group: Option<&ElevationGroup>,
-    mut deposit_reserves_iter: impl Iterator<Item = T> + Clone,
-    mut borrow_reserves_iter: impl Iterator<Item = T> + Clone,
+    deposit_reserves_iter: impl Iterator<Item = T> + Clone,
+    borrow_reserves_iter: impl Iterator<Item = T> + Clone,
 ) -> Result<()>
 where
     T: AnyAccountLoader<'info, Reserve>,
 {
     if let Some(elevation_group) = elevation_group {
         let elevation_group_index = elevation_group.get_index();
-        let mut obligation_deposits_iter = obligation
-            .deposits
-            .iter_mut()
-            .filter(|deposit| deposit.deposit_reserve != Pubkey::default());
-
-        for (deposit, reserve) in obligation_deposits_iter
-            .by_ref()
-            .zip(deposit_reserves_iter.by_ref())
-        {
+        let deposits_and_reserves = zip_and_validate_same_length(
+            obligation
+                .deposits
+                .iter_mut()
+                .filter(|deposit| deposit.deposit_reserve != Pubkey::default()),
+            deposit_reserves_iter,
+        );
+        for deposit_and_reserve in deposits_and_reserves {
+            let (deposit, reserve) =
+                deposit_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
             require_keys_eq!(
                 deposit.deposit_reserve,
                 reserve.get_pubkey(),
@@ -889,25 +897,17 @@ where
 
             deposit.borrowed_amount_against_this_collateral_in_elevation_group = 0;
         }
-
-        require!(
-            obligation_deposits_iter.next().is_none(),
-            LendingError::InvalidAccountInput
-        );
-        require!(
-            deposit_reserves_iter.next().is_none(),
-            LendingError::InvalidAccountInput
-        );
     } else {
-        let mut obligation_borrows_iter = obligation
-            .borrows
-            .iter_mut()
-            .filter(|borrow| borrow.borrow_reserve != Pubkey::default());
-
-        for (borrow, reserve) in obligation_borrows_iter
-            .by_ref()
-            .zip(borrow_reserves_iter.by_ref())
-        {
+        let borrows_and_reserves = zip_and_validate_same_length(
+            obligation
+                .borrows
+                .iter_mut()
+                .filter(|borrow| borrow.borrow_reserve != Pubkey::default()),
+            borrow_reserves_iter,
+        );
+        for borrow_and_reserve in borrows_and_reserves {
+            let (borrow, reserve) =
+                borrow_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
             let mut reserve = reserve.get_mut()?;
             reserve.borrowed_amount_outside_elevation_group = reserve
                 .borrowed_amount_outside_elevation_group
@@ -915,15 +915,6 @@ where
 
             borrow.borrowed_amount_outside_elevation_groups = 0;
         }
-
-        require!(
-            obligation_borrows_iter.next().is_none(),
-            LendingError::InvalidAccountInput
-        );
-        require!(
-            borrow_reserves_iter.next().is_none(),
-            LendingError::InvalidAccountInput
-        );
     }
 
     Ok(())
@@ -2277,6 +2268,7 @@ pub mod utils {
     use num_enum::TryFromPrimitive;
 
     use super::*;
+    use crate::utils::zip_and_validate_same_length;
     use crate::{
         fraction::FRACTION_ONE_SCALED,
         state::ReserveConfig,
@@ -2449,19 +2441,23 @@ pub mod utils {
     pub fn check_elevation_group_borrow_limit_constraints<'info, T>(
         obligation: &Obligation,
         elevation_group: Option<&ElevationGroup>,
-        mut deposit_reserves_iter: impl Iterator<Item = T>,
-        mut borrow_reserves_iter: impl Iterator<Item = T>,
+        deposit_reserves_iter: impl Iterator<Item = T>,
+        borrow_reserves_iter: impl Iterator<Item = T>,
     ) -> Result<()>
     where
         T: AnyAccountLoader<'info, Reserve>,
     {
         {
-            let mut borrows_iter = obligation.borrows.iter();
-            for (borrow, reserve_acc) in borrows_iter
-                .by_ref()
-                .filter(|borrow| borrow.borrow_reserve != Pubkey::default())
-                .zip(borrow_reserves_iter.by_ref())
-            {
+            let borrows_and_reserves = zip_and_validate_same_length(
+                obligation
+                    .borrows
+                    .iter()
+                    .filter(|borrow| borrow.borrow_reserve != Pubkey::default()),
+                borrow_reserves_iter,
+            );
+            for borrow_and_reserve in borrows_and_reserves {
+                let (borrow, reserve_acc) =
+                    borrow_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
                 let reserve_pk = reserve_acc.get_pubkey();
                 let borrow_reserve = reserve_acc.get()?;
                 require_keys_eq!(
@@ -2491,24 +2487,19 @@ pub mod utils {
                     );
                 }
             }
-
-            require!(
-                borrows_iter.next().is_none(),
-                LendingError::InvalidAccountInput
-            );
-            require!(
-                borrow_reserves_iter.next().is_none(),
-                LendingError::InvalidAccountInput
-            );
         }
 
         {
-            let mut deposits_iter = obligation.deposits.iter();
-            for (deposit, reserve_acc) in deposits_iter
-                .by_ref()
-                .filter(|deposit| deposit.deposit_reserve != Pubkey::default())
-                .zip(deposit_reserves_iter.by_ref())
-            {
+            let deposits_and_reserves = zip_and_validate_same_length(
+                obligation
+                    .deposits
+                    .iter()
+                    .filter(|deposit| deposit.deposit_reserve != Pubkey::default()),
+                deposit_reserves_iter,
+            );
+            for deposit_and_reserve in deposits_and_reserves {
+                let (deposit, reserve_acc) =
+                    deposit_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
                 let reserve_pk = reserve_acc.get_pubkey();
                 let deposit_reserve = reserve_acc.get()?;
                 require_keys_eq!(
@@ -2548,15 +2539,6 @@ pub mod utils {
             if !obligation.borrows_empty() {
                 check_non_elevation_group_borrowing_enabled(obligation)?;
             }
-
-            require!(
-                deposits_iter.next().is_none(),
-                LendingError::InvalidAccountInput
-            );
-            require!(
-                deposit_reserves_iter.next().is_none(),
-                LendingError::InvalidAccountInput
-            );
         }
         Ok(())
     }

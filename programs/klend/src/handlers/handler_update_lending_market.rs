@@ -5,7 +5,8 @@ use crate::{
     fraction::FractionExtra,
     state::{lending_market::ElevationGroup, LendingMarket, UpdateLendingMarketMode},
     utils::{
-        validate_numerical_bool, Fraction, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS,
+        validate_numerical_bool, Fraction, ELEVATION_GROUP_NONE, FULL_BPS,
+        MAX_NUM_ELEVATION_GROUPS, MIN_INITIAL_DEPOSIT_AMOUNT,
     },
     LendingError, VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE,
 };
@@ -268,6 +269,20 @@ pub fn process(
                 return err!(LendingError::InvalidConfig);
             }
             msg!("New value is {}", new_value);
+            *current_value = new_value;
+        }
+        UpdateLendingMarketMode::UpdateInitialDepositAmount => {
+            let new_value = u64::from_le_bytes(value[..8].try_into().unwrap());
+            let current_value = &mut market.min_initial_deposit_amount;
+            msg!("Prv value is {}", current_value);
+            msg!("New value is {}", new_value);
+            if new_value < MIN_INITIAL_DEPOSIT_AMOUNT {
+                msg!(
+                    "Min deposit amount cannot be set lower than {}",
+                    MIN_INITIAL_DEPOSIT_AMOUNT
+                );
+                return err!(LendingError::InvalidConfig);
+            }
             *current_value = new_value;
         }
     }

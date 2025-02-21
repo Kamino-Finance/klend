@@ -9,9 +9,10 @@ use serde_values::*;
 use super::{serde_bool_u8, serde_string, serde_utf_string};
 use crate::{
     utils::{
-        CLOSE_TO_INSOLVENCY_RISKY_LTV, ELEVATION_GROUP_NONE, GLOBAL_ALLOWED_BORROW_VALUE,
-        LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR, LIQUIDATION_CLOSE_VALUE,
-        MAX_LIQUIDATABLE_VALUE_AT_ONCE, MIN_NET_VALUE_IN_OBLIGATION, PROGRAM_VERSION,
+        CLOSE_TO_INSOLVENCY_RISKY_LTV, DEFAULT_MIN_DEPOSIT_AMOUNT, ELEVATION_GROUP_NONE,
+        GLOBAL_ALLOWED_BORROW_VALUE, LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR,
+        LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE, MIN_NET_VALUE_IN_OBLIGATION,
+        PROGRAM_VERSION,
     },
     LendingError,
 };
@@ -94,17 +95,19 @@ pub struct LendingMarket {
 
     pub individual_autodeleverage_margin_call_period_secs: u64,
 
+    pub min_initial_deposit_amount: u64,
+
     #[cfg_attr(
         feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_padding_171")
+        serde(skip_deserializing, skip_serializing, default = "default_padding_170")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 171],
+    pub padding1: [u64; 170],
 }
 
 #[cfg(feature = "serde")]
-fn default_padding_171() -> [u64; 171] {
-    [0; 171]
+fn default_padding_170() -> [u64; 170] {
+    [0; 170]
 }
 
 #[cfg(feature = "serde")]
@@ -140,7 +143,8 @@ impl Default for LendingMarket {
             min_net_value_in_obligation_sf: MIN_NET_VALUE_IN_OBLIGATION.to_bits(),
             name: [0; 32],
             individual_autodeleverage_margin_call_period_secs: 0,
-            padding1: [0; 171],
+            min_initial_deposit_amount: DEFAULT_MIN_DEPOSIT_AMOUNT,
+            padding1: [0; 170],
         }
     }
 }

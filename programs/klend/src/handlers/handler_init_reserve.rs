@@ -12,7 +12,7 @@ use crate::{
         },
         LendingMarket, Reserve, ReserveConfig,
     },
-    utils::{constraints, seeds},
+    utils::{constraints, seeds, token_transfer},
     LendingError, ReserveStatus,
 };
 
@@ -24,6 +24,8 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
 
+    let market = &ctx.accounts.lending_market.load()?;
+
     reserve.init(InitReserveParams {
         current_slot: clock.slot,
         lending_market: ctx.accounts.lending_market.key(),
@@ -34,16 +36,28 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
             supply_vault: ctx.accounts.reserve_liquidity_supply.key(),
             fee_vault: ctx.accounts.fee_receiver.key(),
             market_price_sf: 0,
+            initial_amount_deposited_in_reserve: market.min_initial_deposit_amount,
         })),
         collateral: Box::new(ReserveCollateral::new(NewReserveCollateralParams {
             mint_pubkey: ctx.accounts.reserve_collateral_mint.key(),
             supply_vault: ctx.accounts.reserve_collateral_supply.key(),
+            initial_collateral_supply: market.min_initial_deposit_amount,
         })),
         config: Box::new(ReserveConfig {
             status: ReserveStatus::Hidden.into(),
             ..Default::default()
         }),
     });
+
+    token_transfer::deposit_initial_reserve_liquidity_transfer(
+        ctx.accounts.initial_liquidity_source.to_account_info(),
+        ctx.accounts.reserve_liquidity_supply.to_account_info(),
+        ctx.accounts.lending_market_owner.to_account_info(),
+        ctx.accounts.reserve_liquidity_mint.to_account_info(),
+        ctx.accounts.liquidity_token_program.to_account_info(),
+        market.min_initial_deposit_amount,
+        ctx.accounts.reserve_liquidity_mint.decimals,
+    )?;
 
     Ok(())
 }
@@ -109,6 +123,13 @@ pub struct InitReserve<'info> {
         token::token_program = collateral_token_program,
     )]
     pub reserve_collateral_supply: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    #[account(mut,
+        token::mint = reserve_liquidity_mint,
+        token::authority = lending_market_owner,
+        token::token_program = liquidity_token_program,
+    )]
+    pub initial_liquidity_source: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub rent: Sysvar<'info, Rent>,
     pub liquidity_token_program: Interface<'info, TokenInterface>,

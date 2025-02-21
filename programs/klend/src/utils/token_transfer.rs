@@ -71,6 +71,34 @@ pub fn deposit_reserve_liquidity_transfer<'a>(
     Ok(())
 }
 
+pub fn deposit_initial_reserve_liquidity_transfer<'a>(
+    source_liquidity_deposit: AccountInfo<'a>,
+    destination_liquidity_deposit: AccountInfo<'a>,
+    admin_authority: AccountInfo<'a>,
+    liquidity_mint: AccountInfo<'a>,
+    liquidity_token_program: AccountInfo<'a>,
+    liquidity_deposit_amount: u64,
+    liquidity_decimals: u8,
+) -> Result<()> {
+    if liquidity_deposit_amount == 0 {
+        return Ok(());
+    }
+
+    token_interface::transfer_checked(
+        CpiContext::new(
+            liquidity_token_program.clone(),
+            token_interface::TransferChecked {
+                from: source_liquidity_deposit,
+                to: destination_liquidity_deposit,
+                authority: admin_authority,
+                mint: liquidity_mint,
+            },
+        ),
+        liquidity_deposit_amount,
+        liquidity_decimals,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn deposit_reserve_liquidity_and_obligation_collateral_transfer<'a>(
     source_liquidity_deposit: AccountInfo<'a>,

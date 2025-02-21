@@ -1,7 +1,10 @@
 use anchor_lang::solana_program;
 use solana_program::{pubkey, pubkey::Pubkey};
 
-use crate::utils::fraction::{fraction, Fraction};
+use crate::{
+    utils::fraction::{fraction, Fraction},
+    CollateralExchangeRate,
+};
 
 pub const SLOTS_PER_SECOND: u64 = 2;
 pub const SLOTS_PER_MINUTE: u64 = SLOTS_PER_SECOND * 60;
@@ -20,7 +23,7 @@ pub const FULL_BPS: u16 = 10_000;
 pub const UNINITIALIZED_VERSION: u8 = 0;
 
 pub const INITIAL_COLLATERAL_RATIO: u64 = 1;
-pub const INITIAL_COLLATERAL_RATE: Fraction = fraction!(1);
+pub const INITIAL_COLLATERAL_RATE: CollateralExchangeRate = CollateralExchangeRate::ONE;
 
 pub const LIQUIDATION_CLOSE_FACTOR: u8 = 20;
 
@@ -35,6 +38,10 @@ pub const NO_DELEVERAGING_MARKER: u8 = u8::MAX;
 pub const MAX_OBLIGATION_RESERVES: u64 = 20;
 
 pub const CLOSE_TO_INSOLVENCY_RISKY_LTV: u8 = 95;
+
+pub const MIN_INITIAL_DEPOSIT_AMOUNT: u64 = 1000;
+
+pub const DEFAULT_MIN_DEPOSIT_AMOUNT: u64 = 100_000;
 
 pub const NULL_PUBKEY: solana_program::pubkey::Pubkey =
     solana_program::pubkey::Pubkey::new_from_array([
