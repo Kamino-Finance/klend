@@ -209,7 +209,7 @@ impl Obligation {
         let (highest_allowed_borrow_value, withdraw_collateral_ltv_pct) =
             if ltv_max_withdrawal_check == LtvMaxWithdrawalCheck::LiquidationThreshold {
                 (
-                    Fraction::from_bits(self.unhealthy_borrow_value_sf),
+                    Fraction::from_bits(self.unhealthy_borrow_value_sf.saturating_sub(1)),
                     reserve_liq_threshold_pct,
                 )
             } else {

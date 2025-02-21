@@ -93,6 +93,14 @@ pub fn calculate_liquidation(
         borrowed_value_f < lending_market.min_full_liquidation_value_threshold;
 
     let debt_liquidation_amount_f = if is_below_min_full_liquidation_value_threshold {
+        if debt_amount_to_liquidate < borrowed_amount_f {
+            msg!(
+                "Liquidator-provided debt repay amount {} is too small to satisfy the required full liquidation {}",
+                debt_amount_to_liquidate,
+                borrowed_amount_f
+            );
+            return err!(LendingError::RepayTooSmallForFullLiquidation);
+        }
         borrowed_amount_f
     } else {
         max_liquidatable_borrowed_amount(

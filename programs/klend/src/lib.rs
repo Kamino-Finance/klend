@@ -654,6 +654,10 @@ pub enum LendingError {
     WorseLTVThanUnhealthyLTV,
     #[msg("Farm accounts to refresh are missing")]
     FarmAccountsMissing,
+    #[msg("Repay amount is too small to satisfy the mandatory full liquidation")]
+    RepayTooSmallForFullLiquidation,
+    #[msg("Liquidator provided repay amount lower than required by liquidation rules")]
+    InsufficientRepayAmount,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

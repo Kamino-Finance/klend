@@ -15,7 +15,7 @@ use crate::{
     refresh_farms,
     state::{nested_accounts::*, obligation::Obligation, LendingMarket, Reserve},
     utils::{seeds, token_transfer},
-    LendingAction, MaxReservesAsCollateralCheck, ReserveFarmKind,
+    DepositLiquidityResult, LendingAction, MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
 pub fn process_v1(
@@ -88,8 +88,10 @@ pub(super) fn process_impl(
     let initial_reserve_token_balance =
         token_interface::accessor::amount(&accounts.reserve_liquidity_supply.to_account_info())?;
     let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
-    let collateral_amount =
-        lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
+    let DepositLiquidityResult {
+        liquidity_amount,
+        collateral_amount,
+    } = lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
 
     lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
 

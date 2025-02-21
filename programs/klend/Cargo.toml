@@ -1,6 +1,6 @@
 [package]
 name = "kamino_lending"
-version = "0.1.0"
+version = "1.11.0"
 description = "Kamino lending Solana program"
 edition = "2021"
 license = "BUSL-1.1"
@@ -20,6 +20,7 @@ default = []
 serde = ["dep:serde", "fixed/serde-str"]
 staging = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+tracing = ["dep:tracing"]
 serialize_caps_interval_values = []
 
 [dependencies]
@@ -39,7 +40,6 @@ pyth-solana-receiver-sdk = "0.3.1"
 
 farms = { git = "https://github.com/Kamino-Finance/kfarms.git", features = ["no-entrypoint"] }
 
-
 derivative = "2.2.0"
 num_enum = "0.7.0"
 strum = { git = "https://github.com/Kamino-Finance/strum", features = ["derive"], branch = "checked_arithmetics" }
@@ -51,8 +51,8 @@ derive_builder = "0.13.0"
 fixed = { version = "1.23.1" }
 fixed-macro = "1.1"
 uint = "0.9.5"
+bitflags = "2.4.1"
 
 # Only required when serializing to market config to JSON and in tests
 serde = { workspace = true, optional = true }
-
-bitflags = "2.4.1"
+tracing = { version = "0.1.40", optional = true }

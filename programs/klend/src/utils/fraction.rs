@@ -76,6 +76,10 @@ pub trait FractionExtra {
     fn to_ceil<Dst: FromFixed>(&self) -> Dst;
     fn to_round<Dst: FromFixed>(&self) -> Dst;
 
+    fn try_to_floor<Dst: FromFixed>(&self) -> Option<Dst>;
+    fn try_to_ceil<Dst: FromFixed>(&self) -> Option<Dst>;
+    fn try_to_round<Dst: FromFixed>(&self) -> Option<Dst>;
+
     fn to_sf(&self) -> u128;
     fn from_sf(sf: u128) -> Self;
 
@@ -157,6 +161,18 @@ impl FractionExtra for Fraction {
         self.round().to_num()
     }
 
+    fn try_to_floor<Dst: FromFixed>(&self) -> Option<Dst> {
+        self.floor().checked_to_num()
+    }
+
+    fn try_to_ceil<Dst: FromFixed>(&self) -> Option<Dst> {
+        self.ceil().checked_to_num()
+    }
+
+    fn try_to_round<Dst: FromFixed>(&self) -> Option<Dst> {
+        self.round().checked_to_num()
+    }
+
     #[inline]
     fn to_sf(&self) -> u128 {
         self.to_bits()
@@ -214,13 +230,6 @@ impl BigFraction {
 
     pub fn from_bits(bits: [u64; 4]) -> Self {
         Self(U256(bits))
-    }
-
-    pub fn to_u128_sf(&self) -> u128 {
-        let v = self.0 .0;
-        let low = v[0] as u128;
-        let high = v[1] as u128;
-        (high << 64) | low
     }
 
     pub fn from_num<T>(num: T) -> Self
@@ -288,6 +297,16 @@ impl Div for BigFraction {
     fn div(self, rhs: Self) -> Self::Output {
         let extra_scaled = self.0 << Fraction::FRAC_NBITS;
         let res = extra_scaled / rhs.0;
+        Self(res)
+    }
+}
+
+impl Div<Fraction> for BigFraction {
+    type Output = Self;
+
+    fn div(self, rhs: Fraction) -> Self::Output {
+        let extra_scaled = self.0 << Fraction::FRAC_NBITS;
+        let res = extra_scaled / rhs.to_bits();
         Self(res)
     }
 }

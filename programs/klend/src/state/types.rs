@@ -1,4 +1,10 @@
 use crate::{utils::Fraction, PriceStatusFlags};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DepositLiquidityResult {
+    pub liquidity_amount: u64,
+    pub collateral_amount: u64,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalculateBorrowResult {
     pub borrow_amount_f: Fraction,

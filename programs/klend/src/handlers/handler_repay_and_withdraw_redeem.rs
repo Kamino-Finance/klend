@@ -218,11 +218,11 @@ fn process_impl(
         let mut obligation = withdraw_accounts.obligation.load_mut()?;
         obligation.last_update.mark_stale();
 
-        let withdraw_reserve = &withdraw_accounts.withdraw_reserve.load()?;
-
+        let mut withdraw_reserve = withdraw_accounts.withdraw_reserve.load_mut()?;
+        withdraw_reserve.last_update.mark_stale();
         lending_operations::utils::post_repay_and_withdraw_obligation_enforcements(
             &obligation,
-            withdraw_reserve,
+            &withdraw_reserve,
             initial_ltv,
         )?;
     }
