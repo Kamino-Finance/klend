@@ -100,7 +100,7 @@ pub struct DepositReserveLiquidity<'info> {
     )]
     pub lending_market_authority: AccountInfo<'info>,
 
-    #[account(mut,
+    #[account(
         address = reserve.load()?.liquidity.mint_pubkey,
         mint::token_program = liquidity_token_program,
     )]

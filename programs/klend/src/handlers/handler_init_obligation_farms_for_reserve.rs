@@ -48,7 +48,6 @@ pub struct InitObligationFarmsForReserve<'info> {
     pub obligation: AccountLoader<'info, Obligation>,
 
     #[account(
-        mut,
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]

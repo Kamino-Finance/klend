@@ -241,9 +241,12 @@ pub fn process(
             market.min_value_skip_liquidation_bf_checks = min_value_skip_liquidation_bf_checks;
         }
         UpdateLendingMarketMode::UpdatePaddingFields => {
-            msg!("Prev Value is {:?}", market.reserved1);
+            msg!("Prev reserved0 Value is {:?}", market.reserved0);
+            msg!("Prev reserved1 Value is {:?}", market.reserved1);
+            market.reserved0 = [0; 8];
             market.reserved1 = [0; 8];
-            msg!("New Value is {:?}", market.reserved1);
+            msg!("New reserved0 Value is {:?}", market.reserved0);
+            msg!("New reserved1 Value is {:?}", market.reserved1);
         }
         UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints => {
             panic!("Deprecated field")

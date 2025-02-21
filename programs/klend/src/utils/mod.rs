@@ -1,5 +1,6 @@
 pub mod account_loader_trait;
 pub mod account_ops;
+pub mod accounts;
 pub mod borrow_rate_curve;
 pub mod constraints;
 pub mod consts;

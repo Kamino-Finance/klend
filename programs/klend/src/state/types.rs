@@ -43,7 +43,8 @@ pub struct LiquidationParams {
 }
 
 pub struct RefreshObligationDepositsResult {
-    pub lowest_deposit_liquidation_ltv_threshold: u8,
+    pub lowest_deposit_liquidation_ltv_threshold_pct: u8,
+    pub lowest_deposit_max_ltv_pct: u8,
     pub num_of_obsolete_reserves: u8,
     pub deposited_value_f: Fraction,
     pub allowed_borrow_value_f: Fraction,
@@ -64,4 +65,16 @@ pub enum LendingAction {
     Additive(u64),
     Subtractive(u64),
     SubstractiveSigned(i64),
+}
+
+#[derive(PartialEq)]
+pub enum MaxReservesAsCollateralCheck {
+    Perform,
+    Skip,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum LtvMaxWithdrawalCheck {
+    MaxLtv,
+    LiquidationThreshold,
 }

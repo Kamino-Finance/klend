@@ -18,10 +18,10 @@ use crate::{
     LendingAction, LendingError, Obligation, ReferrerTokenState, Reserve, ReserveStatus,
 };
 
-pub fn borrow_obligation_liquidity_checks(ctx: &Context<BorrowObligationLiquidity>) -> Result<()> {
-    let borrow_reserve = &ctx.accounts.borrow_reserve.load()?;
+pub fn borrow_obligation_liquidity_checks(accounts: &BorrowObligationLiquidity) -> Result<()> {
+    let borrow_reserve = &accounts.borrow_reserve.load()?;
 
-    if borrow_reserve.liquidity.supply_vault == ctx.accounts.user_destination_liquidity.key() {
+    if borrow_reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
         msg!(
             "Borrow reserve liquidity supply cannot be used as the destination liquidity provided"
         );
@@ -39,8 +39,8 @@ pub fn borrow_obligation_liquidity_checks(ctx: &Context<BorrowObligationLiquidit
     }
 
     constraints::token_2022::validate_liquidity_token_extensions(
-        &ctx.accounts.borrow_reserve_liquidity_mint.to_account_info(),
-        &ctx.accounts.user_destination_liquidity.to_account_info(),
+        &accounts.borrow_reserve_liquidity_mint.to_account_info(),
+        &accounts.user_destination_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -130,16 +130,16 @@ pub fn deposit_reserve_liquidity_and_obligation_collateral_checks(
 }
 
 pub fn liquidate_obligation_checks(
-    ctx: &Context<LiquidateObligationAndRedeemReserveCollateral>,
+    accounts: &LiquidateObligationAndRedeemReserveCollateral,
 ) -> Result<()> {
-    let repay_reserve = ctx.accounts.repay_reserve.load()?;
-    let withdraw_reserve = ctx.accounts.withdraw_reserve.load()?;
+    let repay_reserve = accounts.repay_reserve.load()?;
+    let withdraw_reserve = accounts.withdraw_reserve.load()?;
 
-    if repay_reserve.liquidity.supply_vault == ctx.accounts.user_source_liquidity.key() {
+    if repay_reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
         msg!("Repay reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
-    if repay_reserve.collateral.supply_vault == ctx.accounts.user_destination_collateral.key() {
+    if repay_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
         msg!(
             "Repay reserve collateral supply cannot be used as the destination collateral provided"
         );
@@ -151,11 +151,11 @@ pub fn liquidate_obligation_checks(
         return err!(LendingError::ReserveDeprecated);
     }
 
-    if withdraw_reserve.liquidity.supply_vault == ctx.accounts.user_source_liquidity.key() {
+    if withdraw_reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
         msg!("Withdraw reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
-    if withdraw_reserve.collateral.supply_vault == ctx.accounts.user_destination_collateral.key() {
+    if withdraw_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
         msg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
         return err!(LendingError::InvalidAccountInput);
     }
@@ -166,15 +166,13 @@ pub fn liquidate_obligation_checks(
     }
 
     constraints::token_2022::validate_liquidity_token_extensions(
-        &ctx.accounts.repay_reserve_liquidity_mint.to_account_info(),
-        &ctx.accounts.user_source_liquidity.to_account_info(),
+        &accounts.repay_reserve_liquidity_mint.to_account_info(),
+        &accounts.user_source_liquidity.to_account_info(),
     )?;
 
     constraints::token_2022::validate_liquidity_token_extensions(
-        &ctx.accounts
-            .withdraw_reserve_liquidity_mint
-            .to_account_info(),
-        &ctx.accounts.user_destination_liquidity.to_account_info(),
+        &accounts.withdraw_reserve_liquidity_mint.to_account_info(),
+        &accounts.user_destination_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -228,10 +226,10 @@ pub fn withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
     Ok(())
 }
 
-pub fn repay_obligation_liquidity_checks(ctx: &Context<RepayObligationLiquidity>) -> Result<()> {
-    let repay_reserve = ctx.accounts.repay_reserve.load()?;
+pub fn repay_obligation_liquidity_checks(accounts: &RepayObligationLiquidity) -> Result<()> {
+    let repay_reserve = accounts.repay_reserve.load()?;
 
-    if repay_reserve.liquidity.supply_vault == ctx.accounts.user_source_liquidity.key() {
+    if repay_reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
         msg!("Repay reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
@@ -242,8 +240,8 @@ pub fn repay_obligation_liquidity_checks(ctx: &Context<RepayObligationLiquidity>
     }
 
     constraints::token_2022::validate_liquidity_token_extensions(
-        &ctx.accounts.reserve_liquidity_mint.to_account_info(),
-        &ctx.accounts.user_source_liquidity.to_account_info(),
+        &accounts.reserve_liquidity_mint.to_account_info(),
+        &accounts.user_source_liquidity.to_account_info(),
     )?;
 
     Ok(())
@@ -315,20 +313,21 @@ pub fn flash_repay_reserve_liquidity_checks(
 }
 
 pub fn refresh_obligation_farms_for_reserve_checks(
-    ctx: &Context<RefreshObligationFarmsForReserve>,
+    accounts: &RefreshObligationFarmsForReserveBase,
 ) -> Result<()> {
-    if !ctx.accounts.obligation.data_is_empty() {
+    if !accounts.obligation.data_is_empty() {
         let obligation_account: FatAccountLoader<Obligation> =
-            FatAccountLoader::try_from(&ctx.accounts.obligation).unwrap();
+            FatAccountLoader::try_from(&accounts.obligation).unwrap();
         let obligation = obligation_account.load()?;
 
-        if obligation.lending_market != ctx.accounts.lending_market.key() {
+        if obligation.lending_market != accounts.lending_market.key() {
             msg!("Obligation lending market does not match the lending market provided");
-            return err!(LendingError::InvalidAccountInput);
+            return Err(error!(LendingError::InvalidAccountInput)
+                .with_pubkeys((obligation.lending_market, accounts.lending_market.key())));
         }
     }
 
-    let reserve = ctx.accounts.reserve.load()?;
+    let reserve = accounts.reserve.load()?;
 
     if reserve.config.status() == ReserveStatus::Obsolete {
         msg!("Reserve is not active");
