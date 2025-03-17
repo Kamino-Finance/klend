@@ -33,9 +33,10 @@ pub fn process(
     lending_operations::update_reserve_config(reserve, mode, value);
 
     if skip_validation {
-        let reserve_is_used = reserve.liquidity.available_amount > 0
+        let reserve_is_used = reserve.liquidity.available_amount
+            > market.min_initial_deposit_amount
             || reserve.liquidity.total_borrow() > Fraction::ZERO
-            || reserve.collateral.mint_total_supply > 0;
+            || reserve.collateral.mint_total_supply > market.min_initial_deposit_amount;
 
         let reserve_blocks_deposits = reserve.config.deposit_limit == 0;
         let reserve_blocks_borrows = reserve.config.borrow_limit == 0;
