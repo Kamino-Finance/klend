@@ -9,8 +9,8 @@ pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> 
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let lending_market = ctx.accounts.lending_market.load()?;
     let slot = Clock::get()?.slot;
-    let deposit_count = obligation.deposits_count();
-    let borrow_count = obligation.borrows_count();
+    let deposit_count = obligation.active_deposits_count();
+    let borrow_count = obligation.active_borrows_count();
     let reserves_count = borrow_count + deposit_count;
 
     let expected_remaining_accounts = if obligation.has_referrer() {

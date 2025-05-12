@@ -15,3 +15,7 @@ impl Clone for crate::accounts::OptionalObligationFarmsAccounts {
 }
 
 impl Copy for crate::accounts::OptionalObligationFarmsAccounts {}
+
+pub fn default_array<T: Default + Copy, const N: usize>() -> [T; N] {
+    [T::default(); N]
+}

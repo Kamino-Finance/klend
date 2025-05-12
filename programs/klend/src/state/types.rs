@@ -1,4 +1,4 @@
-use crate::{utils::Fraction, PriceStatusFlags};
+use crate::{utils::Fraction, LendingMarket, Obligation, PriceStatusFlags, Reserve};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DepositLiquidityResult {
@@ -15,24 +15,35 @@ pub struct CalculateBorrowResult {
 
 #[derive(Debug)]
 pub struct CalculateRepayResult {
-    pub settle_amount_f: Fraction,
+    pub settle_amount: Fraction,
     pub repay_amount: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalculateLiquidationResult {
-    pub settle_amount_f: Fraction,
+    pub settle_amount: Fraction,
     pub repay_amount: u64,
     pub withdraw_amount: u64,
     pub liquidation_bonus_rate: Fraction,
+    pub liquidation_reason: LiquidationReason,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiquidationReason {
+    LtvExceeded,
+    IndividualDeleveraging,
+    MarketWideDeleveraging,
+    ObligationOrder(usize),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiquidateObligationResult {
-    pub settle_amount_f: Fraction,
+    pub settle_amount: Fraction,
     pub repay_amount: u64,
     pub withdraw_amount: u64,
     pub withdraw_collateral_amount: u64,
     pub liquidation_bonus_rate: Fraction,
+    pub liquidation_reason: LiquidationReason,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,9 +54,19 @@ pub struct LiquidateAndRedeemResult {
     pub total_withdraw_liquidity_amount: Option<(u64, u64)>,
 }
 
+pub struct LiquidationCheckInputs<'l> {
+    pub lending_market: &'l LendingMarket,
+    pub collateral_reserve: &'l Reserve,
+    pub debt_reserve: &'l Reserve,
+    pub obligation: &'l Obligation,
+    pub timestamp: u64,
+    pub max_allowed_ltv_override_pct_opt: Option<u64>,
+}
+
 pub struct LiquidationParams {
     pub user_ltv: Fraction,
     pub liquidation_bonus_rate: Fraction,
+    pub liquidation_reason: LiquidationReason,
 }
 
 pub struct RefreshObligationDepositsResult {
@@ -65,6 +86,7 @@ pub struct RefreshObligationBorrowsResult {
     pub prices_state: PriceStatusFlags,
     pub highest_borrow_factor_pct: u64,
     pub borrowed_amount_in_elevation_group: Option<u64>,
+    pub num_of_obsolete_reserves: u8,
 }
 
 pub enum LendingAction {

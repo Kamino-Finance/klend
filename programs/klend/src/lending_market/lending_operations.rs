@@ -1,11 +1,11 @@
 use std::{
     cell::RefMut,
     cmp::min,
+    mem::size_of,
     ops::{Add, Div, Mul},
 };
 
 use anchor_lang::{err, prelude::*, require, solana_program::clock::Slot, Result};
-use borsh::BorshDeserialize;
 use solana_program::clock::{self, Clock};
 
 use self::utils::{
@@ -19,28 +19,25 @@ use self::utils::{
     validate_obligation_asset_tiers,
 };
 use super::{
-    validate_referrer_token_state,
+    config_items, validate_referrer_token_state,
     withdrawal_cap_operations::utils::{add_to_withdrawal_accum, sub_from_withdrawal_accum},
 };
 use crate::{
     approximate_compounded_interest,
     fraction::FractionExtra,
-    liquidation_operations,
-    state::{
-        obligation::Obligation, CalculateBorrowResult, CalculateLiquidationResult,
-        CalculateRepayResult, Reserve,
-    },
+    lending_market::config_items::{renderings, validations},
+    liquidation_operations, order_operations,
+    state::{CalculateBorrowResult, CalculateLiquidationResult, CalculateRepayResult, Reserve},
     utils::{
-        borrow_rate_curve::BorrowRateCurve, consts::NO_DELEVERAGING_MARKER, AnyAccountLoader,
-        BigFraction, Fraction, GetPriceResult, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
+        consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction, Fraction, GetPriceResult,
+        IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
-    xmsg, AssetTier, ElevationGroup, LendingError, LendingMarket, LiquidateAndRedeemResult,
-    LiquidateObligationResult, LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck,
-    ObligationCollateral, PriceStatusFlags, ReferrerTokenState, RefreshObligationBorrowsResult,
-    RefreshObligationDepositsResult, ReserveConfig, ReserveStatus, UpdateConfigMode,
-    WithdrawResult,
+    xmsg, AssetTier, DepositLiquidityResult, ElevationGroup, LendingError, LendingMarket,
+    LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
+    MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags, ReferrerTokenState,
+    RefreshObligationBorrowsResult, RefreshObligationDepositsResult, ReserveStatus,
+    UpdateConfigMode, WithdrawResult,
 };
-use crate::{utils::zip_and_validate_same_length, DepositLiquidityResult};
 
 pub fn refresh_reserve(
     reserve: &mut Reserve,
@@ -70,8 +67,7 @@ pub fn refresh_reserve(
 
     reserve.last_update.update_slot(slot, price_status);
 
-    reserve.config.reserved_2 = [0; 2];
-    reserve.config.reserved_3 = [0; 8];
+    reserve.config.reserved_2 = Default::default();
 
     Ok(())
 }
@@ -194,6 +190,10 @@ where
 
     obligation.check_not_marked_for_deleveraging()?;
 
+    if obligation.has_obsolete_reserves() {
+        return err!(LendingError::ObligationInObsoleteReserve);
+    }
+
     let current_utilization = borrow_reserve.liquidity.utilization_rate();
     let reserve_liquidity_borrowed_f = borrow_reserve.liquidity.total_borrow();
     let liquidity_amount_f = Fraction::from(liquidity_amount);
@@ -285,6 +285,8 @@ where
             borrow_reserve.liquidity.available_amount += referrer_fee;
         }
     }
+
+    order_operations::check_orders_supported_after_user_operation(obligation)?;
 
     obligation.has_debt = 1;
     obligation.last_update.mark_stale();
@@ -379,33 +381,30 @@ pub fn deposit_obligation_collateral(
         obligation.check_not_marked_for_deleveraging()?;
     }
 
-    let pre_deposit_count = obligation.deposits_count();
+    let pre_deposit_count = obligation.active_deposits_count();
     let total_borrowed_amount = obligation.get_borrowed_amount_if_single_token();
     let asset_tier = deposit_reserve.config.get_asset_tier();
 
-    let new_deposit_initializer = |obligation_collateral: &mut ObligationCollateral| -> Result<()> {
-        utils::update_elevation_group_debt_trackers_on_new_deposit(
-            total_borrowed_amount,
-            obligation_collateral,
-            pre_deposit_count,
-            elevation_group,
-            &deposit_reserve_pk,
-            deposit_reserve,
-            max_reserves_as_collateral_check,
-        )
-    };
-
     let pre_collateral_market_value_f = {
-        let obligation_collateral = obligation.find_or_add_collateral_to_deposits(
-            deposit_reserve_pk,
-            asset_tier,
-            new_deposit_initializer,
-        )?;
+        let (obligation_collateral, newly_added) =
+            obligation.find_or_add_collateral_to_deposits(deposit_reserve_pk, asset_tier)?;
+        if newly_added {
+            utils::update_elevation_group_debt_trackers_on_new_deposit(
+                total_borrowed_amount,
+                obligation_collateral,
+                pre_deposit_count,
+                elevation_group,
+                &deposit_reserve_pk,
+                deposit_reserve,
+                max_reserves_as_collateral_check,
+            )?;
+        }
 
         obligation_collateral.deposit(collateral_amount)?;
 
         Fraction::from_bits(obligation_collateral.market_value_sf)
     };
+    order_operations::check_orders_supported_after_user_operation(obligation)?;
 
     obligation.last_update.mark_stale();
 
@@ -438,7 +437,7 @@ pub fn withdraw_obligation_collateral(
         return err!(LendingError::InvalidAmount);
     }
 
-    let is_borrows_empty = obligation.borrows_empty();
+    let is_borrows_empty = obligation.active_borrows_empty();
 
     let required_price_status = if is_borrows_empty {
         PriceStatusFlags::NONE
@@ -478,10 +477,10 @@ pub fn withdraw_obligation_collateral(
         check_elevation_group_borrowing_enabled(lending_market, obligation)?;
     }
 
-    if obligation.num_of_obsolete_reserves > 0
+    if obligation.has_obsolete_reserves()
         && withdraw_reserve.config.status() == ReserveStatus::Active
     {
-        return err!(LendingError::ObligationInDeprecatedReserve);
+        return err!(LendingError::ObligationInObsoleteReserve);
     }
 
     let (reserve_max_ltv_pct, reserve_liq_threshold_ltv_pct) =
@@ -680,12 +679,9 @@ where
     liquidity.accrue_interest(cumulative_borrow_rate)?;
 
     let CalculateRepayResult {
-        settle_amount_f: settle_amount,
+        settle_amount,
         repay_amount,
-    } = repay_reserve.calculate_repay(
-        liquidity_amount,
-        Fraction::from_bits(liquidity.borrowed_amount_sf),
-    );
+    } = repay_reserve.calculate_repay(liquidity_amount, liquidity.borrowed_amount());
 
     if repay_amount == 0 {
         msg!("Repay amount is too small to transfer liquidity");
@@ -712,6 +708,8 @@ where
     obligation.repay(settle_amount, liquidity_index);
     obligation.update_has_debt();
     obligation.last_update.mark_stale();
+
+    order_operations::check_orders_supported_after_user_operation(obligation)?;
 
     post_repay_obligation_invariants(
         settle_amount,
@@ -855,7 +853,7 @@ fn check_ltv_not_worse_if_marked_for_deleveraging(
                 initial_ltv,
                 resulting_ltv
             );
-            return err!(LendingError::WorseLTVBlocked);
+            return err!(LendingError::WorseLtvBlocked);
         }
     }
     Ok(())
@@ -872,13 +870,9 @@ where
 {
     if let Some(elevation_group) = elevation_group {
         let elevation_group_index = elevation_group.get_index();
-        let deposits_and_reserves = zip_and_validate_same_length(
-            obligation
-                .deposits
-                .iter_mut()
-                .filter(|deposit| deposit.deposit_reserve != Pubkey::default()),
-            deposit_reserves_iter,
-        );
+        let deposits_and_reserves = obligation
+            .active_deposits_mut()
+            .zip_exact(deposit_reserves_iter);
         for deposit_and_reserve in deposits_and_reserves {
             let (deposit, reserve) =
                 deposit_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
@@ -898,13 +892,9 @@ where
             deposit.borrowed_amount_against_this_collateral_in_elevation_group = 0;
         }
     } else {
-        let borrows_and_reserves = zip_and_validate_same_length(
-            obligation
-                .borrows
-                .iter_mut()
-                .filter(|borrow| borrow.borrow_reserve != Pubkey::default()),
-            borrow_reserves_iter,
-        );
+        let borrows_and_reserves = obligation
+            .active_borrows_mut()
+            .zip_exact(borrow_reserves_iter);
         for borrow_and_reserve in borrows_and_reserves {
             let (borrow, reserve) =
                 borrow_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
@@ -957,7 +947,7 @@ where
         .deposits
         .iter_mut()
         .enumerate()
-        .filter(|(_, deposit)| deposit.deposit_reserve != Pubkey::default())
+        .filter(|(_, deposit)| deposit.is_active())
     {
         let deposit_reserve = reserves_iter
             .next()
@@ -1091,6 +1081,7 @@ where
     let mut borrow_factor_adjusted_debt_value = Fraction::ZERO;
     let mut prices_state = PriceStatusFlags::all();
     let mut highest_borrow_factor_f = Fraction::ONE;
+    let mut num_of_obsolete_reserves = 0;
 
     let obligation_has_referrer = obligation.has_referrer();
     let mut borrowed_amounts_accumulator_for_elevation_group = 0_u64;
@@ -1100,7 +1091,7 @@ where
         .borrows
         .iter_mut()
         .enumerate()
-        .filter(|(_, borrow)| borrow.borrow_reserve != Pubkey::default())
+        .filter(|(_, borrow)| borrow.is_active())
     {
         num_borrow_reserves += 1;
         let borrow_reserve = reserves_iter
@@ -1124,11 +1115,11 @@ where
         let cumulative_borrow_rate_bf =
             BigFraction::from(borrow_reserve.liquidity.cumulative_borrow_rate_bsf);
 
-        let previous_borrowed_amount_f = Fraction::from_bits(borrow.borrowed_amount_sf);
+        let previous_borrowed_amount_f = borrow.borrowed_amount();
 
         borrow.accrue_interest(cumulative_borrow_rate_bf)?;
 
-        let borrowed_amount_f = Fraction::from_bits(borrow.borrowed_amount_sf);
+        let borrowed_amount_f = borrow.borrowed_amount();
         let borrowed_amount = borrowed_amount_f.to_ceil::<u64>();
         borrowed_amounts_accumulator_for_elevation_group += borrowed_amount;
         {
@@ -1152,6 +1143,10 @@ where
                 borrow_reserve.borrowed_amount_outside_elevation_group += borrowed_amount;
                 borrow.borrowed_amount_outside_elevation_groups = borrowed_amount;
             }
+        }
+
+        if borrow_reserve.config.status() == ReserveStatus::Obsolete {
+            num_of_obsolete_reserves += 1;
         }
 
         accumulate_referrer_fees(
@@ -1194,7 +1189,7 @@ where
         xmsg!(
             "Borrow: {} amount: {} value: {} value_bf: {}",
             &borrow_reserve.config.token_info.symbol(),
-            Fraction::from_bits(borrow.borrowed_amount_sf).to_display(),
+            borrow.borrowed_amount().to_display(),
             market_value_f.to_display(),
             borrow_factor_adjusted_market_value.to_display()
         );
@@ -1211,6 +1206,7 @@ where
     };
 
     Ok(RefreshObligationBorrowsResult {
+        num_of_obsolete_reserves,
         borrowed_assets_market_value_f: borrowed_assets_market_value,
         borrow_factor_adjusted_debt_value_f: borrow_factor_adjusted_debt_value,
         borrowed_amount_in_elevation_group,
@@ -1237,6 +1233,7 @@ where
     let elevation_group = get_elevation_group(obligation.elevation_group, lending_market)?;
 
     let RefreshObligationBorrowsResult {
+        num_of_obsolete_reserves: num_of_obsolete_borrow_reserves,
         borrow_factor_adjusted_debt_value_f,
         borrowed_assets_market_value_f,
         prices_state: borrows_prices_state,
@@ -1255,7 +1252,7 @@ where
     let RefreshObligationDepositsResult {
         lowest_deposit_liquidation_ltv_threshold_pct,
         lowest_deposit_max_ltv_pct,
-        num_of_obsolete_reserves,
+        num_of_obsolete_reserves: num_of_obsolete_deposit_reserves,
         deposited_value_f,
         allowed_borrow_value_f: allowed_borrow_value,
         unhealthy_borrow_value_f: unhealthy_borrow_value,
@@ -1289,7 +1286,8 @@ where
         lowest_deposit_liquidation_ltv_threshold_pct.into();
     obligation.lowest_reserve_deposit_max_ltv_pct = lowest_deposit_max_ltv_pct;
 
-    obligation.num_of_obsolete_reserves = num_of_obsolete_reserves;
+    obligation.num_of_obsolete_borrow_reserves = num_of_obsolete_borrow_reserves;
+    obligation.num_of_obsolete_deposit_reserves = num_of_obsolete_deposit_reserves;
 
     obligation.borrowing_disabled = borrowing_disabled.into();
     obligation.highest_borrow_factor_pct = highest_borrow_factor_pct;
@@ -1316,11 +1314,12 @@ where
     T: AnyAccountLoader<'info, Reserve>,
 {
     let LiquidateObligationResult {
+        settle_amount: _,
         repay_amount,
         withdraw_collateral_amount,
         withdraw_amount,
         liquidation_bonus_rate,
-        ..
+        liquidation_reason,
     } = liquidate_obligation(
         lending_market,
         repay_reserve,
@@ -1340,6 +1339,7 @@ where
         withdraw_amount,
         withdraw_collateral_amount,
         liquidation_bonus_rate,
+        liquidation_reason,
         min_acceptable_received_liquidity_amount,
         clock,
     )?;
@@ -1415,10 +1415,11 @@ where
         <= obligation.lowest_reserve_deposit_liquidation_ltv;
 
     let CalculateLiquidationResult {
-        settle_amount_f: settle_amount,
+        settle_amount,
         repay_amount,
         withdraw_amount,
         liquidation_bonus_rate,
+        liquidation_reason,
     } = liquidation_operations::calculate_liquidation(
         &withdraw_reserve_ref,
         &repay_reserve_ref,
@@ -1465,6 +1466,18 @@ where
         )?;
     }
 
+    if obligation.has_debt() {
+        if let LiquidationReason::ObligationOrder(obligation_order_index) = liquidation_reason {
+            let order = &mut obligation.orders[obligation_order_index];
+            order.consume(repay_amount);
+        }
+    } else {
+        let obligation_had_orders = order_operations::remove_all_orders(obligation);
+        if obligation_had_orders {
+            xmsg!("Liquidation has left the obligation with no debt; removing all its orders");
+        }
+    }
+
     let mut withdraw_reserve_ref_mut = withdraw_reserve.get_mut()?;
     let withdraw_collateral_amount = {
         refresh_reserve(
@@ -1478,7 +1491,6 @@ where
             .liquidity_to_collateral(withdraw_reserve_ref_mut.liquidity.available_amount);
         min(withdraw_amount, max_redeemable_collateral)
     };
-
     if is_full_withdrawal {
         utils::update_elevation_group_debt_trackers_on_full_withdraw(
             previous_borrowed_amount_against_this_collateral_in_elevation_group,
@@ -1488,44 +1500,57 @@ where
     }
 
     Ok(LiquidateObligationResult {
-        settle_amount_f: settle_amount,
+        settle_amount,
         repay_amount,
         withdraw_amount,
         withdraw_collateral_amount,
         liquidation_bonus_rate,
+        liquidation_reason,
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn post_liquidate_redeem(
     withdraw_reserve: &mut Reserve,
     repay_amount: u64,
     withdraw_amount: u64,
     withdraw_collateral_amount: u64,
     liquidation_bonus_rate: Fraction,
+    liquidation_reason: LiquidationReason,
     min_acceptable_received_liquidity_amount: u64,
     clock: &Clock,
 ) -> Result<Option<(u64, u64)>> {
     if withdraw_collateral_amount != 0 {
         let withdraw_liquidity_amount =
             redeem_reserve_collateral(withdraw_reserve, withdraw_collateral_amount, clock, false)?;
-        let protocol_fee = liquidation_operations::calculate_protocol_liquidation_fee(
+        let protocol_liquidation_fee_pct = match liquidation_reason {
+            LiquidationReason::LtvExceeded
+            | LiquidationReason::IndividualDeleveraging
+            | LiquidationReason::MarketWideDeleveraging => {
+                withdraw_reserve.config.protocol_liquidation_fee_pct
+            }
+            LiquidationReason::ObligationOrder(_) => {
+                withdraw_reserve.config.protocol_order_execution_fee_pct
+            }
+        };
+        let protocol_liquidation_fee = liquidation_operations::calculate_protocol_liquidation_fee(
             withdraw_liquidity_amount,
             liquidation_bonus_rate,
-            withdraw_reserve.config.protocol_liquidation_fee_pct,
+            protocol_liquidation_fee_pct,
         );
-        let net_withdraw_liquidity_amount = withdraw_liquidity_amount - protocol_fee;
-        msg!(
+        let net_withdraw_liquidity_amount = withdraw_liquidity_amount - protocol_liquidation_fee;
+        xmsg!(
             "pnl: Liquidator repaid {} and withdrew {} collateral with fees {}",
             repay_amount,
             net_withdraw_liquidity_amount,
-            protocol_fee
+            protocol_liquidation_fee
         );
 
         if net_withdraw_liquidity_amount < min_acceptable_received_liquidity_amount {
             return err!(LendingError::LiquidationRewardTooSmall);
         }
 
-        Ok(Some((withdraw_liquidity_amount, protocol_fee)))
+        Ok(Some((withdraw_liquidity_amount, protocol_liquidation_fee)))
     } else {
         let theoretical_withdraw_liquidity_amount = withdraw_reserve
             .collateral_exchange_rate()
@@ -1535,7 +1560,7 @@ pub(crate) fn post_liquidate_redeem(
             return err!(LendingError::LiquidationRewardTooSmall);
         }
 
-        msg!(
+        xmsg!(
             "pnl: Liquidator repaid {} and withdrew {} ctokens",
             repay_amount,
             withdraw_amount
@@ -1635,12 +1660,12 @@ where
         return Err(LendingError::ObligationStale.into());
     }
 
-    if !obligation.deposits_empty() {
+    if !obligation.active_deposits_empty() {
         msg!("Obligation hasn't been fully liquidated!");
         return Err(LendingError::CannotSocializeObligationWithCollateral.into());
     }
 
-    if obligation.deposits_empty() && obligation.borrows_empty() {
+    if obligation.active_deposits_empty() && obligation.active_borrows_empty() {
         msg!("Obligation has no deposits or borrows");
         return Err(LendingError::ObligationEmpty.into());
     }
@@ -1648,7 +1673,7 @@ where
     let (liquidity, liquidity_index) = obligation.find_liquidity_in_borrows(*reserve_pk)?;
 
     let liquidity_amount_f = Fraction::from(liquidity_amount);
-    let borrowed_amount_f = Fraction::from_bits(liquidity.borrowed_amount_sf);
+    let borrowed_amount_f = liquidity.borrowed_amount();
     let forgive_amount_f = min(liquidity_amount_f, borrowed_amount_f);
 
     if forgive_amount_f >= reserve.liquidity.total_supply() {
@@ -1671,6 +1696,13 @@ where
 
     obligation.repay(forgive_amount_f, liquidity_index);
     obligation.update_has_debt();
+    if !obligation.has_debt() {
+        let obligation_had_orders = order_operations::remove_all_orders(obligation);
+        if obligation_had_orders {
+            msg!("Socializing loss has left the obligation with no debt; removing all its orders");
+        }
+    }
+
     obligation.last_update.mark_stale();
 
     Ok(forgive_amount_f)
@@ -1835,432 +1867,282 @@ pub fn withdraw_referrer_fees(
     Ok(withdraw_amount)
 }
 
-pub fn update_reserve_config(reserve: &mut Reserve, mode: UpdateConfigMode, value: &[u8]) {
+pub fn update_reserve_config(
+    reserve: &mut Reserve,
+    mode: UpdateConfigMode,
+    value: &[u8],
+) -> Result<()> {
     match mode {
         UpdateConfigMode::UpdateLoanToValuePct => {
-            let new = value[0];
-            let prv = reserve.config.loan_to_value_pct;
-            reserve.config.loan_to_value_pct = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.loan_to_value_pct)
+                .validating(validations::check_valid_pct)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateMaxLiquidationBonusBps => {
-            let new: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
-            let prv = reserve.config.max_liquidation_bonus_bps;
-            reserve.config.max_liquidation_bonus_bps = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.max_liquidation_bonus_bps)
+                .validating(validations::check_valid_bps)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateLiquidationThresholdPct => {
-            let new = value[0];
-            let prv = reserve.config.liquidation_threshold_pct;
-            reserve.config.liquidation_threshold_pct = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.liquidation_threshold_pct)
+                .validating(validations::check_valid_pct)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateProtocolLiquidationFee => {
-            let new = value[0];
-            let prv = reserve.config.protocol_liquidation_fee_pct;
-            reserve.config.protocol_liquidation_fee_pct = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.protocol_liquidation_fee_pct)
+                .validating(validations::check_valid_pct)
+                .set(value)?;
+        }
+        UpdateConfigMode::UpdateProtocolOrderExecutionFee => {
+            config_items::for_named_field!(&mut reserve.config.protocol_order_execution_fee_pct)
+                .validating(validations::check_valid_pct)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateProtocolTakeRate => {
-            let new = value[0];
-            let prv = reserve.config.protocol_take_rate_pct;
-            reserve.config.protocol_take_rate_pct = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.protocol_take_rate_pct)
+                .validating(validations::check_valid_pct)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateFeesBorrowFee => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.fees.borrow_fee_sf;
-            reserve.config.fees.borrow_fee_sf = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.fees.borrow_fee_sf)
+                .validating(validations::check_lte(Fraction::ONE.to_bits()))
+                .rendering(renderings::as_fraction)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateFeesFlashLoanFee => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.fees.flash_loan_fee_sf;
-            reserve.config.fees.flash_loan_fee_sf = new;
-            msg!("Prv Value is {}", Fraction::from_bits(prv.into()));
-            msg!("New Value is {}", Fraction::from_bits(new.into()));
-        }
-        UpdateConfigMode::UpdateFeesReferralFeeBps => {
-            msg!("ReferralFee moved to lending_market");
+            config_items::for_named_field!(&mut reserve.config.fees.flash_loan_fee_sf)
+                .validating(validations::check_lte(Fraction::ONE.to_bits()))
+                .rendering(renderings::as_fraction)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateDepositLimit => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.deposit_limit;
-            reserve.config.deposit_limit = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.deposit_limit).set(value)?;
         }
         UpdateConfigMode::UpdateBorrowLimit => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.borrow_limit;
-            reserve.config.borrow_limit = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.borrow_limit).set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoLowerHeuristic => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.token_info.heuristic.lower;
-            reserve.config.token_info.heuristic.lower = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.heuristic.lower)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoUpperHeuristic => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.token_info.heuristic.upper;
-            reserve.config.token_info.heuristic.upper = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.heuristic.upper)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoExpHeuristic => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.token_info.heuristic.exp;
-            reserve.config.token_info.heuristic.exp = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.heuristic.exp)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoTwapDivergence => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.token_info.max_twap_divergence_bps;
-            reserve.config.token_info.max_twap_divergence_bps = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.max_twap_divergence_bps)
+                .validating(validations::check_valid_bps)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoScopeChain => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let x = value.to_le_bytes();
-            let end = x
-                .chunks_exact(2)
-                .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
-                .collect::<Vec<u16>>();
-            let cached = reserve.config.token_info.scope_configuration.price_chain;
-            reserve.config.token_info.scope_configuration.price_chain = end.try_into().unwrap();
-            msg!("Prev scope chain is {:?}", cached);
-            msg!(
-                "Set scope chain to {:?}",
-                reserve.config.token_info.scope_configuration.price_chain
-            );
+            config_items::for_named_field!(
+                &mut reserve.config.token_info.scope_configuration.price_chain
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoScopeTwap => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let x = value.to_le_bytes();
-            let end = x
-                .chunks_exact(2)
-                .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
-                .collect::<Vec<u16>>();
-            let cached = reserve.config.token_info.scope_configuration.twap_chain;
-            reserve.config.token_info.scope_configuration.twap_chain = end.try_into().unwrap();
-            msg!("Prev twap scope chain is {:?}", cached);
-            msg!(
-                "Set  twap scope chain to {:?}",
-                reserve.config.token_info.scope_configuration.twap_chain
-            );
+            config_items::for_named_field!(
+                &mut reserve.config.token_info.scope_configuration.twap_chain
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoName => {
-            let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let str_name = std::str::from_utf8(&value).unwrap();
-            let cached = reserve.config.token_info.name;
-            let cached_name = std::str::from_utf8(&cached).unwrap();
-            msg!("Prev token name was {}", cached_name.trim_end_matches('\0'));
-            msg!("Setting token name to {}", str_name.trim_end_matches('\0'));
-            reserve.config.token_info.name = value;
+            config_items::for_named_field!(&mut reserve.config.token_info.name)
+                .rendering(renderings::as_utf8_null_padded_string)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoPriceMaxAge => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.token_info.max_age_price_seconds;
-            reserve.config.token_info.max_age_price_seconds = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.max_age_price_seconds)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateTokenInfoTwapMaxAge => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.token_info.max_age_twap_seconds;
-            reserve.config.token_info.max_age_twap_seconds = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.max_age_twap_seconds)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateScopePriceFeed => {
-            let new: [u8; 32] = value[0..32].try_into().unwrap();
-            let new = Pubkey::new_from_array(new);
-            let prv = reserve.config.token_info.scope_configuration.price_feed;
-            reserve.config.token_info.scope_configuration.price_feed = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve.config.token_info.scope_configuration.price_feed
+            )
+            .set(value)?;
         }
-
         UpdateConfigMode::UpdatePythPrice => {
-            let new: [u8; 32] = value[0..32].try_into().unwrap();
-            let new = Pubkey::new_from_array(new);
-            let prv = reserve.config.token_info.pyth_configuration.price;
-            reserve.config.token_info.pyth_configuration.price = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.pyth_configuration.price)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateSwitchboardFeed => {
-            let new: [u8; 32] = value[0..32].try_into().unwrap();
-            let new = Pubkey::new_from_array(new);
-            let prv = reserve
-                .config
-                .token_info
-                .switchboard_configuration
-                .price_aggregator;
-            reserve
-                .config
-                .token_info
-                .switchboard_configuration
-                .price_aggregator = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve
+                    .config
+                    .token_info
+                    .switchboard_configuration
+                    .price_aggregator
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateSwitchboardTwapFeed => {
-            let new: [u8; 32] = value[0..32].try_into().unwrap();
-            let new = Pubkey::new_from_array(new);
-            let prv = reserve
-                .config
-                .token_info
-                .switchboard_configuration
-                .twap_aggregator;
-            reserve
-                .config
-                .token_info
-                .switchboard_configuration
-                .twap_aggregator = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve
+                    .config
+                    .token_info
+                    .switchboard_configuration
+                    .twap_aggregator
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateBorrowRateCurve => {
-            let new: BorrowRateCurve = BorshDeserialize::deserialize(&mut &value[..]).unwrap();
-            let prv = reserve.config.borrow_rate_curve;
-            reserve.config.borrow_rate_curve = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.borrow_rate_curve).set(value)?;
         }
         UpdateConfigMode::UpdateEntireReserveConfig => {
-            let new: ReserveConfig = BorshDeserialize::deserialize(&mut &value[..]).unwrap();
-            reserve.config = new;
-            msg!("New Value is {:?}", value);
+            msg!(
+                r"Updating entire reserve config, fields `protocol_take_rate_pct`, 
+                `protocol_liquidation_fee_pct`, `protocol_order_execution_fee_pct` and 
+                `host_fixed_interest_rate_bps` will remain unchanged"
+            );
+            let old_protocol_take_rate_pct = reserve.config.protocol_take_rate_pct;
+            let old_protocol_liquidation_fee_pct = reserve.config.protocol_liquidation_fee_pct;
+            let old_host_fixed_interest_rate_bps = reserve.config.host_fixed_interest_rate_bps;
+            let old_protocol_order_execution_fee_pct =
+                reserve.config.protocol_order_execution_fee_pct;
+
+            config_items::for_named_field!(&mut reserve.config).set(value)?;
+
+            reserve.config.protocol_take_rate_pct = old_protocol_take_rate_pct;
+            reserve.config.protocol_liquidation_fee_pct = old_protocol_liquidation_fee_pct;
+            reserve.config.host_fixed_interest_rate_bps = old_host_fixed_interest_rate_bps;
+            reserve.config.protocol_order_execution_fee_pct = old_protocol_order_execution_fee_pct;
         }
         UpdateConfigMode::UpdateDebtWithdrawalCap => {
-            let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let interval_length_seconds = u64::from_le_bytes(value[8..16].try_into().unwrap());
-
-            let prev_capacity = reserve.config.debt_withdrawal_cap.config_capacity;
-            let prev_length = reserve
-                .config
-                .debt_withdrawal_cap
-                .config_interval_length_seconds;
-
-            reserve.config.debt_withdrawal_cap.config_capacity = capacity.try_into().unwrap();
-            reserve
-                .config
-                .debt_withdrawal_cap
-                .config_interval_length_seconds = interval_length_seconds;
-
-            msg!(
-                "New capacity is {:?}, interval_length_seconds is {:?}",
-                capacity,
-                interval_length_seconds
-            );
-            msg!(
-                "Prv capacity is {:?}, interval_length_seconds is {:?}",
-                prev_capacity,
-                prev_length
-            );
+            config_items::for_named_field!(&mut reserve.config.debt_withdrawal_cap.config_capacity)
+                .validating(validations::check_not_negative)
+                .set(value)?;
+            config_items::for_named_field!(
+                &mut reserve
+                    .config
+                    .debt_withdrawal_cap
+                    .config_interval_length_seconds
+            )
+            .set(&value[size_of::<u64>()..])?;
         }
         UpdateConfigMode::UpdateDepositWithdrawalCap => {
-            let capacity = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let interval_length_seconds = u64::from_le_bytes(value[8..16].try_into().unwrap());
-
-            let prev_capacity = reserve.config.deposit_withdrawal_cap.config_capacity;
-            let prev_length = reserve
-                .config
-                .deposit_withdrawal_cap
-                .config_interval_length_seconds;
-
-            reserve.config.deposit_withdrawal_cap.config_capacity = capacity.try_into().unwrap();
-            reserve
-                .config
-                .deposit_withdrawal_cap
-                .config_interval_length_seconds = interval_length_seconds;
-
-            msg!(
-                "Prv capacity is {:?}, interval_length_seconds is {:?}",
-                prev_capacity,
-                prev_length
-            );
-            msg!(
-                "New capacity is {:?}, interval_length_seconds is {:?}",
-                capacity,
-                interval_length_seconds
-            );
-        }
-        UpdateConfigMode::UpdateDebtWithdrawalCapCurrentTotal => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.debt_withdrawal_cap.current_total;
-            reserve.config.debt_withdrawal_cap.current_total = new.try_into().unwrap();
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
-        }
-        UpdateConfigMode::UpdateDepositWithdrawalCapCurrentTotal => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.deposit_withdrawal_cap.current_total;
-            reserve.config.deposit_withdrawal_cap.current_total = new.try_into().unwrap();
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve.config.deposit_withdrawal_cap.config_capacity
+            )
+            .validating(validations::check_not_negative)
+            .set(value)?;
+            config_items::for_named_field!(
+                &mut reserve
+                    .config
+                    .deposit_withdrawal_cap
+                    .config_interval_length_seconds
+            )
+            .set(&value[size_of::<u64>()..])?;
         }
         UpdateConfigMode::UpdateBadDebtLiquidationBonusBps => {
-            let new: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
-            let prv = reserve.config.bad_debt_liquidation_bonus_bps;
-            reserve.config.bad_debt_liquidation_bonus_bps = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.bad_debt_liquidation_bonus_bps)
+                .validating(validations::check_valid_bps)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateMinLiquidationBonusBps => {
-            let new: u16 = u16::from_le_bytes(value[..2].try_into().unwrap());
-            let prv = reserve.config.min_liquidation_bonus_bps;
-            reserve.config.min_liquidation_bonus_bps = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.min_liquidation_bonus_bps)
+                .validating(validations::check_valid_bps)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateDeleveragingMarginCallPeriod => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.deleveraging_margin_call_period_secs;
-            reserve.config.deleveraging_margin_call_period_secs = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve.config.deleveraging_margin_call_period_secs
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateBorrowFactor => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.borrow_factor_pct;
-            reserve.config.borrow_factor_pct = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.borrow_factor_pct).set(value)?;
         }
         UpdateConfigMode::UpdateAssetTier => {
-            let new = value[0];
-            let prv = reserve.config.asset_tier;
-            reserve.config.asset_tier = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.asset_tier)
+                .representing_u8_enum::<AssetTier>()
+                .set(value)?;
         }
         UpdateConfigMode::UpdateElevationGroup => {
-            let new: [u8; 20] = value[..20].try_into().unwrap();
-            let prv = reserve.config.elevation_groups;
-            reserve.config.elevation_groups = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.elevation_groups).set(value)?;
         }
         UpdateConfigMode::UpdateDeleveragingThresholdDecreaseBpsPerDay => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.deleveraging_threshold_decrease_bps_per_day;
-            reserve.config.deleveraging_threshold_decrease_bps_per_day = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve.config.deleveraging_threshold_decrease_bps_per_day
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateReserveStatus => {
-            let new = ReserveStatus::try_from(value[0]).unwrap();
-            let prv = ReserveStatus::try_from(reserve.config.status).unwrap();
-            reserve.config.status = new as u8;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.status)
+                .representing_u8_enum::<ReserveStatus>()
+                .set(value)?;
         }
         UpdateConfigMode::UpdateBorrowLimitOutsideElevationGroup => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.borrow_limit_outside_elevation_group;
-            reserve.config.borrow_limit_outside_elevation_group = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve.config.borrow_limit_outside_elevation_group
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateBorrowLimitsInElevationGroupAgainstThisReserve => {
-            msg!(
-                "Prv Value is {:?}",
-                reserve
+            config_items::for_named_field!(
+                &mut reserve
                     .config
                     .borrow_limit_against_this_collateral_in_elevation_group
-            );
-            reserve
-                .config
-                .borrow_limit_against_this_collateral_in_elevation_group =
-                BorshDeserialize::try_from_slice(value).unwrap();
-            msg!(
-                "New Value is {:?}",
-                reserve
-                    .config
-                    .borrow_limit_against_this_collateral_in_elevation_group
-            );
+            )
+            .set(value)?;
         }
         UpdateConfigMode::UpdateFarmCollateral => {
-            let new: [u8; 32] = value[0..32].try_into().unwrap();
-            let new = Pubkey::new_from_array(new);
-            let prv = reserve.farm_collateral;
-            reserve.farm_collateral = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.farm_collateral).set(value)?;
         }
         UpdateConfigMode::UpdateFarmDebt => {
-            let new: [u8; 32] = value[0..32].try_into().unwrap();
-            let new = Pubkey::new_from_array(new);
-            let prv = reserve.farm_debt;
-            reserve.farm_debt = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.farm_debt).set(value)?;
         }
         UpdateConfigMode::UpdateDisableUsageAsCollateralOutsideEmode => {
-            let new = value[0];
-            let prv = reserve.config.disable_usage_as_coll_outside_emode;
-            reserve.config.disable_usage_as_coll_outside_emode = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.disable_usage_as_coll_outside_emode)
+                .validating(validations::check_bool)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateBlockBorrowingAboveUtilizationPct => {
-            let new = value[0];
-            let prv = reserve.config.utilization_limit_block_borrowing_above_pct;
-            reserve.config.utilization_limit_block_borrowing_above_pct = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve.config.utilization_limit_block_borrowing_above_pct
+            )
+            .validating(validations::check_valid_pct)
+            .set(value)?;
         }
         UpdateConfigMode::UpdateBlockPriceUsage => {
-            let new = value[0];
-            let prv = reserve.config.token_info.block_price_usage;
-            reserve.config.token_info.block_price_usage = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.token_info.block_price_usage)
+                .validating(validations::check_bool)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateHostFixedInterestRateBps => {
-            let new = u16::from_le_bytes(value[..2].try_into().unwrap());
-            let prv = reserve.config.host_fixed_interest_rate_bps;
-            reserve.config.host_fixed_interest_rate_bps = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
-        }
-        UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost => {
-            panic!("Deprecated endpoint")
-        }
-        UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost => {
-            panic!("Deprecated endpoint")
+            config_items::for_named_field!(&mut reserve.config.host_fixed_interest_rate_bps)
+                .validating(validations::check_valid_bps)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateAutodeleverageEnabled => {
-            let new = value[0];
-            let prv = reserve.config.autodeleverage_enabled;
-            reserve.config.autodeleverage_enabled = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(&mut reserve.config.autodeleverage_enabled)
+                .validating(validations::check_bool)
+                .set(value)?;
         }
         UpdateConfigMode::UpdateDeleveragingBonusIncreaseBpsPerDay => {
-            let new = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let prv = reserve.config.deleveraging_bonus_increase_bps_per_day;
-            reserve.config.deleveraging_bonus_increase_bps_per_day = new;
-            msg!("Prv Value is {:?}", prv);
-            msg!("New Value is {:?}", new);
+            config_items::for_named_field!(
+                &mut reserve.config.deleveraging_bonus_increase_bps_per_day
+            )
+            .set(value)?;
+        }
+        UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
+        | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
+        | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
+        | UpdateConfigMode::DeprecatedUpdateDebtWithdrawalCapCurrentTotal
+        | UpdateConfigMode::DeprecatedUpdateDepositWithdrawalCapCurrentTotal => {
+            panic!("Deprecated endpoint")
         }
     }
 
     reserve.last_update.mark_stale();
+    Ok(())
 }
 
 pub mod utils {
@@ -2268,18 +2150,16 @@ pub mod utils {
     use num_enum::TryFromPrimitive;
 
     use super::*;
-    use crate::utils::zip_and_validate_same_length;
     use crate::{
         fraction::FRACTION_ONE_SCALED,
-        state::ReserveConfig,
-        utils::{ten_pow, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
-        ElevationGroup, ObligationCollateral, ObligationLiquidity,
+        utils::{ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
+        ElevationGroup, ObligationCollateral, ObligationLiquidity, ReserveConfig,
     };
 
     pub(crate) fn repay_and_withdraw_from_obligation_post_liquidation(
         obligation: &mut Obligation,
         repay_reserve: &mut Reserve,
-        settle_amount_f: Fraction,
+        settle_amount: Fraction,
         withdraw_amount: u64,
         repay_amount: u64,
         liquidity_index: usize,
@@ -2294,12 +2174,10 @@ pub mod utils {
             return err!(LendingError::LiquidationTooSmall);
         }
 
-        repay_reserve
-            .liquidity
-            .repay(repay_amount, settle_amount_f)?;
+        repay_reserve.liquidity.repay(repay_amount, settle_amount)?;
         repay_reserve.last_update.mark_stale();
 
-        obligation.repay(settle_amount_f, liquidity_index);
+        obligation.repay(settle_amount, liquidity_index);
         obligation.withdraw(withdraw_amount, collateral_index)?;
         obligation.update_has_debt();
         obligation.last_update.mark_stale();
@@ -2311,12 +2189,9 @@ pub mod utils {
         reserve: &Reserve,
         liquidity_amount: Fraction,
     ) -> Fraction {
-        let mint_decimal_factor: u128 =
-            ten_pow(reserve.liquidity.mint_decimals.try_into().unwrap()).into();
-        let market_price_f = reserve.liquidity.get_market_price_f();
-        liquidity_amount
-            .mul(market_price_f)
-            .div(mint_decimal_factor)
+        let mint_decimal_factor = u128::from(reserve.liquidity.mint_factor());
+        let market_price = reserve.liquidity.get_market_price();
+        liquidity_amount.mul(market_price).div(mint_decimal_factor)
     }
 
     pub(crate) fn calculate_obligation_collateral_market_value(
@@ -2337,10 +2212,7 @@ pub mod utils {
         borrow_reserve: &Reserve,
         borrow: &ObligationLiquidity,
     ) -> Fraction {
-        calculate_market_value_from_liquidity_amount(
-            borrow_reserve,
-            Fraction::from_bits(borrow.borrowed_amount_sf),
-        )
+        calculate_market_value_from_liquidity_amount(borrow_reserve, borrow.borrowed_amount())
     }
 
     pub(crate) fn check_obligation_collateral_deposit_reserve(
@@ -2448,13 +2320,7 @@ pub mod utils {
         T: AnyAccountLoader<'info, Reserve>,
     {
         {
-            let borrows_and_reserves = zip_and_validate_same_length(
-                obligation
-                    .borrows
-                    .iter()
-                    .filter(|borrow| borrow.borrow_reserve != Pubkey::default()),
-                borrow_reserves_iter,
-            );
+            let borrows_and_reserves = obligation.active_borrows().zip_exact(borrow_reserves_iter);
             for borrow_and_reserve in borrows_and_reserves {
                 let (borrow, reserve_acc) =
                     borrow_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
@@ -2490,13 +2356,9 @@ pub mod utils {
         }
 
         {
-            let deposits_and_reserves = zip_and_validate_same_length(
-                obligation
-                    .deposits
-                    .iter()
-                    .filter(|deposit| deposit.deposit_reserve != Pubkey::default()),
-                deposit_reserves_iter,
-            );
+            let deposits_and_reserves = obligation
+                .active_deposits()
+                .zip_exact(deposit_reserves_iter);
             for deposit_and_reserve in deposits_and_reserves {
                 let (deposit, reserve_acc) =
                     deposit_and_reserve.map_err(|_| error!(LendingError::InvalidAccountInput))?;
@@ -2536,7 +2398,7 @@ pub mod utils {
                 }
             }
 
-            if !obligation.borrows_empty() {
+            if !obligation.active_borrows_empty() {
                 check_non_elevation_group_borrowing_enabled(obligation)?;
             }
         }
@@ -2563,11 +2425,7 @@ pub mod utils {
                 *borrow_reserve_pk,
                 LendingError::ElevationGroupHasAnotherDebtReserve
             );
-            for obligation_deposit in obligation
-                .deposits
-                .iter_mut()
-                .filter(|d| d.deposit_reserve != Pubkey::default())
-            {
+            for obligation_deposit in obligation.active_deposits_mut() {
                 let deposit_reserve = deposit_reserves_iter
                     .next()
                     .ok_or_else(|| error!(LendingError::InvalidAccountInput))?;
@@ -2641,11 +2499,7 @@ pub mod utils {
     {
         if obligation.elevation_group != ELEVATION_GROUP_NONE {
             let elevation_group_index = obligation.elevation_group as usize - 1;
-            for obligation_deposit in obligation
-                .deposits
-                .iter_mut()
-                .filter(|d| d.deposit_reserve != Pubkey::default())
-            {
+            for obligation_deposit in obligation.active_deposits_mut() {
                 let deposit_reserve = deposit_reserves_iter
                     .next()
                     .ok_or_else(|| error!(LendingError::InvalidAccountInput))?;
@@ -2797,7 +2651,7 @@ pub mod utils {
                     new_ltv.to_display(),
                     reserve.token_symbol()
                 );
-                return err!(LendingError::WorseLTVBlocked);
+                return err!(LendingError::WorseLtvBlocked);
             }
         }
 
@@ -2865,7 +2719,7 @@ pub mod utils {
                     new_unhealthy_ltv.to_display(),
                     reserve.token_symbol()
                 );
-                return err!(LendingError::WorseLTVThanUnhealthyLTV);
+                return err!(LendingError::WorseLtvThanUnhealthyLtv);
             }
         }
 
@@ -2888,7 +2742,7 @@ pub mod utils {
         if obligation.lowest_reserve_deposit_max_ltv_pct < withdraw_reserve.config.loan_to_value_pct
             && debt_value > 0
         {
-            return err!(LendingError::MinLtvAssetsPriority);
+            return err!(LendingError::LowestLtvAssetsPriority);
         }
 
         if new_total_deposited_mv != 0 {
@@ -2898,7 +2752,7 @@ pub mod utils {
 
             if new_ltv > initial_ltv_before_repay {
                 msg!("Obligation new LTV/initial LTV after withdraw with permissive withdraw flag {}/{}", new_ltv.to_display(), initial_ltv_before_repay.to_display());
-                return err!(LendingError::WorseLTVBlocked);
+                return err!(LendingError::WorseLtvBlocked);
             }
 
             if new_ltv >= new_unhealthy_ltv {
@@ -2907,7 +2761,7 @@ pub mod utils {
                     new_ltv.to_display(),
                     new_unhealthy_ltv.to_display()
                 );
-                return err!(LendingError::WorseLTVThanUnhealthyLTV);
+                return err!(LendingError::WorseLtvThanUnhealthyLtv);
             }
         }
 
@@ -2939,7 +2793,7 @@ pub mod utils {
         if obligation.lowest_reserve_deposit_max_ltv_pct < withdraw_reserve.config.loan_to_value_pct
             && debt_value > 0
         {
-            return err!(LendingError::MinLtvAssetsPriority);
+            return err!(LendingError::LowestLtvAssetsPriority);
         }
 
         if new_total_deposited_mv != 0 {
@@ -2949,7 +2803,7 @@ pub mod utils {
 
             if new_ltv > initial_ltv {
                 msg!("Obligation new LTV/initial LTV after withdraw with permissive withdraw flag {}/{}", new_ltv.to_display(), initial_ltv.to_display());
-                return err!(LendingError::WorseLTVBlocked);
+                return err!(LendingError::WorseLtvBlocked);
             }
 
             if new_ltv >= new_unhealthy_ltv {
@@ -2958,7 +2812,7 @@ pub mod utils {
                     new_ltv.to_display(),
                     new_unhealthy_ltv.to_display()
                 );
-                return err!(LendingError::WorseLTVThanUnhealthyLTV);
+                return err!(LendingError::WorseLtvThanUnhealthyLtv);
             }
         }
 
@@ -2976,7 +2830,7 @@ pub mod utils {
         {
             require_gte!(
                 usize::from(elevation_group.max_reserves_as_collateral),
-                obligation.deposits_count(),
+                obligation.active_deposits_count(),
                 LendingError::ObligationCollateralExceedsElevationGroupLimit
             );
         }
@@ -3018,7 +2872,7 @@ pub mod utils {
                 obligation.unhealthy_loan_to_value().to_display(),
                 reserve.token_symbol()
             );
-            return err!(LendingError::WorseLTVThanUnhealthyLTV);
+            return err!(LendingError::WorseLtvThanUnhealthyLtv);
         }
 
         if new_total_no_bf_debt_mv >= Fraction::from_bits(obligation.deposited_value_sf) {
@@ -3069,7 +2923,7 @@ pub mod utils {
                     obligation.unhealthy_loan_to_value().to_display(),
                     reserve.token_symbol()
                 );
-                return err!(LendingError::WorseLTVBlocked);
+                return err!(LendingError::WorseLtvBlocked);
             }
         }
 
@@ -3133,7 +2987,7 @@ pub mod utils {
         );
             return err!(LendingError::ObligationStale);
         }
-        if obligation.deposits_empty() {
+        if obligation.active_deposits_empty() {
             msg!("Obligation has no deposits to borrow against");
             return err!(LendingError::ObligationDepositsEmpty);
         }
@@ -3202,6 +3056,73 @@ pub mod utils {
         Ok(())
     }
 
+    pub fn is_update_reserve_config_mode_global_admin_only(mode: UpdateConfigMode) -> bool {
+        match mode {
+            UpdateConfigMode::UpdateProtocolTakeRate
+            | UpdateConfigMode::UpdateProtocolLiquidationFee
+            | UpdateConfigMode::UpdateHostFixedInterestRateBps
+            | UpdateConfigMode::UpdateProtocolOrderExecutionFee => true,
+            UpdateConfigMode::UpdateLoanToValuePct
+            | UpdateConfigMode::UpdateMaxLiquidationBonusBps
+            | UpdateConfigMode::UpdateLiquidationThresholdPct
+            | UpdateConfigMode::UpdateFeesBorrowFee
+            | UpdateConfigMode::UpdateFeesFlashLoanFee
+            | UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
+            | UpdateConfigMode::UpdateDepositLimit
+            | UpdateConfigMode::UpdateBorrowLimit
+            | UpdateConfigMode::UpdateTokenInfoLowerHeuristic
+            | UpdateConfigMode::UpdateTokenInfoUpperHeuristic
+            | UpdateConfigMode::UpdateTokenInfoExpHeuristic
+            | UpdateConfigMode::UpdateTokenInfoTwapDivergence
+            | UpdateConfigMode::UpdateTokenInfoScopeTwap
+            | UpdateConfigMode::UpdateTokenInfoScopeChain
+            | UpdateConfigMode::UpdateTokenInfoName
+            | UpdateConfigMode::UpdateTokenInfoPriceMaxAge
+            | UpdateConfigMode::UpdateTokenInfoTwapMaxAge
+            | UpdateConfigMode::UpdateScopePriceFeed
+            | UpdateConfigMode::UpdatePythPrice
+            | UpdateConfigMode::UpdateSwitchboardFeed
+            | UpdateConfigMode::UpdateSwitchboardTwapFeed
+            | UpdateConfigMode::UpdateBorrowRateCurve
+            | UpdateConfigMode::UpdateEntireReserveConfig
+            | UpdateConfigMode::UpdateDebtWithdrawalCap
+            | UpdateConfigMode::UpdateDepositWithdrawalCap
+            | UpdateConfigMode::DeprecatedUpdateDebtWithdrawalCapCurrentTotal
+            | UpdateConfigMode::DeprecatedUpdateDepositWithdrawalCapCurrentTotal
+            | UpdateConfigMode::UpdateBadDebtLiquidationBonusBps
+            | UpdateConfigMode::UpdateMinLiquidationBonusBps
+            | UpdateConfigMode::UpdateDeleveragingMarginCallPeriod
+            | UpdateConfigMode::UpdateBorrowFactor
+            | UpdateConfigMode::UpdateAssetTier
+            | UpdateConfigMode::UpdateElevationGroup
+            | UpdateConfigMode::UpdateDeleveragingThresholdDecreaseBpsPerDay
+            | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
+            | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
+            | UpdateConfigMode::UpdateReserveStatus
+            | UpdateConfigMode::UpdateFarmCollateral
+            | UpdateConfigMode::UpdateFarmDebt
+            | UpdateConfigMode::UpdateDisableUsageAsCollateralOutsideEmode
+            | UpdateConfigMode::UpdateBlockBorrowingAboveUtilizationPct
+            | UpdateConfigMode::UpdateBlockPriceUsage
+            | UpdateConfigMode::UpdateBorrowLimitOutsideElevationGroup
+            | UpdateConfigMode::UpdateBorrowLimitsInElevationGroupAgainstThisReserve
+            | UpdateConfigMode::UpdateAutodeleverageEnabled
+            | UpdateConfigMode::UpdateDeleveragingBonusIncreaseBpsPerDay => false,
+        }
+    }
+
+    pub fn allowed_signer_update_reserve_config(
+        mode: UpdateConfigMode,
+        lending_market_owner: Pubkey,
+        global_admin: Pubkey,
+    ) -> Pubkey {
+        if is_update_reserve_config_mode_global_admin_only(mode) {
+            global_admin
+        } else {
+            lending_market_owner
+        }
+    }
+
     pub fn validate_reserve_config(
         config: &ReserveConfig,
         market: &LendingMarket,
@@ -3231,6 +3152,10 @@ pub mod utils {
         }
         if config.protocol_liquidation_fee_pct > 100 {
             msg!("Protocol liquidation fee must be in range [0, 100]");
+            return err!(LendingError::InvalidConfig);
+        }
+        if config.protocol_order_execution_fee_pct > 100 {
+            msg!("Protocol order execution fee must be in range [0, 100]");
             return err!(LendingError::InvalidConfig);
         }
         if config.protocol_take_rate_pct > 100 {

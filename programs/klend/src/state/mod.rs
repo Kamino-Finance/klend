@@ -1,14 +1,17 @@
+pub mod global_config;
 pub mod last_update;
 pub mod lending_market;
 pub mod liquidation_operations;
 pub mod nested_accounts;
 pub mod obligation;
+pub mod order_operations;
 pub mod referral;
 pub mod reserve;
 pub mod token_info;
 pub mod types;
 
 use anchor_lang::prelude::*;
+pub use global_config::*;
 pub use last_update::*;
 pub use lending_market::*;
 pub use nested_accounts::*;
@@ -92,7 +95,7 @@ pub enum UpdateConfigMode {
     UpdateProtocolTakeRate = 5,
     UpdateFeesBorrowFee = 6,
     UpdateFeesFlashLoanFee = 7,
-    UpdateFeesReferralFeeBps = 8,
+    DeprecatedUpdateFeesReferralFeeBps = 8,
     UpdateDepositLimit = 9,
     UpdateBorrowLimit = 10,
     UpdateTokenInfoLowerHeuristic = 11,
@@ -112,8 +115,8 @@ pub enum UpdateConfigMode {
     UpdateEntireReserveConfig = 25,
     UpdateDebtWithdrawalCap = 26,
     UpdateDepositWithdrawalCap = 27,
-    UpdateDebtWithdrawalCapCurrentTotal = 28,
-    UpdateDepositWithdrawalCapCurrentTotal = 29,
+    DeprecatedUpdateDebtWithdrawalCapCurrentTotal = 28,
+    DeprecatedUpdateDepositWithdrawalCapCurrentTotal = 29,
     UpdateBadDebtLiquidationBonusBps = 30,
     UpdateMinLiquidationBonusBps = 31,
     UpdateDeleveragingMarginCallPeriod = 32,
@@ -134,6 +137,7 @@ pub enum UpdateConfigMode {
     UpdateHostFixedInterestRateBps = 47,
     UpdateAutodeleverageEnabled = 48,
     UpdateDeleveragingBonusIncreaseBpsPerDay = 49,
+    UpdateProtocolOrderExecutionFee = 50,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -221,6 +225,9 @@ pub enum UpdateLendingMarketMode {
     UpdateName = 19,
     UpdateIndividualAutodeleverageMarginCallPeriodSecs = 20,
     UpdateInitialDepositAmount = 21,
+    UpdateObligationOrderExecutionEnabled = 22,
+    UpdateImmutableFlag = 23,
+    UpdateObligationOrderCreationEnabled = 24,
 }
 
 #[cfg(feature = "serde")]
@@ -230,8 +237,15 @@ pub mod serde_iter {
     use super::*;
     impl UpdateLendingMarketMode {
         pub fn iter_without_deprecated() -> impl Iterator<Item = Self> {
-            Self::iter()
-                .filter(|mode| *mode != UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints)
+            Self::iter().filter(|mode| !mode.is_deprecated())
+        }
+
+        pub fn is_deprecated(&self) -> bool {
+            matches!(
+                *self,
+                UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints
+                    | UpdateLendingMarketMode::DeprecatedUpdateGlobalUnhealthyBorrow
+            )
         }
     }
 }

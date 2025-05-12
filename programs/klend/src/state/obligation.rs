@@ -1,14 +1,19 @@
 use std::{
     cmp::Ordering,
     fmt::{self, Display, Formatter},
+    ops::RangeInclusive,
 };
 
 use anchor_lang::{account, err, prelude::*, solana_program::clock::Slot, Result};
+use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 
 use super::{LastUpdate, LtvMaxWithdrawalCheck};
 use crate::{
-    utils::{BigFraction, Fraction, FractionExtra, ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256},
+    order_operations::{ConditionType, OpportunityType},
+    utils::{
+        BigFraction, Fraction, FractionExtra, IterExt, ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256,
+    },
     xmsg, AssetTier, BigFractionBytes, LendingError,
 };
 
@@ -38,7 +43,7 @@ pub struct Obligation {
 
     pub elevation_group: u8,
 
-    pub num_of_obsolete_reserves: u8,
+    pub num_of_obsolete_deposit_reserves: u8,
 
     pub has_debt: u8,
 
@@ -50,15 +55,19 @@ pub struct Obligation {
 
     pub lowest_reserve_deposit_max_ltv_pct: u8,
 
+    pub num_of_obsolete_borrow_reserves: u8,
+
     #[derivative(Debug = "ignore")]
-    pub reserved: [u8; 5],
+    pub reserved: [u8; 4],
 
     pub highest_borrow_factor_pct: u64,
 
     pub autodeleverage_margin_call_started_timestamp: u64,
 
+    pub orders: [ObligationOrder; 2],
+
     #[derivative(Debug = "ignore")]
-    pub padding_3: [u64; 125],
+    pub padding_3: [u64; 93],
 }
 
 impl Default for Obligation {
@@ -79,16 +88,18 @@ impl Default for Obligation {
             deposits_asset_tiers: [u8::MAX; 8],
             borrows_asset_tiers: [u8::MAX; 5],
             elevation_group: ELEVATION_GROUP_NONE,
-            num_of_obsolete_reserves: 0,
+            num_of_obsolete_deposit_reserves: 0,
+            num_of_obsolete_borrow_reserves: 0,
             has_debt: 0,
             borrowing_disabled: 0,
             highest_borrow_factor_pct: 0,
             lowest_reserve_deposit_max_ltv_pct: 0,
-            reserved: [0; 5],
-            padding_3: [0; 125],
+            reserved: [0; 4],
+            padding_3: [0; 93],
             referrer: Pubkey::default(),
             autodeleverage_target_ltv_pct: 0,
             autodeleverage_margin_call_started_timestamp: 0,
+            orders: [ObligationOrder::default(); 2],
         }
     }
 }
@@ -104,11 +115,7 @@ impl Display for Obligation {
             if self.deposited_value_sf > 0 {self.loan_to_value().to_percent::<u16>().unwrap()} else { 0 },
         )?;
 
-        for collateral in self
-            .deposits
-            .iter()
-            .filter(|c| c.deposit_reserve != Pubkey::default())
-        {
+        for collateral in self.active_deposits() {
             write!(
                 f,
                 "\n  Collateral reserve: {}, value: ${}, lamports: {}",
@@ -118,17 +125,13 @@ impl Display for Obligation {
             )?;
         }
 
-        for liquidity in self
-            .borrows
-            .iter()
-            .filter(|l| l.borrow_reserve != Pubkey::default())
-        {
+        for liquidity in self.active_borrows() {
             write!(
                 f,
                 "\n  Borrowed reserve  : {}, value: ${}, lamports: {}",
                 liquidity.borrow_reserve,
-                Fraction::from_bits(liquidity.market_value_sf).to_display(),
-                Fraction::from_bits(liquidity.borrowed_amount_sf).to_num::<u128>(),
+                liquidity.market_value().to_display(),
+                liquidity.borrowed_amount().to_num::<u128>(),
             )?;
         }
 
@@ -175,7 +178,7 @@ impl Obligation {
 
     pub fn repay(&mut self, settle_amount: Fraction, liquidity_index: usize) {
         let liquidity = &mut self.borrows[liquidity_index];
-        if settle_amount == Fraction::from_bits(liquidity.borrowed_amount_sf) {
+        if settle_amount == liquidity.borrowed_amount() {
             self.borrows[liquidity_index] = ObligationLiquidity::default();
             self.borrows_asset_tiers[liquidity_index] = u8::MAX;
         } else {
@@ -245,7 +248,7 @@ impl Obligation {
         &self,
         deposit_reserve: Pubkey,
     ) -> Result<&ObligationCollateral> {
-        if self.deposits_empty() {
+        if self.active_deposits_empty() {
             xmsg!("Obligation has no deposits");
             return err!(LendingError::ObligationDepositsEmpty);
         }
@@ -261,26 +264,18 @@ impl Obligation {
         &mut self,
         deposit_reserve: Pubkey,
         deposit_reserve_asset_tier: AssetTier,
-        init_function: impl FnOnce(&mut ObligationCollateral) -> Result<()>,
-    ) -> Result<&mut ObligationCollateral> {
+    ) -> Result<(&mut ObligationCollateral, bool)> {
         if let Some(collateral_index) = self
             .deposits
             .iter_mut()
             .position(|collateral| collateral.deposit_reserve == deposit_reserve)
         {
-            Ok(&mut self.deposits[collateral_index])
-        } else if let Some(collateral_index) = self
-            .deposits
-            .iter()
-            .position(|c| c.deposit_reserve == Pubkey::default())
-        {
+            Ok((&mut self.deposits[collateral_index], false))
+        } else if let Some(collateral_index) = self.deposits.iter().position(|c| !c.is_active()) {
             let collateral = &mut self.deposits[collateral_index];
             *collateral = ObligationCollateral::new(deposit_reserve);
             self.deposits_asset_tiers[collateral_index] = deposit_reserve_asset_tier.into();
-
-            init_function(collateral)?;
-
-            Ok(collateral)
+            Ok((collateral, true))
         } else {
             xmsg!("Obligation has no empty deposits");
             err!(LendingError::ObligationReserveLimit)
@@ -288,7 +283,7 @@ impl Obligation {
     }
 
     pub fn position_of_collateral_in_deposits(&self, deposit_reserve: Pubkey) -> Result<usize> {
-        if self.deposits_empty() {
+        if self.active_deposits_empty() {
             xmsg!("Obligation has no deposits");
             return err!(LendingError::ObligationDepositsEmpty);
         }
@@ -302,7 +297,7 @@ impl Obligation {
         &self,
         borrow_reserve: Pubkey,
     ) -> Result<(&ObligationLiquidity, usize)> {
-        if self.borrows_empty() {
+        if self.active_borrows_empty() {
             xmsg!("Obligation has no borrows");
             return err!(LendingError::ObligationBorrowsEmpty);
         }
@@ -316,7 +311,7 @@ impl Obligation {
         &mut self,
         borrow_reserve: Pubkey,
     ) -> Result<(&mut ObligationLiquidity, usize)> {
-        if self.borrows_empty() {
+        if self.active_borrows_empty() {
             xmsg!("Obligation has no borrows");
             return err!(LendingError::ObligationBorrowsEmpty);
         }
@@ -338,7 +333,7 @@ impl Obligation {
             .borrows
             .iter_mut()
             .enumerate()
-            .find(|c| c.1.borrow_reserve == Pubkey::default())
+            .find(|c| !c.1.is_active())
         {
             *liquidity = ObligationLiquidity::new(borrow_reserve, cumulative_borrow_rate);
             self.borrows_asset_tiers[index] = borrow_reserve_asset_tier.into();
@@ -356,30 +351,36 @@ impl Obligation {
             .position(|liquidity| liquidity.borrow_reserve == borrow_reserve)
     }
 
-    pub fn deposits_empty(&self) -> bool {
-        self.deposits
-            .iter()
-            .all(|c| c.deposit_reserve == Pubkey::default())
+    pub fn active_deposits_empty(&self) -> bool {
+        self.deposits.iter().all(|deposit| !deposit.is_active())
     }
 
-    pub fn borrows_empty(&self) -> bool {
-        self.borrows
-            .iter()
-            .all(|l| l.borrow_reserve == Pubkey::default())
+    pub fn active_borrows_empty(&self) -> bool {
+        self.borrows.iter().all(|borrow| !borrow.is_active())
     }
 
-    pub fn deposits_count(&self) -> usize {
-        self.deposits
-            .iter()
-            .filter(|c| c.deposit_reserve != Pubkey::default())
-            .count()
+    pub fn active_deposits_count(&self) -> usize {
+        self.active_deposits().count()
     }
 
-    pub fn borrows_count(&self) -> usize {
-        self.borrows
-            .iter()
-            .filter(|l| l.borrow_reserve != Pubkey::default())
-            .count()
+    pub fn active_borrows_count(&self) -> usize {
+        self.active_borrows().count()
+    }
+
+    pub fn active_deposits(&self) -> impl Iterator<Item = &ObligationCollateral> {
+        self.deposits.iter().filter(|c| c.is_active())
+    }
+
+    pub fn active_borrows(&self) -> impl Iterator<Item = &ObligationLiquidity> {
+        self.borrows.iter().filter(|c| c.is_active())
+    }
+
+    pub fn active_deposits_mut(&mut self) -> impl Iterator<Item = &mut ObligationCollateral> {
+        self.deposits.iter_mut().filter(|c| c.is_active())
+    }
+
+    pub fn active_borrows_mut(&mut self) -> impl Iterator<Item = &mut ObligationLiquidity> {
+        self.borrows.iter_mut().filter(|c| c.is_active())
     }
 
     pub fn get_deposit_asset_tiers(&self) -> Vec<AssetTier> {
@@ -387,7 +388,7 @@ impl Obligation {
             .iter()
             .enumerate()
             .filter_map(|(index, deposit)| {
-                if deposit.deposit_reserve != Pubkey::default() && deposit.deposited_amount > 0 {
+                if deposit.is_active() && deposit.deposited_amount > 0 {
                     Some(AssetTier::try_from(self.deposits_asset_tiers[index]).unwrap())
                 } else {
                     None
@@ -401,7 +402,7 @@ impl Obligation {
             .iter()
             .enumerate()
             .filter_map(|(index, borrow)| {
-                if borrow.borrow_reserve != Pubkey::default() && borrow.borrowed_amount_sf > 0 {
+                if borrow.is_active() && borrow.borrowed_amount_sf > 0 {
                     Some(AssetTier::try_from(self.borrows_asset_tiers[index]).unwrap())
                 } else {
                     None
@@ -411,7 +412,7 @@ impl Obligation {
     }
 
     pub fn get_borrowed_amount_if_single_token(&self) -> Option<u64> {
-        if self.borrows_count() > 1 {
+        if self.active_borrows_count() > 1 {
             None
         } else {
             Some(
@@ -433,16 +434,24 @@ impl Obligation {
         Fraction::from_bits(self.unhealthy_borrow_value_sf)
     }
 
+    pub fn get_borrowed_assets_market_value(&self) -> Fraction {
+        Fraction::from_bits(self.borrowed_assets_market_value_sf)
+    }
+
     pub fn has_referrer(&self) -> bool {
         self.referrer != Pubkey::default()
     }
 
     pub fn update_has_debt(&mut self) {
-        if self.borrows_empty() {
+        if self.active_borrows_empty() {
             self.has_debt = 0;
         } else {
             self.has_debt = 1;
         }
+    }
+
+    pub fn has_debt(&self) -> bool {
+        self.has_debt == true as u8
     }
 
     pub fn is_marked_for_deleveraging(&self) -> bool {
@@ -464,13 +473,29 @@ impl Obligation {
 
     pub fn check_not_marked_for_deleveraging(&self) -> Result<()> {
         if self.is_marked_for_deleveraging() {
-            msg!(
+            xmsg!(
                 "Obligation marked for deleveraging since {}",
                 self.autodeleverage_margin_call_started_timestamp
             );
             return err!(LendingError::ObligationCurrentlyMarkedForDeleveraging);
         }
         Ok(())
+    }
+
+    pub fn has_obsolete_reserves(&self) -> bool {
+        self.num_of_obsolete_borrow_reserves > 0 || self.num_of_obsolete_deposit_reserves > 0
+    }
+
+    pub fn single_debt(&self) -> Option<&ObligationLiquidity> {
+        self.active_borrows().only_element()
+    }
+
+    pub fn single_collateral(&self) -> Option<&ObligationCollateral> {
+        self.active_deposits().only_element()
+    }
+
+    pub fn is_single_debt_single_coll(&self) -> bool {
+        self.active_deposits_count() == 1 && self.active_borrows_count() == 1
     }
 }
 
@@ -527,6 +552,10 @@ impl ObligationCollateral {
             .ok_or(LendingError::MathOverflow)?;
         Ok(())
     }
+
+    pub fn is_active(&self) -> bool {
+        self.deposit_reserve != Pubkey::default()
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -560,13 +589,11 @@ impl ObligationLiquidity {
     }
 
     pub fn repay(&mut self, settle_amount: Fraction) {
-        self.borrowed_amount_sf =
-            (Fraction::from_bits(self.borrowed_amount_sf) - settle_amount).to_bits();
+        self.borrowed_amount_sf = (self.borrowed_amount() - settle_amount).to_bits();
     }
 
     pub fn borrow(&mut self, borrow_amount: Fraction) {
-        self.borrowed_amount_sf =
-            (Fraction::from_bits(self.borrowed_amount_sf) + borrow_amount).to_bits();
+        self.borrowed_amount_sf = (self.borrowed_amount() + borrow_amount).to_bits();
     }
 
     pub fn accrue_interest(&mut self, new_cumulative_borrow_rate: BigFraction) -> Result<()> {
@@ -592,5 +619,125 @@ impl ObligationLiquidity {
         }
 
         Ok(())
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.borrow_reserve != Pubkey::default()
+    }
+
+    pub fn market_value(&self) -> Fraction {
+        Fraction::from_bits(self.market_value_sf)
+    }
+
+    pub fn borrowed_amount(&self) -> Fraction {
+        Fraction::from_bits(self.borrowed_amount_sf)
+    }
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Default, PartialEq, Eq)]
+#[zero_copy]
+#[repr(C)]
+pub struct ObligationOrder {
+    pub condition_threshold_sf: u128,
+
+    pub opportunity_parameter_sf: u128,
+
+    pub min_execution_bonus_bps: u16,
+
+    pub max_execution_bonus_bps: u16,
+
+    pub condition_type: u8,
+
+    pub opportunity_type: u8,
+
+    pub padding1: [u8; 10],
+
+    pub padding2: [u128; 5],
+}
+
+impl ObligationOrder {
+    pub fn condition_type(&self) -> ConditionType {
+        ConditionType::try_from(self.condition_type).expect("Invalid serialized condition")
+    }
+
+    pub fn condition_threshold(&self) -> Fraction {
+        Fraction::from_bits(self.condition_threshold_sf)
+    }
+
+    pub fn opportunity_type(&self) -> OpportunityType {
+        OpportunityType::try_from(self.opportunity_type).expect("Invalid serialized opportunity")
+    }
+
+    pub fn opportunity_parameter(&self) -> Fraction {
+        Fraction::from_bits(self.opportunity_parameter_sf)
+    }
+
+    pub fn execution_bonus_rate_range(&self) -> RangeInclusive<Fraction> {
+        Fraction::from_bps(self.min_execution_bonus_bps)
+            ..=Fraction::from_bps(self.max_execution_bonus_bps)
+    }
+
+    pub fn is_supported_by(&self, obligation: &Obligation) -> bool {
+        if self == &ObligationOrder::default() {
+            return true;
+        }
+        self.condition_type().is_supported_by(obligation)
+            && self.opportunity_type().is_supported_by(obligation)
+    }
+
+    pub fn consume(&mut self, debt_repay_amount: u64) {
+        match self.opportunity_type() {
+            OpportunityType::DeleverageSingleDebtAmount => {
+                self.use_deleverage_single_debt_amount_opportunity(debt_repay_amount);
+            }
+            OpportunityType::DeleverageAllDebt => {
+                xmsg!("An opportunity to liquidate all debt was used by liquidator repaying amount {} (order unaffected)", debt_repay_amount);
+            }
+        }
+    }
+
+    pub fn condition_to_display(&self) -> impl Display {
+        match self.condition_type() {
+            ConditionType::Never => "<inactive>".to_string(),
+            ConditionType::UserLtvAbove => format!("LTV > {}", self.condition_threshold()),
+            ConditionType::UserLtvBelow => format!("LTV < {}", self.condition_threshold()),
+            ConditionType::DebtCollPriceRatioAbove => format!(
+                "ratio of (debt token price / collateral token price) > {}",
+                self.condition_threshold()
+            ),
+            ConditionType::DebtCollPriceRatioBelow => format!(
+                "ratio of (debt token price / collateral token price) < {}",
+                self.condition_threshold()
+            ),
+        }
+    }
+
+    pub fn opportunity_to_display(&self) -> impl Display {
+        match self.opportunity_type() {
+            OpportunityType::DeleverageSingleDebtAmount => format!(
+                "repay amount {} of single debt",
+                self.opportunity_parameter()
+            ),
+            OpportunityType::DeleverageAllDebt => "repay all debt".to_string(),
+        }
+    }
+
+    fn use_deleverage_single_debt_amount_opportunity(&mut self, debt_repay_amount: u64) {
+        let liquidatable_debt_amount = self.opportunity_parameter();
+        let updated_liquidatable_debt_amount =
+            liquidatable_debt_amount.saturating_sub(Fraction::from_num(debt_repay_amount));
+
+        if updated_liquidatable_debt_amount.is_zero() {
+            xmsg!("An opportunity to liquidate {} of single debt was fully used by liquidator repaying amount {} (order cleared)", liquidatable_debt_amount, debt_repay_amount);
+            *self = ObligationOrder::default();
+            return;
+        }
+
+        xmsg!("An opportunity to liquidate {} of single debt was partially used by liquidator repaying amount {} ({} left on the order)", liquidatable_debt_amount, debt_repay_amount, updated_liquidatable_debt_amount);
+        self.opportunity_parameter_sf = updated_liquidatable_debt_amount.to_bits();
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.condition_type != 0
     }
 }

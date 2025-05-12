@@ -1,9 +1,14 @@
 use anchor_lang::{prelude::*, Accounts};
 
-use crate::state::LendingMarket;
+use crate::{state::LendingMarket, LendingError};
 
 pub fn process(ctx: Context<UpdateLendingMarketOwner>) -> Result<()> {
     let market = &mut ctx.accounts.lending_market.load_mut()?;
+
+    require!(
+        !market.is_immutable(),
+        LendingError::OperationNotPermittedMarketImmutable
+    );
 
     market.lending_market_owner = market.lending_market_owner_cached;
 

@@ -1,3 +1,4 @@
+pub mod config_items;
 pub mod farms_ixs;
 pub mod flash_ixs;
 pub mod ix_utils;

@@ -56,3 +56,4 @@ bitflags = "2.4.1"
 # Only required when serializing to market config to JSON and in tests
 serde = { workspace = true, optional = true }
 tracing = { version = "0.1.40", optional = true }
+
