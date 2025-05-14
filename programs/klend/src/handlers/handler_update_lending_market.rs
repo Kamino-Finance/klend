@@ -24,7 +24,8 @@ pub fn process(
     let market = &mut ctx.accounts.lending_market.load_mut()?;
 
     msg!(
-        "Updating lending market with mode {:?} and value {:?}",
+        "Updating lending market {:?} with mode {:?} and value {:?}",
+        ctx.accounts.lending_market.key(),
         mode,
         &value[0..32]
     );

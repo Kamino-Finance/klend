@@ -7,7 +7,7 @@ pub mod lending_market;
 pub mod state;
 pub mod utils;
 
-pub use lending_market::lending_operations::utils::validate_reserve_config;
+pub use lending_market::lending_operations::utils::validate_reserve_config_integrity;
 use utils::constraints::emergency_mode_disabled;
 
 use crate::handlers::*;
@@ -65,9 +65,9 @@ pub mod kamino_lending {
         ctx: Context<UpdateReserveConfig>,
         mode: UpdateConfigMode,
         value: Vec<u8>,
-        skip_validation: bool,
+        skip_config_integrity_validation: bool,
     ) -> Result<()> {
-        handler_update_reserve_config::process(ctx, mode, &value, skip_validation)
+        handler_update_reserve_config::process(ctx, mode, &value, skip_config_integrity_validation)
     }
 
     pub fn redeem_fees(ctx: Context<RedeemFees>) -> Result<()> {

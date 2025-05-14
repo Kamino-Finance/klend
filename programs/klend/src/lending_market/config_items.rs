@@ -162,7 +162,7 @@ pub mod validations {
     use std::{any::type_name, ops::RangeInclusive};
 
     use super::*;
-    use crate::LendingError;
+    use crate::{utils::FULL_BPS, LendingError};
 
     pub fn check_bool<T: Into<u128> + Clone>(value: &T) -> Result<()> {
         let value = value.clone().into();
@@ -208,7 +208,7 @@ pub mod validations {
     }
 
     pub fn check_valid_bps<T: Into<u128> + Clone>(value: &T) -> Result<()> {
-        check_in_range(0..=10_000)(value)
+        check_in_range(0..=u128::from(FULL_BPS))(value)
     }
 
     pub fn check_gte<T: PartialOrd + Display, U: Into<T> + Clone>(

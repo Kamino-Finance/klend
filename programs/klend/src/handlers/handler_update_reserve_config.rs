@@ -11,7 +11,7 @@ pub fn process(
     ctx: Context<UpdateReserveConfig>,
     mode: UpdateConfigMode,
     value: &[u8],
-    skip_validation: bool,
+    skip_config_integrity_validation: bool,
 ) -> Result<()> {
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let market = ctx.accounts.lending_market.load()?;
@@ -34,7 +34,7 @@ pub fn process(
 
     lending_operations::update_reserve_config(reserve, mode, value)?;
 
-    if skip_validation {
+    if skip_config_integrity_validation {
         let reserve_is_used = reserve.liquidity.available_amount
             > market.min_initial_deposit_amount
             || reserve.liquidity.total_borrow() > Fraction::ZERO
@@ -49,7 +49,7 @@ pub fn process(
         );
         msg!("WARNING! Skipping validation of the config");
     } else {
-        lending_operations::utils::validate_reserve_config(
+        lending_operations::utils::validate_reserve_config_integrity(
             &reserve.config,
             &market,
             ctx.accounts.reserve.key(),
@@ -63,7 +63,7 @@ pub fn process(
 #[instruction(
     mode: UpdateConfigMode,
     value: Vec<u8>,
-    skip_validation: bool,
+    skip_config_integrity_validation: bool,
 )]
 pub struct UpdateReserveConfig<'info> {
     #[account(address = lending_operations::utils::allowed_signer_update_reserve_config(

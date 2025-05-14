@@ -2043,7 +2043,7 @@ pub fn update_reserve_config(
         }
         UpdateConfigMode::UpdateBadDebtLiquidationBonusBps => {
             config_items::for_named_field!(&mut reserve.config.bad_debt_liquidation_bonus_bps)
-                .validating(validations::check_valid_bps)
+                .validating(validations::check_lte(100u64))
                 .set(value)?;
         }
         UpdateConfigMode::UpdateMinLiquidationBonusBps => {
@@ -2058,7 +2058,9 @@ pub fn update_reserve_config(
             .set(value)?;
         }
         UpdateConfigMode::UpdateBorrowFactor => {
-            config_items::for_named_field!(&mut reserve.config.borrow_factor_pct).set(value)?;
+            config_items::for_named_field!(&mut reserve.config.borrow_factor_pct)
+                .validating(validations::check_gte(100u64))
+                .set(value)?;
         }
         UpdateConfigMode::UpdateAssetTier => {
             config_items::for_named_field!(&mut reserve.config.asset_tier)
@@ -3123,7 +3125,7 @@ pub mod utils {
         }
     }
 
-    pub fn validate_reserve_config(
+    pub fn validate_reserve_config_integrity(
         config: &ReserveConfig,
         market: &LendingMarket,
         reserve_address: Pubkey,
