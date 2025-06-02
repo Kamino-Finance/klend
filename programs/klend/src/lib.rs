@@ -7,7 +7,7 @@ pub mod lending_market;
 pub mod state;
 pub mod utils;
 
-pub use lending_market::lending_operations::utils::validate_reserve_config;
+pub use lending_market::lending_operations::utils::validate_reserve_config_integrity;
 use utils::constraints::emergency_mode_disabled;
 
 use crate::handlers::*;
@@ -63,11 +63,11 @@ pub mod kamino_lending {
 
     pub fn update_reserve_config(
         ctx: Context<UpdateReserveConfig>,
-        mode: u64,
+        mode: UpdateConfigMode,
         value: Vec<u8>,
-        skip_validation: bool,
+        skip_config_integrity_validation: bool,
     ) -> Result<()> {
-        handler_update_reserve_config::process(ctx, mode, &value, skip_validation)
+        handler_update_reserve_config::process(ctx, mode, &value, skip_config_integrity_validation)
     }
 
     pub fn redeem_fees(ctx: Context<RedeemFees>) -> Result<()> {
@@ -394,6 +394,31 @@ pub mod kamino_lending {
         handler_delete_referrer_state_and_short_url::process(ctx)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn set_obligation_order(
+        ctx: Context<SetObligationOrder>,
+        index: u8,
+        order: ObligationOrder,
+    ) -> Result<()> {
+        handler_set_obligation_order::process(ctx, index, order)
+    }
+
+    pub fn init_global_config(ctx: Context<InitGlobalConfig>) -> Result<()> {
+        handler_init_global_config::process(ctx)
+    }
+
+    pub fn update_global_config(
+        ctx: Context<UpdateGlobalConfig>,
+        mode: UpdateGlobalConfigMode,
+        value: Vec<u8>,
+    ) -> Result<()> {
+        handler_update_global_config::process(ctx, mode, &value)
+    }
+
+    pub fn update_global_config_admin(ctx: Context<UpdateGlobalConfigAdmin>) -> Result<()> {
+        handler_update_global_config_admin::process(ctx)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn idl_missing_types(
         _ctx: Context<UpdateReserveConfig>,
@@ -410,7 +435,7 @@ pub mod kamino_lending {
 }
 
 #[error_code]
-#[derive(PartialEq, Eq, strum::EnumString)]
+#[derive(PartialEq, Eq, strum::EnumString, num_enum::TryFromPrimitive)]
 pub enum LendingError {
     #[msg("Market authority is invalid")]
     InvalidMarketAuthority,
@@ -580,8 +605,8 @@ pub enum LendingError {
     ReserveObsolete,
     #[msg("Obligation already part of the same elevation group")]
     ElevationGroupAlreadyActivated,
-    #[msg("Obligation has a deposit in a deprecated reserve")]
-    ObligationInDeprecatedReserve,
+    #[msg("Obligation has a deposit or borrow in an obsolete reserve")]
+    ObligationInObsoleteReserve,
     #[msg("Referrer state owner does not match the given signer")]
     ReferrerStateOwnerMismatch,
     #[msg("User metadata owner is already set")]
@@ -599,7 +624,7 @@ pub enum LendingError {
     #[msg("Net value remaining too small")]
     NetValueRemainingTooSmall,
     #[msg("Cannot get the obligation in a worse position")]
-    WorseLTVBlocked,
+    WorseLtvBlocked,
     #[msg("Cannot have more liabilities than assets in a position")]
     LiabilitiesBiggerThanAssets,
     #[msg("Reserve state and token account cannot drift")]
@@ -612,8 +637,8 @@ pub enum LendingError {
     BorrowingAboveUtilizationRateDisabled,
     #[msg("Liquidation must prioritize the debt with the highest borrow factor")]
     LiquidationBorrowFactorPriority,
-    #[msg("Liquidation must prioritize the collateral with the lowest LTV")]
-    LiquidationLowestLTVPriority,
+    #[msg("Liquidation must prioritize the collateral with the lowest liquidation LTV")]
+    LiquidationLowestLiquidationLtvPriority,
     #[msg("Elevation group borrow limit exceeded")]
     ElevationGroupBorrowLimitExceeded,
     #[msg("The elevation group does not have a debt reserve defined")]
@@ -648,16 +673,30 @@ pub enum LendingError {
     MaximumWithdrawValueZero,
     #[msg("No max LTV 0 assets allowed in deposits for repay and withdraw")]
     ZeroMaxLtvAssetsInDeposits,
-    #[msg("The operation must prioritize the collateral with the lowest LTV")]
-    MinLtvAssetsPriority,
+    #[msg("Withdrawing must prioritize the collateral with the lowest reserve max-LTV")]
+    LowestLtvAssetsPriority,
     #[msg("Cannot get the obligation liquidatable")]
-    WorseLTVThanUnhealthyLTV,
+    WorseLtvThanUnhealthyLtv,
     #[msg("Farm accounts to refresh are missing")]
     FarmAccountsMissing,
     #[msg("Repay amount is too small to satisfy the mandatory full liquidation")]
     RepayTooSmallForFullLiquidation,
     #[msg("Liquidator provided repay amount lower than required by liquidation rules")]
     InsufficientRepayAmount,
+    #[msg("Obligation order of the given index cannot exist")]
+    OrderIndexOutOfBounds,
+    #[msg("Given order configuration has wrong parameters")]
+    InvalidOrderConfiguration,
+    #[msg("Given order configuration cannot be used with the current state of the obligation")]
+    OrderConfigurationNotSupportedByObligation,
+    #[msg("Single debt, single collateral obligation orders have to be cancelled before changing the deposit/borrow count")]
+    OperationNotPermittedWithCurrentObligationOrders,
+    #[msg("Cannot update lending market because it is set as immutable")]
+    OperationNotPermittedMarketImmutable,
+    #[msg("Creation of new orders is disabled")]
+    OrderCreationDisabled,
+    #[msg("Cannot initialize global config because there is no upgrade authority to the program")]
+    NoUpgradeAuthority,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

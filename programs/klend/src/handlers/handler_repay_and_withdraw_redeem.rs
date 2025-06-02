@@ -66,8 +66,8 @@ fn process_impl(
     {
         let obligation = withdraw_accounts.obligation.load()?;
 
-        deposit_count = obligation.deposits_count();
-        previous_borrow_count = obligation.borrows_count();
+        deposit_count = obligation.active_deposits_count();
+        previous_borrow_count = obligation.active_borrows_count();
         referrer = obligation.referrer;
         initial_ltv = obligation.loan_to_value();
         has_referrer = obligation.has_referrer();
@@ -85,7 +85,7 @@ fn process_impl(
 
     let borrow_count_post_repay = {
         let obligation = repay_accounts.obligation.load()?;
-        let borrow_count_post_repay = obligation.borrows_count();
+        let borrow_count_post_repay = obligation.active_borrows_count();
         drop(obligation);
 
         if borrow_count_post_repay == previous_borrow_count

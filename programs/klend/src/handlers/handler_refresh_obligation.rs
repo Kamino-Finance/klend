@@ -14,8 +14,8 @@ pub fn process(
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let clock = &Clock::get()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
-    let borrow_count = obligation.borrows_count();
-    let deposit_count = obligation.deposits_count();
+    let borrow_count = obligation.active_borrows_count();
+    let deposit_count = obligation.active_deposits_count();
     let reserves_count = borrow_count + deposit_count;
 
     let expected_remaining_accounts = if obligation.has_referrer() {

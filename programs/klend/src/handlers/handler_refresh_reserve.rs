@@ -56,7 +56,7 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
     msg!(
         "Token: {} Price: {}",
         &reserve.config.token_info.symbol(),
-        reserve.liquidity.get_market_price_f().to_display()
+        reserve.liquidity.get_market_price().to_display()
     );
 
     Ok(())

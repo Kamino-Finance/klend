@@ -7,12 +7,25 @@ pub const BASE_SEED_REFERRER_TOKEN_STATE: &[u8] = b"referrer_acc";
 pub const BASE_SEED_USER_METADATA: &[u8] = b"user_meta";
 pub const BASE_SEED_REFERRER_STATE: &[u8] = b"ref_state";
 pub const BASE_SEED_SHORT_URL: &[u8] = b"short_url";
+pub const GLOBAL_CONFIG_STATE: &[u8] = b"global_config";
 
 pub mod pda {
     use anchor_lang::prelude::Pubkey;
 
     use super::*;
     use crate::ID;
+
+    pub fn program_data() -> Pubkey {
+        program_data_program_id(&crate::ID)
+    }
+
+    pub fn program_data_program_id(program_id: &Pubkey) -> Pubkey {
+        Pubkey::find_program_address(
+            &[program_id.as_ref()],
+            &solana_program::bpf_loader_upgradeable::ID,
+        )
+        .0
+    }
 
     pub fn lending_market_auth(lending_market: &Pubkey) -> Pubkey {
         lending_market_auth_program_id(&ID, lending_market)
@@ -24,6 +37,14 @@ pub mod pda {
             program_id,
         );
         lending_market_authority
+    }
+
+    pub fn global_config() -> Pubkey {
+        global_config_program_id(&crate::ID)
+    }
+
+    pub fn global_config_program_id(program_id: &Pubkey) -> Pubkey {
+        Pubkey::find_program_address(&[GLOBAL_CONFIG_STATE], program_id).0
     }
 
     pub struct InitReservePdas {

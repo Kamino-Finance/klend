@@ -21,8 +21,9 @@ use super::{DepositLiquidityResult, LastUpdate, TokenInfo};
 use crate::{
     fraction::FractionExtra,
     utils::{
-        borrow_rate_curve::BorrowRateCurve, BigFraction, Fraction, INITIAL_COLLATERAL_RATE,
-        PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
+        accounts::default_array, borrow_rate_curve::BorrowRateCurve, ten_pow, BigFraction,
+        Fraction, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE,
+        SLOTS_PER_YEAR, U256,
     },
     CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult, ReferrerTokenState,
 };
@@ -100,12 +101,12 @@ impl Default for Reserve {
             config: ReserveConfig::default(),
             farm_collateral: Pubkey::default(),
             farm_debt: Pubkey::default(),
-            reserve_liquidity_padding: [0; 150],
-            reserve_collateral_padding: [0; 150],
-            config_padding: [0; 116],
+            reserve_liquidity_padding: default_array(),
+            reserve_collateral_padding: default_array(),
+            config_padding: default_array(),
             borrowed_amount_outside_elevation_group: 0,
             borrowed_amounts_against_this_reserve_in_elevation_groups: [0; 32],
-            padding: [0; 207],
+            padding: default_array(),
         }
     }
 }
@@ -274,10 +275,8 @@ impl Reserve {
         is_in_elevation_group: bool,
         has_referrer: bool,
     ) -> Result<CalculateBorrowResult> {
-        let decimals = 10u64
-            .checked_pow(self.liquidity.mint_decimals as u32)
-            .ok_or(LendingError::MathOverflow)?;
-        let market_price_f = self.liquidity.get_market_price_f();
+        let decimals = self.liquidity.mint_factor();
+        let market_price_f = self.liquidity.get_market_price();
 
         if amount_to_borrow == u64::MAX {
             let borrow_amount_f = (max_borrow_factor_adjusted_debt_value * u128::from(decimals)
@@ -335,16 +334,15 @@ impl Reserve {
         amount_to_repay: u64,
         borrowed_amount: Fraction,
     ) -> CalculateRepayResult {
-        let settle_amount_f = if amount_to_repay == u64::MAX {
+        let settle_amount = if amount_to_repay == u64::MAX {
             borrowed_amount
         } else {
-            let amount_to_repay_f = Fraction::from(amount_to_repay);
-            min(amount_to_repay_f, borrowed_amount)
+            min(Fraction::from(amount_to_repay), borrowed_amount)
         };
-        let repay_amount = settle_amount_f.to_ceil();
+        let repay_amount = settle_amount.to_ceil();
 
         CalculateRepayResult {
-            settle_amount_f,
+            settle_amount,
             repay_amount,
         }
     }
@@ -573,6 +571,10 @@ impl ReserveLiquidity {
         Fraction::from_bits(self.borrowed_amount_sf) / total_supply
     }
 
+    pub fn mint_factor(&self) -> u64 {
+        ten_pow(usize::try_from(self.mint_decimals).expect("mint decimals is expected to be <20"))
+    }
+
     fn compound_interest(
         &mut self,
         current_borrow_rate: Fraction,
@@ -671,7 +673,7 @@ impl ReserveLiquidity {
         Ok(())
     }
 
-    pub fn get_market_price_f(&self) -> Fraction {
+    pub fn get_market_price(&self) -> Fraction {
         Fraction::from_bits(self.market_price_sf)
     }
 }
@@ -811,6 +813,14 @@ impl CollateralExchangeRate {
             .expect("fraction_liquidity_to_collateral: collateral_amount overflow")
     }
 
+    pub fn fraction_liquidity_to_collateral_ceil(&self, liquidity_amount: Fraction) -> Fraction {
+        (((BigFraction::from(liquidity_amount) * self.collateral_supply)
+            + BigFraction::from(self.liquidity - Fraction::DELTA))
+            / self.liquidity)
+            .try_into()
+            .expect("fraction_liquidity_to_collateral_ceil: collateral_amount overflow")
+    }
+
     pub fn liquidity_to_collateral_fraction(&self, liquidity_amount: u64) -> Fraction {
         (BigFraction::from_num(self.collateral_supply * u128::from(liquidity_amount))
             / self.liquidity)
@@ -860,10 +870,8 @@ pub struct ReserveConfig {
     pub host_fixed_interest_rate_bps: u16,
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_2: [u8; 2],
-    #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
-    #[derivative(Debug = "ignore")]
-    pub reserved_3: [u8; 8],
+    pub reserved_2: [u8; 9],
+    pub protocol_order_execution_fee_pct: u8,
     pub protocol_take_rate_pct: u8,
     pub protocol_liquidation_fee_pct: u8,
     pub loan_to_value_pct: u8,

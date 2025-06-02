@@ -9,10 +9,10 @@ use serde_values::*;
 use super::{serde_bool_u8, serde_string, serde_utf_string};
 use crate::{
     utils::{
-        CLOSE_TO_INSOLVENCY_RISKY_LTV, DEFAULT_MIN_DEPOSIT_AMOUNT, ELEVATION_GROUP_NONE,
-        GLOBAL_ALLOWED_BORROW_VALUE, LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR,
-        LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE, MIN_NET_VALUE_IN_OBLIGATION,
-        PROGRAM_VERSION,
+        accounts::default_array, CLOSE_TO_INSOLVENCY_RISKY_LTV, DEFAULT_MIN_DEPOSIT_AMOUNT,
+        ELEVATION_GROUP_NONE, GLOBAL_ALLOWED_BORROW_VALUE, LENDING_MARKET_SIZE,
+        LIQUIDATION_CLOSE_FACTOR, LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE,
+        MIN_NET_VALUE_IN_OBLIGATION, PROGRAM_VERSION,
     },
     LendingError,
 };
@@ -73,7 +73,7 @@ pub struct LendingMarket {
     pub elevation_groups: [ElevationGroup; 32],
     #[cfg_attr(
         feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_padding_90")
+        serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     pub elevation_group_padding: [u64; 90],
 
@@ -97,22 +97,28 @@ pub struct LendingMarket {
 
     pub min_initial_deposit_amount: u64,
 
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub obligation_order_execution_enabled: u8,
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub immutable: u8,
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub obligation_order_creation_enabled: u8,
+
     #[cfg_attr(
         feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_padding_170")
+        serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 170],
-}
+    pub padding2: [u8; 5],
 
-#[cfg(feature = "serde")]
-fn default_padding_170() -> [u64; 170] {
-    [0; 170]
-}
-
-#[cfg(feature = "serde")]
-fn default_padding_90() -> [u64; 90] {
-    [0; 90]
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_deserializing, skip_serializing, default = "default_array")
+    )]
+    #[derivative(Debug = "ignore")]
+    pub padding1: [u64; 169],
 }
 
 impl Default for LendingMarket {
@@ -139,12 +145,16 @@ impl Default for LendingMarket {
             elevation_groups: [ElevationGroup::default(); 32],
             min_value_skip_liquidation_ltv_checks: 0,
             min_value_skip_liquidation_bf_checks: 0,
-            elevation_group_padding: [0; 90],
+            elevation_group_padding: default_array(),
             min_net_value_in_obligation_sf: MIN_NET_VALUE_IN_OBLIGATION.to_bits(),
             name: [0; 32],
             individual_autodeleverage_margin_call_period_secs: 0,
             min_initial_deposit_amount: DEFAULT_MIN_DEPOSIT_AMOUNT,
-            padding1: [0; 170],
+            obligation_order_execution_enabled: 0,
+            immutable: 0,
+            obligation_order_creation_enabled: 0,
+            padding2: default_array(),
+            padding1: default_array(),
         }
     }
 }
@@ -158,10 +168,7 @@ impl LendingMarket {
         self.quote_currency = params.quote_currency;
     }
 
-    pub fn get_elevation_group(
-        &self,
-        id: u8,
-    ) -> std::result::Result<Option<&ElevationGroup>, LendingError> {
+    pub fn get_elevation_group(&self, id: u8) -> Result<Option<&ElevationGroup>> {
         if id == ELEVATION_GROUP_NONE {
             Ok(None)
         } else {
@@ -189,6 +196,18 @@ impl LendingMarket {
 
     pub fn is_autodeleverage_enabled(&self) -> bool {
         self.autodeleverage_enabled != false as u8
+    }
+
+    pub fn is_obligation_order_execution_enabled(&self) -> bool {
+        self.obligation_order_execution_enabled != false as u8
+    }
+
+    pub fn is_obligation_order_creation_enabled(&self) -> bool {
+        self.obligation_order_creation_enabled != false as u8
+    }
+
+    pub fn is_immutable(&self) -> bool {
+        self.immutable != false as u8
     }
 }
 

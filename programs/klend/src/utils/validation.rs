@@ -1,17 +1,32 @@
-use anchor_lang::prelude::{require, Result};
+pub trait IterExt: Iterator + Sized {
+    fn zip_exact<R: Iterator>(
+        self,
+        rights: impl IntoIterator<Item = R::Item, IntoIter = R>,
+    ) -> LengthCheckingZipIterator<Self, R> {
+        zip_exact(self, rights)
+    }
 
-use crate::LendingError;
+    fn only_element(self) -> Option<Self::Item> {
+        only_element(self)
+    }
+}
+impl<T: Iterator> IterExt for T {}
 
-pub fn validate_numerical_bool(value: u8) -> Result<()> {
-    let num_matches_boolean_values = matches!(value, 0 | 1);
-    require!(num_matches_boolean_values, LendingError::InvalidFlag);
-    Ok(())
+pub fn only_element<T>(iter: impl IntoIterator<Item = T>) -> Option<T> {
+    let mut the_only = None;
+    for element in iter.into_iter() {
+        if the_only.is_some() {
+            return None;
+        }
+        the_only = Some(element);
+    }
+    the_only
 }
 
-pub fn zip_and_validate_same_length<L, R>(
-    lefts: impl IntoIterator<Item = L>,
-    rights: impl IntoIterator<Item = R>,
-) -> impl Iterator<Item = LengthCheckedResult<L, R>> {
+pub fn zip_exact<L: Iterator, R: Iterator>(
+    lefts: impl IntoIterator<Item = L::Item, IntoIter = L>,
+    rights: impl IntoIterator<Item = R::Item, IntoIter = R>,
+) -> LengthCheckingZipIterator<L, R> {
     LengthCheckingZipIterator {
         lefts: lefts.into_iter(),
         rights: rights.into_iter(),
@@ -22,9 +37,9 @@ pub fn zip_and_validate_same_length<L, R>(
 #[derive(Debug, Eq, PartialEq)]
 pub struct LengthMismatchError;
 
-pub type LengthCheckedResult<L, R> = core::result::Result<(L, R), LengthMismatchError>;
+pub type LengthCheckedResult<L, R> = Result<(L, R), LengthMismatchError>;
 
-struct LengthCheckingZipIterator<L, R> {
+pub struct LengthCheckingZipIterator<L, R> {
     lefts: L,
     rights: R,
     errored: bool,

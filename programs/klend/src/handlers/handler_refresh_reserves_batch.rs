@@ -104,7 +104,7 @@ pub fn process(ctx: Context<RefreshReservesBatch>, skip_price_updates: bool) -> 
             msg!(
                 "Token: {} Price: {}",
                 &reserve.config.token_info.symbol(),
-                reserve.liquidity.get_market_price_f().to_display()
+                reserve.liquidity.get_market_price().to_display()
             );
         }
     }

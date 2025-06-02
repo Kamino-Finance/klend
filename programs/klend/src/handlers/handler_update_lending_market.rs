@@ -1,12 +1,14 @@
+use std::fmt::Debug;
+
 use anchor_lang::{prelude::*, Accounts};
 
 use crate::{
-    borsh::BorshDeserialize,
     fraction::FractionExtra,
+    lending_market::config_items::{self, renderings, validations},
     state::{lending_market::ElevationGroup, LendingMarket, UpdateLendingMarketMode},
     utils::{
-        validate_numerical_bool, Fraction, ELEVATION_GROUP_NONE, FULL_BPS,
-        MAX_NUM_ELEVATION_GROUPS, MIN_INITIAL_DEPOSIT_AMOUNT,
+        Fraction, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS,
+        MIN_INITIAL_DEPOSIT_AMOUNT,
     },
     LendingError, VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE,
 };
@@ -22,228 +24,104 @@ pub fn process(
     let market = &mut ctx.accounts.lending_market.load_mut()?;
 
     msg!(
-        "Updating lending market with mode {:?} and value {:?}",
+        "Updating lending market {:?} with mode {:?} and value {:?}",
+        ctx.accounts.lending_market.key(),
         mode,
         &value[0..32]
     );
 
+    require!(
+        !market.is_immutable(),
+        LendingError::OperationNotPermittedMarketImmutable
+    );
+
     match mode {
         UpdateLendingMarketMode::UpdateOwner => {
-            let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let value = Pubkey::from(value);
-            msg!("Prv value is {:?}", market.lending_market_owner_cached);
-            msg!("New value is {:?}", value);
-            market.lending_market_owner_cached = value;
+            config_items::for_named_field!(&mut market.lending_market_owner_cached).set(&value)?;
         }
         UpdateLendingMarketMode::UpdateEmergencyMode => {
-            let emergency_mode = value[0];
-            msg!("Prv value is {:?}", market.emergency_mode);
-            msg!("New value is {:?}", emergency_mode);
-            if emergency_mode == 0 {
-                market.emergency_mode = 0
-            } else if emergency_mode == 1 {
-                market.emergency_mode = 1;
-            } else {
-                return err!(LendingError::InvalidFlag);
-            }
+            config_items::for_named_field!(&mut market.emergency_mode)
+                .validating(validations::check_bool)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateLiquidationCloseFactor => {
-            let liquidation_close_factor = value[0];
-            msg!(
-                "Prv value is {:?}",
-                market.liquidation_max_debt_close_factor_pct
-            );
-            msg!("New value is {:?}", liquidation_close_factor);
-            if !(5..=100).contains(&liquidation_close_factor) {
-                return err!(LendingError::InvalidFlag);
-            }
-            market.liquidation_max_debt_close_factor_pct = liquidation_close_factor;
+            config_items::for_named_field!(&mut market.liquidation_max_debt_close_factor_pct)
+                .validating(validations::check_in_range(5..=100))
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateLiquidationMaxValue => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!(
-                "Prv value is {:?}",
-                market.max_liquidatable_debt_market_value_at_once
-            );
-            msg!("New value is {:?}", value);
-            if value == 0 {
-                return err!(LendingError::InvalidFlag);
-            }
-            market.max_liquidatable_debt_market_value_at_once = value;
+            config_items::for_named_field!(&mut market.max_liquidatable_debt_market_value_at_once)
+                .validating(validations::check_not_zero)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateGlobalAllowedBorrow => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!("Prv value is {:?}", market.global_allowed_borrow_value);
-            msg!("New value is {:?}", value);
-            market.global_allowed_borrow_value = value;
+            config_items::for_named_field!(&mut market.global_allowed_borrow_value).set(&value)?;
         }
         UpdateLendingMarketMode::DeprecatedUpdateGlobalUnhealthyBorrow => {
             panic!("Deprecated field")
         }
         UpdateLendingMarketMode::UpdateMinFullLiquidationThreshold => {
-            let value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!(
-                "Prv value is {:?}",
-                market.min_full_liquidation_value_threshold
-            );
-            msg!("New value is {:?}", value);
-            if value == 0 {
-                return err!(LendingError::InvalidFlag);
-            }
-            market.min_full_liquidation_value_threshold = value;
+            config_items::for_named_field!(&mut market.min_full_liquidation_value_threshold)
+                .validating(validations::check_not_zero)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateRiskCouncil => {
-            let value: [u8; 32] = value[0..32].try_into().unwrap();
-            let value = Pubkey::from(value);
-            msg!("Prv value is {:?}", market.risk_council);
-            msg!("New value is {:?}", value);
-            market.risk_council = value;
+            config_items::for_named_field!(&mut market.risk_council).set(&value)?;
         }
         UpdateLendingMarketMode::UpdateInsolvencyRiskLtv => {
-            let insolvency_risk_ltv = value[0];
-            msg!(
-                "Prv value is {:?}",
-                market.insolvency_risk_unhealthy_ltv_pct
-            );
-            msg!("New value is {:?}", value);
-
-            if !(5..=100).contains(&insolvency_risk_ltv) {
-                return err!(LendingError::InvalidFlag);
-            }
-            market.insolvency_risk_unhealthy_ltv_pct = insolvency_risk_ltv;
+            config_items::for_named_field!(&mut market.insolvency_risk_unhealthy_ltv_pct)
+                .validating(validations::check_in_range(5..=100))
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateElevationGroup => {
-            let elevation_group: ElevationGroup =
-                BorshDeserialize::deserialize(&mut &value[..]).unwrap();
-
-            if elevation_group.id > MAX_NUM_ELEVATION_GROUPS {
-                return err!(LendingError::InvalidElevationGroupConfig);
-            }
-
-            if elevation_group.id != ELEVATION_GROUP_NONE
-                && elevation_group.liquidation_threshold_pct == 0
-            {
-                return err!(LendingError::InvalidElevationGroupConfig);
-            }
-
-            if elevation_group.liquidation_threshold_pct >= 100
-                || elevation_group.ltv_pct >= 100
-                || elevation_group.ltv_pct > elevation_group.liquidation_threshold_pct
-                || elevation_group.max_liquidation_bonus_bps > FULL_BPS
-            {
-                return err!(LendingError::InvalidElevationGroupConfig);
-            }
-
-            if elevation_group.id != ELEVATION_GROUP_NONE
-                && (elevation_group.debt_reserve == Pubkey::default()
-                    || elevation_group.max_reserves_as_collateral == 0)
-            {
-                return err!(LendingError::InvalidElevationGroupConfig);
-            }
-
-            if Fraction::from_percent(elevation_group.liquidation_threshold_pct)
-                + Fraction::from_percent(elevation_group.liquidation_threshold_pct)
-                    * Fraction::from_bps(elevation_group.max_liquidation_bonus_bps)
-                > Fraction::ONE
-            {
-                msg!("Max liquidation bonus * liquidation threshold is greater than 100%, invalid");
-                return err!(LendingError::InvalidElevationGroupConfig);
-            }
-
-            let prev_elevation_group = market.get_elevation_group(elevation_group.id);
-
-            msg!("Prev value is {:?}", prev_elevation_group);
-            msg!("New value is {:?}", elevation_group);
-
-            market.set_elevation_group(elevation_group)?;
+            config_items::for_object(market)
+                .using_setter_and_getter(
+                    |market, group| market.set_elevation_group(group),
+                    |market, group| market.get_elevation_group(group.id),
+                )
+                .named("elevation_group")
+                .validating(validate_new_elevation_group)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateReferralFeeBps => {
-            let value = u16::from_le_bytes(value[..2].try_into().unwrap());
-            msg!("Prev value is {:?}", market.referral_fee_bps);
-            msg!("New value is {:?}", value);
-            if value > FULL_BPS {
-                msg!("Referral fee bps must be in range [0, 10000]");
-                return err!(LendingError::InvalidConfig);
-            }
             if market.referral_fee_bps != 0 {
                 msg!("WARNING: Referral fee bps already set, unrefreshed obligations referral fees could be lost!");
             }
-            market.referral_fee_bps = value;
+            config_items::for_named_field!(&mut market.referral_fee_bps)
+                .validating(validations::check_valid_bps)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdatePriceRefreshTriggerToMaxAgePct => {
-            let value = value[0];
-            msg!(
-                "Prev value is {:?}",
-                market.price_refresh_trigger_to_max_age_pct
-            );
-            msg!("New value is {:?}", value);
-            if value > 100 {
-                msg!("Price refresh trigger to max age pct must be in range [0, 100]");
-                return err!(LendingError::InvalidConfig);
-            }
-            market.price_refresh_trigger_to_max_age_pct = value;
+            config_items::for_named_field!(&mut market.price_refresh_trigger_to_max_age_pct)
+                .validating(validations::check_valid_pct)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateAutodeleverageEnabled => {
-            let autodeleverage_enabled = value[0];
-            msg!("Prev Value is {:?}", market.autodeleverage_enabled);
-            msg!("New Value is {:?}", autodeleverage_enabled);
-            if autodeleverage_enabled == 0 {
-                market.autodeleverage_enabled = 0
-            } else if autodeleverage_enabled == 1 {
-                market.autodeleverage_enabled = 1;
-            } else {
-                msg!(
-                    "Autodeleverage enabled flag must be 0 or 1, got {:?}",
-                    autodeleverage_enabled
-                );
-                return err!(LendingError::InvalidFlag);
-            }
+            config_items::for_named_field!(&mut market.autodeleverage_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateBorrowingDisabled => {
-            let borrow_disabled = value[0];
-            msg!("Prev Value is {:?}", market.borrow_disabled);
-            msg!("New Value is {:?}", borrow_disabled);
-            validate_numerical_bool(borrow_disabled)?;
-            market.borrow_disabled = borrow_disabled;
+            config_items::for_named_field!(&mut market.borrow_disabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateMinNetValueObligationPostAction => {
-            let min_net_value_in_obligation_sf =
-                u128::from_le_bytes(value[..16].try_into().unwrap());
-            msg!(
-                "Prev Value is {}",
-                Fraction::from_bits(market.min_net_value_in_obligation_sf)
-            );
-            msg!(
-                "New Value is {}",
-                Fraction::from_bits(min_net_value_in_obligation_sf)
-            );
-            market.min_net_value_in_obligation_sf = min_net_value_in_obligation_sf;
+            config_items::for_named_field!(&mut market.min_net_value_in_obligation_sf)
+                .rendering(renderings::as_fraction)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateMinValueLtvSkipPriorityLiqCheck => {
-            let min_value_skip_liquidation_ltv_checks =
-                u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!(
-                "Prev Value is {}",
-                market.min_value_skip_liquidation_ltv_checks
-            );
-            msg!("New Value is {}", min_value_skip_liquidation_ltv_checks);
-
-            market.min_value_skip_liquidation_ltv_checks = min_value_skip_liquidation_ltv_checks;
+            config_items::for_named_field!(&mut market.min_value_skip_liquidation_ltv_checks)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateMinValueBfSkipPriorityLiqCheck => {
-            let min_value_skip_liquidation_bf_checks =
-                u64::from_le_bytes(value[..8].try_into().unwrap());
-            msg!(
-                "Prev Value is {}",
-                market.min_value_skip_liquidation_bf_checks
-            );
-            msg!("New Value is {}", min_value_skip_liquidation_bf_checks);
-
-            market.min_value_skip_liquidation_bf_checks = min_value_skip_liquidation_bf_checks;
+            config_items::for_named_field!(&mut market.min_value_skip_liquidation_bf_checks)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdatePaddingFields => {
-            msg!("Prev reserved0 Value is {:?}", market.reserved0);
-            msg!("Prev reserved1 Value is {:?}", market.reserved1);
+            msg!("Prv reserved0 Value is {:?}", market.reserved0);
+            msg!("Prv reserved1 Value is {:?}", market.reserved1);
             market.reserved0 = [0; 8];
             market.reserved1 = [0; 8];
             msg!("New reserved0 Value is {:?}", market.reserved0);
@@ -253,38 +131,74 @@ pub fn process(
             panic!("Deprecated field")
         }
         UpdateLendingMarketMode::UpdateName => {
-            let name_bytes = &value[0..market.name.len()];
-            let name = std::str::from_utf8(name_bytes).unwrap();
-            let previous_name = std::str::from_utf8(&market.name).unwrap();
-            msg!("Prev Value is {}", previous_name.trim_end_matches('\0'));
-            msg!("New Value is {}", name.trim_end_matches('\0'));
-            market.name.copy_from_slice(name_bytes);
+            config_items::for_named_field!(&mut market.name)
+                .rendering(renderings::as_utf8_null_padded_string)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateIndividualAutodeleverageMarginCallPeriodSecs => {
-            let new_value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let current_value = &mut market.individual_autodeleverage_margin_call_period_secs;
-            msg!("Prv value is {}", current_value);
-            if new_value == 0 {
-                msg!("Individual deleveraging margin call period cannot be set to 0");
-                return err!(LendingError::InvalidConfig);
-            }
-            msg!("New value is {}", new_value);
-            *current_value = new_value;
+            config_items::for_named_field!(
+                &mut market.individual_autodeleverage_margin_call_period_secs
+            )
+            .validating(validations::check_not_zero)
+            .set(&value)?;
         }
         UpdateLendingMarketMode::UpdateInitialDepositAmount => {
-            let new_value = u64::from_le_bytes(value[..8].try_into().unwrap());
-            let current_value = &mut market.min_initial_deposit_amount;
-            msg!("Prv value is {}", current_value);
-            msg!("New value is {}", new_value);
-            if new_value < MIN_INITIAL_DEPOSIT_AMOUNT {
-                msg!(
-                    "Min deposit amount cannot be set lower than {}",
-                    MIN_INITIAL_DEPOSIT_AMOUNT
-                );
-                return err!(LendingError::InvalidConfig);
-            }
-            *current_value = new_value;
+            config_items::for_named_field!(&mut market.min_initial_deposit_amount)
+                .validating(validations::check_gte(MIN_INITIAL_DEPOSIT_AMOUNT))
+                .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateObligationOrderExecutionEnabled => {
+            config_items::for_named_field!(&mut market.obligation_order_execution_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateImmutableFlag => {
+            config_items::for_named_field!(&mut market.immutable)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateObligationOrderCreationEnabled => {
+            config_items::for_named_field!(&mut market.obligation_order_creation_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_new_elevation_group(elevation_group: &ElevationGroup) -> Result<()> {
+    if elevation_group.id > MAX_NUM_ELEVATION_GROUPS {
+        return err!(LendingError::InvalidElevationGroupConfig);
+    }
+
+    if elevation_group.id != ELEVATION_GROUP_NONE && elevation_group.liquidation_threshold_pct == 0
+    {
+        return err!(LendingError::InvalidElevationGroupConfig);
+    }
+
+    if elevation_group.liquidation_threshold_pct >= 100
+        || elevation_group.ltv_pct >= 100
+        || elevation_group.ltv_pct > elevation_group.liquidation_threshold_pct
+        || elevation_group.max_liquidation_bonus_bps > FULL_BPS
+    {
+        return err!(LendingError::InvalidElevationGroupConfig);
+    }
+
+    if elevation_group.id != ELEVATION_GROUP_NONE
+        && (elevation_group.debt_reserve == Pubkey::default()
+            || elevation_group.max_reserves_as_collateral == 0)
+    {
+        return err!(LendingError::InvalidElevationGroupConfig);
+    }
+
+    if Fraction::from_percent(elevation_group.liquidation_threshold_pct)
+        + Fraction::from_percent(elevation_group.liquidation_threshold_pct)
+            * Fraction::from_bps(elevation_group.max_liquidation_bonus_bps)
+        > Fraction::ONE
+    {
+        msg!("Max liquidation bonus * liquidation threshold is greater than 100%, invalid");
+        return err!(LendingError::InvalidElevationGroupConfig);
     }
 
     Ok(())

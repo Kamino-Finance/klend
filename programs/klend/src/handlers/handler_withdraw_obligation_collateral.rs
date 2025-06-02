@@ -88,7 +88,7 @@ fn process_impl(accounts: &WithdrawObligationCollateral, collateral_amount: u64)
 
         msg!("pnl: Withdraw obligation collateral {}", withdraw_amount);
 
-        obligation.deposits_empty() && obligation.borrows_empty()
+        obligation.active_deposits_empty() && obligation.active_borrows_empty()
     };
 
     close_account_loader(close_obligation, &accounts.owner, &accounts.obligation)?;
