@@ -6,7 +6,9 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use solana_program::msg;
 
 use crate::{
-    fraction, utils::Fraction, LendingError, LendingMarket, Obligation, ObligationOrder, Reserve,
+    fraction,
+    utils::{accounts::is_default_array, Fraction},
+    LendingError, LendingMarket, Obligation, ObligationOrder, Reserve,
 };
 
 const VALID_DEBT_COLL_PRICE_RATIO_RANGE: RangeInclusive<Fraction> =
@@ -55,12 +57,16 @@ pub fn find_applicable_obligation_order(
 }
 
 pub fn check_orders_supported_after_user_operation(obligation: &mut Obligation) -> Result<()> {
-    let unsupported_orders = obligation
+    let has_unsupported_orders = obligation
         .orders
         .iter()
-        .filter(|order| !order.is_supported_by(obligation))
-        .collect::<Vec<_>>();
-    if !unsupported_orders.is_empty() {
+        .any(|order| !order.is_supported_by(obligation));
+    if has_unsupported_orders {
+        let unsupported_orders = obligation
+            .orders
+            .iter()
+            .filter(|order| !order.is_supported_by(obligation))
+            .collect::<Vec<_>>();
         msg!(
             "The obligation has orders which have to be cancelled before the operation: {:?}",
             unsupported_orders
@@ -225,6 +231,10 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             execution_bonus_rate_range.end(),
             EXECUTION_BONUS_SANITY_LIMIT
         );
+        return err!(LendingError::InvalidOrderConfiguration);
+    }
+    if !is_default_array(&order.padding1) || !is_default_array(&order.padding2) {
+        msg!("Padding fields must be zeroed");
         return err!(LendingError::InvalidOrderConfiguration);
     }
     Ok(())
