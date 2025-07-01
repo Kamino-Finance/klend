@@ -49,6 +49,7 @@ pub mod token_2022 {
         ExtensionType::TransferFeeConfig,
         ExtensionType::TokenMetadata,
         ExtensionType::TransferHook,
+        ExtensionType::DefaultAccountState,
     ];
 
     pub fn validate_liquidity_token_extensions(
@@ -78,60 +79,72 @@ pub mod token_2022 {
                 );
                 return err!(LendingError::UnsupportedTokenExtension);
             }
-            if mint_ext == ExtensionType::TransferFeeConfig {
-                let ext = mint
-                    .get_extension::<spl_token_2022::extension::transfer_fee::TransferFeeConfig>(
-                    )?;
-                if <u16>::from(ext.older_transfer_fee.transfer_fee_basis_points) != 0
-                    || <u16>::from(ext.newer_transfer_fee.transfer_fee_basis_points) != 0
-                {
-                    xmsg!(
-                        "Transfer fee must be 0 for liquidity tokens, got: {:?}",
-                        ext
-                    );
-                    return err!(LendingError::UnsupportedTokenExtension);
-                }
-            } else if mint_ext == ExtensionType::TransferHook {
-                let ext =
-                    mint.get_extension::<spl_token_2022::extension::transfer_hook::TransferHook>()?;
-                let hook_program_id: Option<Pubkey> = ext.program_id.into();
-                if hook_program_id.is_some() {
-                    xmsg!(
-                        "Transfer hook program id must not be set for liquidity tokens, got {:?}",
-                        ext
-                    );
-                    return err!(LendingError::UnsupportedTokenExtension);
-                }
-            } else if mint_ext == ExtensionType::ConfidentialTransferMint {
-                let ext = mint
-                .get_extension::<spl_token_2022::extension::confidential_transfer::ConfidentialTransferMint>(
-                )?;
-                if bool::from(ext.auto_approve_new_accounts) {
-                    xmsg!(
-                        "Auto approve new accounts must be false for liquidity tokens, got {:?}",
-                        ext
-                    );
-                    return err!(LendingError::UnsupportedTokenExtension);
-                }
-
-                if let Ok(token_acc_ext) = token_acc.get_extension::<spl_token_2022::extension::confidential_transfer::ConfidentialTransferAccount>() {
-                    if bool::from(token_acc_ext.allow_confidential_credits) {
-                        xmsg!(
-                            "Allow confidential credits must be false for token accounts, got {:?}",
-                            token_acc_ext
-                        );
-                        return err!(LendingError::UnsupportedTokenExtension);
-                    }
-                    if token_acc_ext.pending_balance_lo != EncryptedBalance::zeroed()
-                        && token_acc_ext.pending_balance_hi != EncryptedBalance::zeroed()
+            match mint_ext {
+                ExtensionType::TransferFeeConfig => {
+                    let ext = mint
+                        .get_extension::<spl_token_2022::extension::transfer_fee::TransferFeeConfig>()?;
+                    if <u16>::from(ext.older_transfer_fee.transfer_fee_basis_points) != 0
+                        || <u16>::from(ext.newer_transfer_fee.transfer_fee_basis_points) != 0
                     {
                         xmsg!(
-                            "Pending balance must be zero for token accounts, got {:?}",
-                            token_acc_ext
+                            "Transfer fee must be 0 for liquidity tokens, got: {:?}",
+                            ext
                         );
                         return err!(LendingError::UnsupportedTokenExtension);
                     }
                 }
+                ExtensionType::TransferHook => {
+                    let ext = mint
+                        .get_extension::<spl_token_2022::extension::transfer_hook::TransferHook>(
+                        )?;
+                    let hook_program_id: Option<Pubkey> = ext.program_id.into();
+                    if hook_program_id.is_some() {
+                        xmsg!(
+                            "Transfer hook program id must not be set for liquidity tokens, got {:?}",
+                            ext
+                        );
+                        return err!(LendingError::UnsupportedTokenExtension);
+                    }
+                }
+                ExtensionType::ConfidentialTransferMint => {
+                    let ext = mint.get_extension::<spl_token_2022::extension::confidential_transfer::ConfidentialTransferMint>()?;
+                    if bool::from(ext.auto_approve_new_accounts) {
+                        xmsg!(
+                            "Auto approve new accounts must be false for liquidity tokens, got {:?}",
+                            ext
+                        );
+                        return err!(LendingError::UnsupportedTokenExtension);
+                    }
+
+                    if let Ok(token_acc_ext) = token_acc.get_extension::<spl_token_2022::extension::confidential_transfer::ConfidentialTransferAccount>() {
+                        if bool::from(token_acc_ext.allow_confidential_credits) {
+                            xmsg!(
+                                "Allow confidential credits must be false for token accounts, got {:?}",
+                                token_acc_ext
+                            );
+                            return err!(LendingError::UnsupportedTokenExtension);
+                        }
+                        if token_acc_ext.pending_balance_lo != EncryptedBalance::zeroed()
+                            && token_acc_ext.pending_balance_hi != EncryptedBalance::zeroed()
+                        {
+                            xmsg!(
+                                "Pending balance must be zero for token accounts, got {:?}",
+                                token_acc_ext
+                            );
+                            return err!(LendingError::UnsupportedTokenExtension);
+                        }
+                    }
+                }
+                ExtensionType::DefaultAccountState => {
+                    let ext = mint.get_extension::<spl_token_2022::extension::default_account_state::DefaultAccountState>()?;
+                    if ext.state != spl_token_2022::state::AccountState::Initialized as u8 {
+                        xmsg!(
+                            "Default account state extension only supports \"Initialized\" state"
+                        );
+                        return err!(LendingError::UnsupportedTokenExtension);
+                    }
+                }
+                _ => {}
             }
         }
         Ok(())
