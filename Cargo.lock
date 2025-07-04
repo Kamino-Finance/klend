@@ -219,7 +219,7 @@ dependencies = [
  "serum_dex",
  "solana-program",
  "spl-associated-token-account",
- "spl-token 4.0.0",
+ "spl-token 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-token-2022 0.9.0",
 ]
 
@@ -1101,7 +1101,7 @@ dependencies = [
  "num_enum 0.5.11",
  "scope-types 1.0.0 (git+https://github.com/Kamino-Finance/scope.git?branch=anchor_0.29_idl)",
  "solana-security-txt",
- "spl-token 4.0.0",
+ "spl-token 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "static_assertions",
  "uint",
 ]
@@ -2656,7 +2656,7 @@ dependencies = [
  "num-derive 0.4.1",
  "num-traits",
  "solana-program",
- "spl-token 4.0.0",
+ "spl-token 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-token-2022 1.0.0",
  "thiserror",
 ]
@@ -2669,7 +2669,27 @@ checksum = "cce5d563b58ef1bb2cdbbfe0dfb9ffdc24903b10ae6a4df2d8f425ece375033f"
 dependencies = [
  "bytemuck",
  "solana-program",
- "spl-discriminator-derive",
+ "spl-discriminator-derive 0.1.1",
+]
+
+[[package]]
+name = "spl-discriminator"
+version = "0.1.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "bytemuck",
+ "solana-program",
+ "spl-discriminator-derive 0.1.0",
+]
+
+[[package]]
+name = "spl-discriminator-derive"
+version = "0.1.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "quote",
+ "spl-discriminator-syn 0.1.0",
+ "syn 2.0.48",
 ]
 
 [[package]]
@@ -2679,8 +2699,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fadbefec4f3c678215ca72bd71862697bb06b41fd77c0088902dd3203354387b"
 dependencies = [
  "quote",
- "spl-discriminator-syn",
+ "spl-discriminator-syn 0.1.1",
  "syn 2.0.48",
+]
+
+[[package]]
+name = "spl-discriminator-syn"
+version = "0.1.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "solana-program",
+ "syn 2.0.48",
+ "thiserror",
 ]
 
 [[package]]
@@ -2706,6 +2738,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "spl-memo"
+version = "4.0.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "solana-program",
+]
+
+[[package]]
 name = "spl-pod"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2715,7 +2755,19 @@ dependencies = [
  "bytemuck",
  "solana-program",
  "solana-zk-token-sdk",
- "spl-program-error",
+ "spl-program-error 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "spl-pod"
+version = "0.1.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "borsh 0.10.3",
+ "bytemuck",
+ "solana-program",
+ "solana-zk-token-sdk",
+ "spl-program-error 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
 ]
 
 [[package]]
@@ -2727,8 +2779,31 @@ dependencies = [
  "num-derive 0.4.1",
  "num-traits",
  "solana-program",
- "spl-program-error-derive",
+ "spl-program-error-derive 0.3.1",
  "thiserror",
+]
+
+[[package]]
+name = "spl-program-error"
+version = "0.3.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "num-derive 0.4.1",
+ "num-traits",
+ "solana-program",
+ "spl-program-error-derive 0.3.0",
+ "thiserror",
+]
+
+[[package]]
+name = "spl-program-error-derive"
+version = "0.3.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "solana-program",
+ "syn 2.0.48",
 ]
 
 [[package]]
@@ -2746,15 +2821,14 @@ dependencies = [
 [[package]]
 name = "spl-tlv-account-resolution"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "062e148d3eab7b165582757453632ffeef490c02c86a48bfdb4988f63eefb3b9"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
 dependencies = [
  "bytemuck",
  "solana-program",
- "spl-discriminator",
- "spl-pod",
- "spl-program-error",
- "spl-type-length-value",
+ "spl-discriminator 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-pod 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-program-error 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-type-length-value 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
 ]
 
 [[package]]
@@ -2765,10 +2839,10 @@ checksum = "56f335787add7fa711819f9e7c573f8145a5358a709446fe2d24bf2a88117c90"
 dependencies = [
  "bytemuck",
  "solana-program",
- "spl-discriminator",
- "spl-pod",
- "spl-program-error",
- "spl-type-length-value",
+ "spl-discriminator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-pod 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-program-error 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-type-length-value 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2802,10 +2876,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "spl-token"
+version = "4.0.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "arrayref",
+ "bytemuck",
+ "num-derive 0.4.1",
+ "num-traits",
+ "num_enum 0.7.1",
+ "solana-program",
+ "thiserror",
+]
+
+[[package]]
 name = "spl-token-2022"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4abf34a65ba420584a0c35f3903f8d727d1f13ababbdc3f714c6b065a686e86"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
 dependencies = [
  "arrayref",
  "bytemuck",
@@ -2814,12 +2901,12 @@ dependencies = [
  "num_enum 0.7.1",
  "solana-program",
  "solana-zk-token-sdk",
- "spl-memo",
- "spl-pod",
- "spl-token 4.0.0",
- "spl-token-metadata-interface",
+ "spl-memo 4.0.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-pod 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-token 4.0.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-token-metadata-interface 0.2.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
  "spl-transfer-hook-interface 0.3.0",
- "spl-type-length-value",
+ "spl-type-length-value 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
  "thiserror",
 ]
 
@@ -2837,13 +2924,13 @@ dependencies = [
  "solana-program",
  "solana-security-txt",
  "solana-zk-token-sdk",
- "spl-memo",
- "spl-pod",
- "spl-token 4.0.0",
+ "spl-memo 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-pod 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-token 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-token-group-interface",
- "spl-token-metadata-interface",
+ "spl-token-metadata-interface 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-transfer-hook-interface 0.4.1",
- "spl-type-length-value",
+ "spl-type-length-value 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
 ]
 
@@ -2855,9 +2942,9 @@ checksum = "b889509d49fa74a4a033ca5dae6c2307e9e918122d97e58562f5c4ffa795c75d"
 dependencies = [
  "bytemuck",
  "solana-program",
- "spl-discriminator",
- "spl-pod",
- "spl-program-error",
+ "spl-discriminator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-pod 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-program-error 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2868,26 +2955,38 @@ checksum = "4c16ce3ba6979645fb7627aa1e435576172dd63088dc7848cb09aa331fa1fe4f"
 dependencies = [
  "borsh 0.10.3",
  "solana-program",
- "spl-discriminator",
- "spl-pod",
- "spl-program-error",
- "spl-type-length-value",
+ "spl-discriminator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-pod 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-program-error 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-type-length-value 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "spl-token-metadata-interface"
+version = "0.2.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "borsh 0.10.3",
+ "solana-program",
+ "spl-discriminator 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-pod 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-program-error 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-type-length-value 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
 ]
 
 [[package]]
 name = "spl-transfer-hook-interface"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "051d31803f873cabe71aec3c1b849f35248beae5d19a347d93a5c9cccc5d5a9b"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
 dependencies = [
  "arrayref",
  "bytemuck",
  "solana-program",
- "spl-discriminator",
- "spl-pod",
- "spl-program-error",
+ "spl-discriminator 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-pod 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-program-error 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
  "spl-tlv-account-resolution 0.4.0",
- "spl-type-length-value",
+ "spl-type-length-value 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
 ]
 
 [[package]]
@@ -2899,11 +2998,11 @@ dependencies = [
  "arrayref",
  "bytemuck",
  "solana-program",
- "spl-discriminator",
- "spl-pod",
- "spl-program-error",
+ "spl-discriminator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-pod 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-program-error 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-tlv-account-resolution 0.5.2",
- "spl-type-length-value",
+ "spl-type-length-value 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2914,9 +3013,21 @@ checksum = "a468e6f6371f9c69aae760186ea9f1a01c2908351b06a5e0026d21cfc4d7ecac"
 dependencies = [
  "bytemuck",
  "solana-program",
- "spl-discriminator",
- "spl-pod",
- "spl-program-error",
+ "spl-discriminator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-pod 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-program-error 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "spl-type-length-value"
+version = "0.3.0"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+dependencies = [
+ "bytemuck",
+ "solana-program",
+ "spl-discriminator 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-pod 0.1.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
+ "spl-program-error 0.3.0 (git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched)",
 ]
 
 [[package]]

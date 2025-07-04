@@ -50,6 +50,8 @@ pub mod token_2022 {
         ExtensionType::TokenMetadata,
         ExtensionType::TransferHook,
         ExtensionType::DefaultAccountState,
+        ExtensionType::ScaledUiAmount,
+        ExtensionType::Pausable,
     ];
 
     pub fn validate_liquidity_token_extensions(
@@ -70,6 +72,7 @@ pub mod token_2022 {
         let token_acc_data = token_acc_info.data.borrow();
         let token_acc =
             StateWithExtensions::<spl_token_2022::state::Account>::unpack(&token_acc_data)?;
+
         for mint_ext in mint.get_extension_types()? {
             if !VALID_LIQUIDITY_TOKEN_EXTENSIONS.contains(&mint_ext) {
                 xmsg!(
@@ -141,6 +144,14 @@ pub mod token_2022 {
                         xmsg!(
                             "Default account state extension only supports \"Initialized\" state"
                         );
+                        return err!(LendingError::UnsupportedTokenExtension);
+                    }
+                }
+                ExtensionType::Pausable => {
+                    let ext = mint
+                        .get_extension::<spl_token_2022::extension::pausable::PausableConfig>()?;
+                    if ext.paused.into() {
+                        xmsg!("Pausable extension must not be paused for liquidity tokens");
                         return err!(LendingError::UnsupportedTokenExtension);
                     }
                 }
