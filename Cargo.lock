@@ -2675,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "spl-discriminator"
 version = "0.1.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "bytemuck",
  "solana-program",
@@ -2685,7 +2685,7 @@ dependencies = [
 [[package]]
 name = "spl-discriminator-derive"
 version = "0.1.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "quote",
  "spl-discriminator-syn 0.1.0",
@@ -2706,7 +2706,7 @@ dependencies = [
 [[package]]
 name = "spl-discriminator-syn"
 version = "0.1.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2740,7 +2740,7 @@ dependencies = [
 [[package]]
 name = "spl-memo"
 version = "4.0.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "solana-program",
 ]
@@ -2761,7 +2761,7 @@ dependencies = [
 [[package]]
 name = "spl-pod"
 version = "0.1.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "borsh 0.10.3",
  "bytemuck",
@@ -2786,7 +2786,7 @@ dependencies = [
 [[package]]
 name = "spl-program-error"
 version = "0.3.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "num-derive 0.4.1",
  "num-traits",
@@ -2798,7 +2798,7 @@ dependencies = [
 [[package]]
 name = "spl-program-error-derive"
 version = "0.3.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2821,7 +2821,7 @@ dependencies = [
 [[package]]
 name = "spl-tlv-account-resolution"
 version = "0.4.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "bytemuck",
  "solana-program",
@@ -2878,7 +2878,7 @@ dependencies = [
 [[package]]
 name = "spl-token"
 version = "4.0.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "arrayref",
  "bytemuck",
@@ -2892,7 +2892,7 @@ dependencies = [
 [[package]]
 name = "spl-token-2022"
 version = "0.9.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "arrayref",
  "bytemuck",
@@ -2964,7 +2964,7 @@ dependencies = [
 [[package]]
 name = "spl-token-metadata-interface"
 version = "0.2.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "borsh 0.10.3",
  "solana-program",
@@ -2977,7 +2977,7 @@ dependencies = [
 [[package]]
 name = "spl-transfer-hook-interface"
 version = "0.3.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "arrayref",
  "bytemuck",
@@ -3021,7 +3021,7 @@ dependencies = [
 [[package]]
 name = "spl-type-length-value"
 version = "0.3.0"
-source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#3fc0d0dacf5c9be2306daa7c2e6b9569534be99f"
+source = "git+https://github.com/Kamino-Finance/solana-program-library.git?branch=spl-token-2022-v0.9.0-patched#05499337404b7709a07c8c44325fb71f642c06da"
 dependencies = [
  "bytemuck",
  "solana-program",
