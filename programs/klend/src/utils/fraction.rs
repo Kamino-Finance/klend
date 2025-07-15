@@ -69,6 +69,11 @@ pub trait FractionExtra {
 
     fn mul_int_ratio(&self, numerator: impl Into<u128>, denominator: impl Into<u128>) -> Self;
     fn full_mul_int_ratio(&self, numerator: impl Into<U256>, denominator: impl Into<U256>) -> Self;
+    fn full_mul_int_ratio_ceil(
+        &self,
+        numerator: impl Into<U256>,
+        denominator: impl Into<U256>,
+    ) -> Self;
 
     fn div_ceil(&self, denominator: &Self) -> Self;
 
@@ -130,6 +135,22 @@ impl FractionExtra for Fraction {
         let denominator = denominator.into();
         let big_sf = U256::from(self.to_bits());
         let big_sf_res = big_sf * numerator / denominator;
+        let sf_res: u128 = big_sf_res
+            .try_into()
+            .expect("Denominator is not big enough, the result doesn't fit in a Fraction.");
+        Fraction::from_bits(sf_res)
+    }
+
+    #[inline]
+    fn full_mul_int_ratio_ceil(
+        &self,
+        numerator: impl Into<U256>,
+        denominator: impl Into<U256>,
+    ) -> Self {
+        let numerator = numerator.into();
+        let denominator = denominator.into();
+        let big_sf = U256::from(self.to_bits());
+        let big_sf_res = (big_sf * numerator + denominator - 1) / denominator;
         let sf_res: u128 = big_sf_res
             .try_into()
             .expect("Denominator is not big enough, the result doesn't fit in a Fraction.");
