@@ -58,6 +58,17 @@ pub fn process_v2(
     Ok(())
 }
 
+
+
+
+
+
+
+
+
+
+
+
 pub(super) fn process_impl(
     accounts: &WithdrawObligationCollateralAndRedeemReserveCollateral,
     collateral_amount: u64,
@@ -151,6 +162,7 @@ pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
     pub obligation: AccountLoader<'info, Obligation>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
+    /// CHECK: Verified through create_program_address
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -188,6 +200,7 @@ pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
     pub collateral_token_program: Program<'info, Token>,
     pub liquidity_token_program: Interface<'info, TokenInterface>,
 
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

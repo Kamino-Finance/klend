@@ -9,10 +9,12 @@ use crate::LendingError;
 mod uint_types {
     use uint::construct_uint;
     construct_uint! {
-               pub struct U256(4);
+
+        pub struct U256(4);
     }
     construct_uint! {
-               pub struct U128(2);
+
+        pub struct U128(2);
     }
 }
 
@@ -22,11 +24,15 @@ pub const FRACTION_ONE_SCALED: u128 = Fraction::ONE.to_bits();
 
 pub const EPSILON: Fraction = Fraction::from_bits(1_000_000);
 
+
+
 pub fn pow_fraction(fraction: Fraction, power: u32) -> Option<Fraction> {
     if power == 0 {
         return Some(Fraction::ONE);
     }
 
+   
+   
     let mut x = fraction;
     let mut y = Fraction::ONE;
     let mut n = power;
@@ -42,6 +48,7 @@ pub fn pow_fraction(fraction: Fraction, power: u32) -> Option<Fraction> {
     x.checked_mul(y)
 }
 
+
 #[inline]
 pub const fn bps_u128_to_fraction(bps: u128) -> Fraction {
     if bps == 10_000 {
@@ -49,6 +56,7 @@ pub const fn bps_u128_to_fraction(bps: u128) -> Fraction {
     }
     Fraction::const_from_int(bps).unwrapped_div_int(10_000)
 }
+
 
 #[inline]
 pub const fn pct_u128_to_fraction(percent: u128) -> Fraction {
@@ -197,6 +205,8 @@ pub const fn to_sf_const(src: u128) -> u128 {
     Fraction::const_from_int(src).to_bits()
 }
 
+
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, PartialOrd, Ord)]
 pub struct BigFraction(pub U256);
 
@@ -241,6 +251,8 @@ impl BigFraction {
         Self(sf)
     }
 }
+
+
 
 use std::{
     fmt::Display,
@@ -378,19 +390,26 @@ impl TryFrom<U256> for U128 {
     }
 }
 
+
+
+
 pub struct FractionDisplay<'a>(&'a Fraction);
 
 impl Display for FractionDisplay<'_> {
     fn fmt(&self, formater: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let sf = self.0.to_bits();
 
+       
         const ROUND_COMP: u128 = (1 << Fraction::FRAC_NBITS) / (10_000 * 2);
         let sf = sf + ROUND_COMP;
 
+       
         let i = sf >> Fraction::FRAC_NBITS;
 
+       
         const FRAC_MASK: u128 = (1 << Fraction::FRAC_NBITS) - 1;
         let f_p = (sf & FRAC_MASK) as u64;
+       
         let f_p = ((f_p >> 30) * 10_000) >> 30;
         write!(formater, "{i}.{f_p:0>4}")
     }
@@ -401,3 +420,5 @@ impl std::fmt::Debug for FractionDisplay<'_> {
         write!(formater, "{}", self)
     }
 }
+
+

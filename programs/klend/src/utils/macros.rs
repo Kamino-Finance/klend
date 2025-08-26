@@ -96,11 +96,17 @@ macro_rules! refresh_farms {
 #[cfg(target_arch = "bpf")]
 #[macro_export]
 macro_rules! dbg_msg {
-                () => {
+   
+   
+   
+   
+    () => {
         msg!("[{}:{}]", file!(), line!())
     };
     ($val:expr $(,)?) => {
-                      match $val {
+       
+       
+        match $val {
             tmp => {
                 msg!("[{}:{}] {} = {:#?}",
                     file!(), line!(), stringify!($val), &tmp);
@@ -116,11 +122,17 @@ macro_rules! dbg_msg {
 #[cfg(not(target_arch = "bpf"))]
 #[macro_export]
 macro_rules! dbg_msg {
-                () => {
+   
+   
+   
+   
+    () => {
         println!("[{}:{}]", file!(), line!())
     };
     ($val:expr $(,)?) => {
-                      match $val {
+       
+       
+        match $val {
             tmp => {
                 println!("[{}:{}] {} = {:#?}",
                     file!(), line!(), stringify!($val), &tmp);
@@ -219,7 +231,8 @@ macro_rules! assert_fuzzy_eq_percentage {
         let percentage = $percentage as f64;
         let diff = (act - exp).abs();
         let diff_percentage = match exp {
-            0 => f64::MAX,            _ => (100.0 * diff as f64) / (exp as f64),
+            0 => f64::MAX,
+            _ => (100.0 * diff as f64) / (exp as f64),
         };
         if diff > 0 && diff_percentage > percentage {
             panic!("Actual {} Expected {} diff {} and percentage_diff > percentage ({}% > {}%)",
@@ -233,7 +246,8 @@ macro_rules! assert_fuzzy_eq_percentage {
         let percentage = $percentage as f64;
         let diff = (act - exp).abs();
         let diff_percentage = match exp {
-            0 => f64::MAX,            _ => (100.0 * diff as f64) / (exp as f64),
+            0 => f64::MAX,
+            _ => (100.0 * diff as f64) / (exp as f64),
         };
         if diff > 0 && diff_percentage > percentage {
             panic!("Actual {} Expected {} diff {} and percentage_diff > percentage ({}% > {}%) testcase: {}",
@@ -288,7 +302,9 @@ macro_rules! assert_almost_eq_fraction {
 #[macro_export]
 macro_rules! assert_gt {
     ($left:expr, $right:expr) => {
+       
         if !($left > $right) {
+           
             panic!(
                 "Assertion failed: {:?} is not greater than {:?}",
                 $left, $right
@@ -300,7 +316,9 @@ macro_rules! assert_gt {
 #[macro_export]
 macro_rules! assert_gte {
     ($left:expr, $right:expr) => {
+       
         if !($left >= $right) {
+           
             panic!(
                 "Assertion failed: {:?} is not greater than {:?}",
                 $left, $right
@@ -398,6 +416,7 @@ macro_rules! prop_assert_fuzzy_eq {
     };
 }
 
+
 #[macro_export]
 macro_rules! prop_assert_fuzzy_eq_percentage {
     ($actual: expr, $expected: expr, $epsilon: expr, $percentage: expr) => {
@@ -410,17 +429,13 @@ macro_rules! prop_assert_fuzzy_eq_percentage {
             0 => f64::MAX,
             _ => (100.0 * diff as f64) / (exp as f64),
         };
-        ::proptest::prop_assert!(
-            !(diff > eps && diff_percentage > percentage),
+        ::proptest::prop_assert!(!(diff > eps && diff_percentage > percentage),
             "Actual {} Expected {} diff {} and percentage_diff > percentage ({}% > {}%)",
-            $actual,
-            $expected,
-            diff,
-            diff_percentage,
-            percentage
+            $actual, $expected, diff, diff_percentage, percentage
         );
     };
 }
+
 
 #[macro_export]
 macro_rules! prop_assert_fuzzy_bps_diff {

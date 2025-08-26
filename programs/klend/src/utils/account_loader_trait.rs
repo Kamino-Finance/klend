@@ -31,6 +31,8 @@ impl<'info, T: ZeroCopy + Owner> AnyAccountLoader<'info, T> for AccountLoader<'i
     }
 }
 
+
+
 pub struct FatAccountLoader<'info, T: ZeroCopy + Owner> {
     acc_info: AccountInfo<'info>,
     phantom: PhantomData<&'info T>,
@@ -53,6 +55,7 @@ impl<'info, T: ZeroCopy + Owner> FatAccountLoader<'info, T> {
         }
     }
 
+
     #[inline(never)]
     pub fn try_from(acc_info: &AccountInfo<'info>) -> Result<FatAccountLoader<'info, T>> {
         if acc_info.owner != &T::owner() {
@@ -65,12 +68,14 @@ impl<'info, T: ZeroCopy + Owner> FatAccountLoader<'info, T> {
         if data.len() < T::discriminator().len() {
             return Err(ErrorCode::AccountDiscriminatorNotFound.into());
         }
+       
         if data[0..8] != T::discriminator() {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
         Ok(FatAccountLoader::new(acc_info))
     }
+
 
     #[inline(never)]
     pub fn try_from_unchecked(
@@ -85,6 +90,7 @@ impl<'info, T: ZeroCopy + Owner> FatAccountLoader<'info, T> {
         }
         Ok(FatAccountLoader::new(acc_info))
     }
+
 
     pub fn load(&self) -> Result<Ref<T>> {
         let data = self.acc_info.try_borrow_data()?;
@@ -101,7 +107,10 @@ impl<'info, T: ZeroCopy + Owner> FatAccountLoader<'info, T> {
         }))
     }
 
+
     pub fn load_mut(&self) -> Result<RefMut<T>> {
+       
+       
         if !self.acc_info.is_writable {
             return Err(ErrorCode::AccountNotMutable.into());
         }
@@ -120,13 +129,18 @@ impl<'info, T: ZeroCopy + Owner> FatAccountLoader<'info, T> {
         }))
     }
 
+
+
     pub fn load_init(&self) -> Result<RefMut<T>> {
+       
+       
         if !self.acc_info.is_writable {
             return Err(ErrorCode::AccountNotMutable.into());
         }
 
         let data = self.acc_info.try_borrow_mut_data()?;
 
+       
         let mut disc_bytes = [0u8; 8];
         disc_bytes.copy_from_slice(&data[..8]);
         let discriminator = u64::from_le_bytes(disc_bytes);

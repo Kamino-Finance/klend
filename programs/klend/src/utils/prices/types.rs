@@ -3,13 +3,21 @@ use anchor_lang::prelude::*;
 use super::utils::ten_pow;
 use crate::utils::{Fraction, U256};
 
+
+
+
+
+
+
 #[derive(Clone, Copy, Debug, AnchorDeserialize, AnchorSerialize, Default)]
 pub(crate) struct Price<T>
 where
     T: Into<U256>,
 {
+
     pub value: T,
 
+   
     pub exp: u32,
 }
 
@@ -17,6 +25,11 @@ impl<T> Price<T>
 where
     T: Into<U256> + Copy + TryFrom<U256>,
 {
+
+
+
+
+
     pub fn to_adjusted_exp(self, target_exp: u32) -> Option<Price<T>> {
         if target_exp == self.exp {
             return Some(self);
@@ -25,10 +38,12 @@ where
         let exp = self.exp;
 
         let value_256 = if exp > target_exp {
+           
             let diff = exp - target_exp;
             let factor = ten_pow(diff).into();
             value.checked_div(factor)
         } else {
+           
             let diff = target_exp - exp;
             let factor = ten_pow(diff).into();
             value.checked_mul(factor)
@@ -41,6 +56,10 @@ where
             })
         })
     }
+
+
+
+
 
     pub fn reduce_exp_lossy(self, target_exp: u32) -> Option<Price<T>> {
         if self.exp <= target_exp {
@@ -75,3 +94,5 @@ pub(super) struct TimestampedPriceWithTwap {
     pub price: TimestampedPrice,
     pub twap: Option<TimestampedPrice>,
 }
+
+

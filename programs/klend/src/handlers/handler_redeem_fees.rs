@@ -61,6 +61,7 @@ pub struct RedeemFees<'info> {
     pub reserve_supply_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
+    /// CHECK: Verified through create_program_address
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,

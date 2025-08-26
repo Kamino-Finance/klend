@@ -14,7 +14,9 @@ use self::{
 };
 use crate::{utils::Fraction, LendingError, PriceStatusFlags, TokenInfo};
 
+
 const MAX_CONFIDENCE_PERCENTAGE: u64 = 2u64;
+
 
 const CONFIDENCE_FACTOR: u64 = 100 / MAX_CONFIDENCE_PERCENTAGE;
 
@@ -44,6 +46,8 @@ pub fn get_price(
 
     Ok(get_validated_price(price, token_info, clock.unix_timestamp))
 }
+
+
 
 fn get_most_recent_price_and_twap(
     token_info: &TokenInfo,
@@ -96,3 +100,4 @@ fn get_most_recent_price_and_twap(
         error!(LendingError::PriceNotValid)
     })
 }
+

@@ -17,6 +17,7 @@ pub fn check_remaining_accounts<T>(ctx: &Context<T>) -> Result<()>
 where
     T: Bumps,
 {
+
     if !ctx.remaining_accounts.is_empty() {
         return err!(LendingError::InvalidAccountInput);
     }
@@ -53,6 +54,7 @@ pub mod token_2022 {
         ExtensionType::ScaledUiAmount,
         ExtensionType::Pausable,
     ];
+
 
     pub fn validate_liquidity_token_extensions(
         mint_acc_info: &AccountInfo,
@@ -161,3 +163,4 @@ pub mod token_2022 {
         Ok(())
     }
 }
+

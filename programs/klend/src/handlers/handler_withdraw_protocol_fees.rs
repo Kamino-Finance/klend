@@ -1,3 +1,6 @@
+
+
+
 use anchor_lang::{prelude::*, solana_program::program_option::COption, Accounts};
 use anchor_spl::{
     associated_token::get_associated_token_address_with_program_id,
@@ -66,6 +69,7 @@ pub struct WithdrawProtocolFees<'info> {
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
     )]
+    /// CHECK: PDA signer, checked with the provided seeds
     pub lending_market_authority: AccountInfo<'info>,
 
     #[account(mut,

@@ -21,13 +21,17 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<GlobalConfig>() % 8);
 #[account(zero_copy)]
 #[repr(C)]
 pub struct GlobalConfig {
+
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub global_admin: Pubkey,
+
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub pending_admin: Pubkey,
 
+
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub fee_collector: Pubkey,
+
 
     #[cfg_attr(
         feature = "serde",
@@ -53,6 +57,7 @@ impl Default for GlobalConfig {
     Debug,
     EnumString,
 )]
+// ..
 #[repr(u8)]
 pub enum UpdateGlobalConfigMode {
     PendingAdmin = 0,
@@ -85,3 +90,4 @@ impl GlobalConfig {
         Ok(())
     }
 }
+

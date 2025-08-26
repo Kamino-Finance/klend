@@ -11,12 +11,20 @@ use crate::{
     LendingError, LendingMarket, Obligation, ObligationOrder, Reserve,
 };
 
+
 const VALID_DEBT_COLL_PRICE_RATIO_RANGE: RangeInclusive<Fraction> =
     fraction!(0.000000000000001)..=fraction!(1000000000000000);
 
+
+
+
+
 const VALID_USER_LTV_RANGE: Range<Fraction> = fraction!(0.01)..fraction!(1.0);
 
+
 const EXECUTION_BONUS_SANITY_LIMIT: Fraction = fraction!(0.1);
+
+
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
 pub enum ConditionType {
@@ -27,6 +35,8 @@ pub enum ConditionType {
     DebtCollPriceRatioBelow = 4,
 }
 
+
+
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
 pub enum OpportunityType {
@@ -34,12 +44,28 @@ pub enum OpportunityType {
     DeleverageAllDebt = 1,
 }
 
+
 pub type ApplicableObligationOrder = (usize, ConditionHit);
+
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct ConditionHit {
+
+
+
+
+
+
+
+
+
+
     pub normalized_distance_from_threshold: Fraction,
 }
+
+
+
+
 
 pub fn find_applicable_obligation_order(
     collateral_reserve: &Reserve,
@@ -56,12 +82,20 @@ pub fn find_applicable_obligation_order(
     None
 }
 
+
+
+
+
+
+
+
 pub fn check_orders_supported_after_user_operation(obligation: &mut Obligation) -> Result<()> {
     let has_unsupported_orders = obligation
         .orders
         .iter()
         .any(|order| !order.is_supported_by(obligation));
     if has_unsupported_orders {
+       
         let unsupported_orders = obligation
             .orders
             .iter()
@@ -76,9 +110,15 @@ pub fn check_orders_supported_after_user_operation(obligation: &mut Obligation) 
     Ok(())
 }
 
+
+
+
+
+
 pub fn remove_all_orders(obligation: &mut Obligation) -> bool {
     let mut had_orders = false;
     for order in obligation.orders.iter_mut() {
+       
         if order != &ObligationOrder::default() {
             *order = ObligationOrder::default();
             had_orders = true;
@@ -86,6 +126,9 @@ pub fn remove_all_orders(obligation: &mut Obligation) -> bool {
     }
     had_orders
 }
+
+
+
 
 pub fn set_order_on_obligation(
     lending_market: &LendingMarket,
@@ -129,10 +172,12 @@ pub fn set_order_on_obligation(
     Ok(())
 }
 
+
+
 impl ConditionType {
     pub fn is_supported_by(&self, obligation: &Obligation) -> bool {
         match self {
-            Self::Never => true,
+            Self::Never => true,                            
             Self::UserLtvAbove | Self::UserLtvBelow => true,
             Self::DebtCollPriceRatioAbove | Self::DebtCollPriceRatioBelow => {
                 obligation.is_single_debt_single_coll()
@@ -179,6 +224,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
                 msg!("A void order should be entirely zeroed; got {:?}", order);
                 return err!(LendingError::InvalidOrderConfiguration);
             }
+           
             return Ok(());
         }
         Err(error) => {
@@ -261,6 +307,9 @@ fn evaluate_order_condition(
             evaluate_stop_loss(
                 price_ratio,
                 order.condition_threshold(),
+               
+               
+               
                 price_ratio * obligation.unhealthy_loan_to_value() / obligation.loan_to_value(),
             )
         }
@@ -280,8 +329,13 @@ fn evaluate_stop_loss(
         return None;
     }
     let normalized_distance_towards_liquidation = if condition_threshold > liquidation_threshold {
+       
+       
+       
+       
         Fraction::ONE
     } else {
+       
         let current_distance = current_value - condition_threshold;
         let maximum_distance = liquidation_threshold - condition_threshold;
         current_distance / maximum_distance
@@ -315,3 +369,4 @@ impl ConditionHit {
         }
     }
 }
+

@@ -168,6 +168,7 @@ pub fn process(
 }
 
 fn validate_new_elevation_group(elevation_group: &ElevationGroup) -> Result<()> {
+   
     if elevation_group.id > MAX_NUM_ELEVATION_GROUPS {
         return err!(LendingError::InvalidElevationGroupConfig);
     }
@@ -177,6 +178,7 @@ fn validate_new_elevation_group(elevation_group: &ElevationGroup) -> Result<()> 
         return err!(LendingError::InvalidElevationGroupConfig);
     }
 
+   
     if elevation_group.liquidation_threshold_pct >= 100
         || elevation_group.ltv_pct >= 100
         || elevation_group.ltv_pct > elevation_group.liquidation_threshold_pct
@@ -192,6 +194,8 @@ fn validate_new_elevation_group(elevation_group: &ElevationGroup) -> Result<()> 
         return err!(LendingError::InvalidElevationGroupConfig);
     }
 
+   
+   
     if Fraction::from_percent(elevation_group.liquidation_threshold_pct)
         + Fraction::from_percent(elevation_group.liquidation_threshold_pct)
             * Fraction::from_bps(elevation_group.max_liquidation_bonus_bps)

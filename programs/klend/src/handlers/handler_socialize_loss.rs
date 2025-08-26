@@ -63,6 +63,7 @@ fn process_impl(
 
 #[derive(Accounts)]
 pub struct SocializeLoss<'info> {
+   
     pub risk_council: Signer<'info>,
 
     #[account(mut,
@@ -78,6 +79,7 @@ pub struct SocializeLoss<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

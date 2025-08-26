@@ -96,6 +96,7 @@ pub struct DepositReserveLiquidity<'info> {
     pub reserve: AccountLoader<'info, Reserve>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
+    /// CHECK: Verified through create_program_address in anchor
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -128,6 +129,7 @@ pub struct DepositReserveLiquidity<'info> {
     pub collateral_token_program: Program<'info, Token>,
     pub liquidity_token_program: Interface<'info, TokenInterface>,
 
+    /// CHECK: Syvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

@@ -33,6 +33,7 @@ pub struct InitFarmsForReserve<'info> {
     pub lending_market_owner: Signer<'info>,
     #[account(has_one = lending_market_owner)]
     pub lending_market: AccountLoader<'info, LendingMarket>,
+    /// CHECK: Checked through create_program_address
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -45,11 +46,14 @@ pub struct InitFarmsForReserve<'info> {
     pub reserve: AccountLoader<'info, Reserve>,
 
     pub farms_program: Program<'info, Farms>,
+    /// CHECK: GlobalConfig account checked on farms CPI
     pub farms_global_config: AccountInfo<'info>,
 
+    /// CHECK: FarmState account is initialized on farms CPI
     #[account(mut)]
     pub farm_state: AccountInfo<'info>,
 
+    /// CHECK: PDA initialized on farms CPI
     pub farms_vault_authority: AccountInfo<'info>,
 
     pub rent: Sysvar<'info, Rent>,

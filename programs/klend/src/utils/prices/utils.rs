@@ -4,6 +4,10 @@ use crate::{
     utils::{Fraction, U128, U256},
 };
 
+
+
+
+
 pub(crate) fn price_to_fraction<T>(price: Price<T>) -> Fraction
 where
     T: Into<U256> + Copy,
@@ -14,6 +18,9 @@ where
 
     let value_bf = BigFraction::from_num(value);
     let price_bf = value_bf / decimal;
+   
+   
+   
     price_bf
         .try_into()
         .expect("Failed to convert Price stored on BigFraction to Fraction")
@@ -63,3 +70,4 @@ pub(super) fn ten_pow(exponent: u32) -> U128 {
 
     U128::from(value)
 }
+

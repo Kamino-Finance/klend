@@ -120,6 +120,7 @@ pub struct DepositObligationCollateral<'info> {
 
     pub token_program: Program<'info, Token>,
 
+    /// CHECK: Syvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

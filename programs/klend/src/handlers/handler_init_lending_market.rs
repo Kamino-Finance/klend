@@ -25,6 +25,7 @@ pub struct InitLendingMarket<'info> {
     #[account(zero)]
     pub lending_market: AccountLoader<'info, LendingMarket>,
 
+    /// CHECK: Seed checked
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump
