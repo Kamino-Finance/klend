@@ -25,9 +25,8 @@ solana_security_txt::security_txt! {
     project_url: "https://kamino.finance/",
     contacts: "email:security@kamino.finance",
     policy: "https://github.com/Kamino-Finance/audits/blob/master/docs/SECURITY.md",
-
-       preferred_languages: "en",
-    auditors: "OtterSec, Offside Labs"
+    preferred_languages: "en",
+    auditors: "OtterSec, Offside Labs, Certora, Sec3"
 }
 
 #[program]
