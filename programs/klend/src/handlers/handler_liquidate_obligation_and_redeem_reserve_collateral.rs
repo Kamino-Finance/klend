@@ -20,6 +20,7 @@ use crate::{
     xmsg, LendingAction, LiquidateAndRedeemResult, ReserveFarmKind,
 };
 
+
 pub fn process_v1(
     ctx: Context<LiquidateObligationAndRedeemReserveCollateral>,
     liquidity_amount: u64,
@@ -106,6 +107,8 @@ fn process_impl(
     let lending_market_key = accounts.lending_market.key();
     let clock = &Clock::get()?;
 
+   
+
     let max_allowed_ltv_override_pct_opt =
         if accounts.liquidator.key() == obligation.owner && max_allowed_ltv_override_percent > 0 {
             if cfg!(feature = "staging") {
@@ -191,6 +194,7 @@ fn process_impl(
             accounts.withdraw_reserve_liquidity_mint.decimals,
         )?;
 
+       
         token_interface::transfer_checked(
             CpiContext::new(
                 accounts.withdraw_liquidity_token_program.to_account_info(),
@@ -268,6 +272,7 @@ pub struct LiquidateObligationAndRedeemReserveCollateral<'info> {
     pub obligation: AccountLoader<'info, Obligation>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
+    /// CHECK: Verified through create_program_address
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -325,6 +330,7 @@ pub struct LiquidateObligationAndRedeemReserveCollateral<'info> {
     pub repay_liquidity_token_program: Interface<'info, TokenInterface>,
     pub withdraw_liquidity_token_program: Interface<'info, TokenInterface>,
 
+    /// CHECK: Syvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

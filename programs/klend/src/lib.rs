@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
-#![allow(deprecated)]
+#![allow(deprecated)] //Needed as anchor will use the deprecated functions automatically
+
 use anchor_lang::prelude::*;
 
 mod handlers;
@@ -25,15 +26,15 @@ solana_security_txt::security_txt! {
     project_url: "https://kamino.finance/",
     contacts: "email:security@kamino.finance",
     policy: "https://github.com/Kamino-Finance/audits/blob/master/docs/SECURITY.md",
-
-       preferred_languages: "en",
-    auditors: "OtterSec, Offside Labs"
+    preferred_languages: "en",
+    auditors: "OtterSec, Offside Labs, Certora, Sec3"
 }
 
 #[program]
 pub mod kamino_lending {
     use super::*;
 
+   
     pub fn init_lending_market(
         ctx: Context<InitLendingMarket>,
         quote_currency: [u8; 32],
@@ -78,6 +79,7 @@ pub mod kamino_lending {
         handler_withdraw_protocol_fees::process(ctx, amount)
     }
 
+   
     #[deprecated(
         since = "1.8.0",
         note = "Please use `_v2` variant of the handler instead"
@@ -97,6 +99,7 @@ pub mod kamino_lending {
         handler_mark_obligation_for_deleveraging::process(ctx, autodeleverage_target_ltv_pct)
     }
 
+   
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
         handler_refresh_reserve::process(ctx)
@@ -700,3 +703,4 @@ pub enum LendingError {
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
+

@@ -54,7 +54,9 @@ pub struct InitObligation<'info> {
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
 
+    /// CHECK: Verified in check_obligation_seeds function
     pub seed1_account: AccountInfo<'info>,
+    /// CHECK: Verified in check_obligation_seeds function
     pub seed2_account: AccountInfo<'info>,
 
     #[account(

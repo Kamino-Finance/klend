@@ -51,6 +51,11 @@ impl From<Price<u64>> for scope::Price {
     }
 }
 
+
+
+
+
+
 fn get_price_account<'a>(scope_price_account: &'a AccountInfo) -> Result<Ref<'a, ScopePrices>> {
     if *scope_price_account.key == NULL_PUBKEY {
         return Err(LendingError::InvalidOracleConfig.into());
@@ -60,11 +65,15 @@ fn get_price_account<'a>(scope_price_account: &'a AccountInfo) -> Result<Ref<'a,
 
     let disc_bytes = &data[0..8];
     if disc_bytes != ScopePrices::discriminator() {
+       
         return Err(LendingError::CouldNotDeserializeScope.into());
     }
 
     Ok(Ref::map(data, |data| bytemuck::from_bytes(&data[8..])))
 }
+
+
+
 
 fn get_price_usd(
     scope_prices: &ScopePrices,
@@ -74,6 +83,7 @@ fn get_price_usd(
         msg!("Scope chain is not initialized properly");
         return err!(LendingError::PriceNotValid);
     }
+   
     let price_chain_raw = tokens_chain.map(|token_id| get_base_price(scope_prices, token_id));
 
     let chain_len = price_chain_raw.iter().take_while(|v| v.is_some()).count();
@@ -83,6 +93,7 @@ fn get_price_usd(
         return err!(LendingError::NoPriceFound);
     }
 
+   
     if chain_len == 1 {
         let price = price_chain_raw[0].unwrap();
         let price_load = Box::new(move || Ok(price_to_fraction(price.0)));
@@ -134,9 +145,12 @@ fn get_price_usd(
     })
 }
 
+
+
 fn get_base_price(scope_prices: &ScopePrices, token: ScopePriceId) -> Option<(Price<u64>, u64)> {
     scope_prices
         .prices
         .get(usize::from(token))
         .map(|price| (price.price.into(), price.unix_timestamp))
 }
+

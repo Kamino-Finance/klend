@@ -1,4 +1,6 @@
+
 pub trait IterExt: Iterator + Sized {
+
     fn zip_exact<R: Iterator>(
         self,
         rights: impl IntoIterator<Item = R::Item, IntoIter = R>,
@@ -6,11 +8,13 @@ pub trait IterExt: Iterator + Sized {
         zip_exact(self, rights)
     }
 
+
     fn only_element(self) -> Option<Self::Item> {
         only_element(self)
     }
 }
 impl<T: Iterator> IterExt for T {}
+
 
 pub fn only_element<T>(iter: impl IntoIterator<Item = T>) -> Option<T> {
     let mut the_only = None;
@@ -23,6 +27,15 @@ pub fn only_element<T>(iter: impl IntoIterator<Item = T>) -> Option<T> {
     the_only
 }
 
+
+
+
+
+
+
+
+
+
 pub fn zip_exact<L: Iterator, R: Iterator>(
     lefts: impl IntoIterator<Item = L::Item, IntoIter = L>,
     rights: impl IntoIterator<Item = R::Item, IntoIter = R>,
@@ -34,8 +47,11 @@ pub fn zip_exact<L: Iterator, R: Iterator>(
     }
 }
 
+
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct LengthMismatchError;
+
 
 pub type LengthCheckedResult<L, R> = Result<(L, R), LengthMismatchError>;
 
@@ -62,3 +78,4 @@ impl<L: Iterator, R: Iterator> Iterator for LengthCheckingZipIterator<L, R> {
         }
     }
 }
+

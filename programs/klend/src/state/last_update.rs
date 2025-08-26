@@ -6,6 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::LendingError;
 
+
 pub const STALE_AFTER_SLOTS_ELAPSED: u64 = 1;
 
 #[derive(
@@ -40,17 +41,23 @@ impl PriceStatusFlags {
 
     pub const NONE: PriceStatusFlags = PriceStatusFlags::empty();
 
+   
+
     pub const LIQUIDATION_CHECKS: PriceStatusFlags = PriceStatusFlags::PRICE_LOADED
         .union(PriceStatusFlags::PRICE_AGE_CHECKED)
         .union(PriceStatusFlags::PRICE_USAGE_ALLOWED);
 }
 
+
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 #[zero_copy]
 #[repr(C)]
 pub struct LastUpdate {
+
     slot: u64,
+
     stale: u8,
+
     price_status: u8,
 
     placeholder: [u8; 6],
@@ -63,6 +70,7 @@ impl Default for LastUpdate {
 }
 
 impl LastUpdate {
+
     pub fn new(slot: Slot) -> Self {
         Self {
             slot,
@@ -72,12 +80,14 @@ impl LastUpdate {
         }
     }
 
+
     pub fn slots_elapsed(&self, slot: Slot) -> Result<u64> {
         let slots_elapsed = slot
             .checked_sub(self.slot)
             .ok_or_else(|| error!(LendingError::MathOverflow))?;
         Ok(slots_elapsed)
     }
+
 
     pub fn update_slot(&mut self, slot: Slot, price_status: impl Into<Option<PriceStatusFlags>>) {
         let price_status: Option<PriceStatusFlags> = price_status.into();
@@ -88,15 +98,23 @@ impl LastUpdate {
         }
     }
 
+
     pub fn mark_stale(&mut self) {
         self.stale = true as u8;
     }
 
+
     pub fn is_stale(&self, slot: Slot, min_price_status: PriceStatusFlags) -> Result<bool> {
+       
         let is_price_status_ok = self.get_price_status().contains(min_price_status);
         Ok(self.stale != (false as u8)
             || self.slots_elapsed(slot)? >= STALE_AFTER_SLOTS_ELAPSED
             || !is_price_status_ok)
+    }
+
+
+    pub fn is_marked_stale(&self) -> bool {
+        self.stale != (false as u8)
     }
 
     pub fn get_price_status(&self) -> PriceStatusFlags {
@@ -115,3 +133,4 @@ impl PartialOrd for LastUpdate {
         self.slot.partial_cmp(&other.slot)
     }
 }
+

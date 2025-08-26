@@ -94,8 +94,10 @@ pub fn check_refresh(
 
             let ix_discriminator: [u8; 8] = ix.data[0..8].try_into().unwrap();
 
+           
             require_keys_eq!(ix.program_id, crate::id());
 
+           
             let ix_discriminator_matches = ix_discriminator == required_ix.discriminator();
             if !ix_discriminator_matches {
                 for (i, ix) in required_ixns.iter().enumerate() {
@@ -108,6 +110,7 @@ pub fn check_refresh(
                 LendingError::IncorrectInstructionInPosition
             );
 
+           
             for (key, index) in required_ix.accounts.iter() {
                 require_keys_eq!(
                     ix.accounts
@@ -122,6 +125,23 @@ pub fn check_refresh(
         Ok(())
     };
 
+   
+   
+   
+   
+   
+
+   
+   
+   
+   
+   
+   
+   
+
+   
+
+   
     let refresh_reserve_ixs = if reserves.len() == 2 && reserves[0].0 == reserves[1].0 {
         reserves.len() - 1
     } else {
@@ -130,6 +150,7 @@ pub fn check_refresh(
 
     let mut required_pre_ixs = Vec::with_capacity(refresh_reserve_ixs + 1 + refresh_reserve_ixs);
     let mut required_post_ixs = Vec::with_capacity(refresh_reserve_ixs);
+
     for reserve in reserves.iter().take(refresh_reserve_ixs) {
         required_pre_ixs.push(RequiredIx {
             kind: RequiredIxType::RefreshReserve,
@@ -160,6 +181,10 @@ pub fn check_refresh(
             }
         });
 
+   
+   
+
+   
     required_pre_ixs.reverse();
     check_ixns(required_pre_ixs, AppendedIxType::PreIxs)?;
     check_ixns(required_post_ixs, AppendedIxType::PostIxs)?;

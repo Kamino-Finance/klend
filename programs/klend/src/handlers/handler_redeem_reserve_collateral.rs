@@ -91,6 +91,7 @@ pub struct RedeemReserveCollateral<'info> {
         has_one = lending_market
     )]
     pub reserve: AccountLoader<'info, Reserve>,
+    /// CHECK: Verified through create_program_address
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -124,6 +125,7 @@ pub struct RedeemReserveCollateral<'info> {
     pub collateral_token_program: Program<'info, Token>,
     pub liquidity_token_program: Interface<'info, TokenInterface>,
 
+    /// CHECK: Syvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
 }

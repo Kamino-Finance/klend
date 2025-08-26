@@ -112,6 +112,7 @@ where
 
 #[derive(Accounts)]
 pub struct RepayObligationLiquidity<'info> {
+   
     pub owner: Signer<'info>,
 
     #[account(mut,
@@ -145,8 +146,10 @@ pub struct RepayObligationLiquidity<'info> {
 
     pub token_program: Interface<'info, TokenInterface>,
 
+    /// CHECK: Syvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]
     pub instruction_sysvar_account: AccountInfo<'info>,
+   
 }
 
 #[derive(Accounts)]

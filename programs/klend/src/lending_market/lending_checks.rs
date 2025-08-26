@@ -291,6 +291,7 @@ pub fn flash_borrow_reserve_liquidity_checks(
         return err!(LendingError::FlashLoansDisabled);
     }
 
+   
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
         &ctx.accounts.user_destination_liquidity.to_account_info(),

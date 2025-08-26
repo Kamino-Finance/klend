@@ -27,10 +27,13 @@ pub use types::*;
 
 use crate::utils::{borrow_rate_curve::BorrowRateCurve, RESERVE_CONFIG_SIZE};
 
+
+
 pub const VALUE_BYTE_ARRAY_LEN_RESERVE: usize = RESERVE_CONFIG_SIZE;
 pub const VALUE_BYTE_ARRAY_LEN_SHORT_UPDATE: usize = 32;
 
 pub const VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE: usize = 72;
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum UpdateReserveConfigValue {
     Bool(bool),
@@ -317,3 +320,4 @@ pub mod serde_bool_u8 {
         Ok(s as u8)
     }
 }
+

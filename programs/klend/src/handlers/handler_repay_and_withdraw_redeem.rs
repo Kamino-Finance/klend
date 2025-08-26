@@ -88,11 +88,13 @@ fn process_impl(
         let borrow_count_post_repay = obligation.active_borrows_count();
         drop(obligation);
 
+       
         if borrow_count_post_repay == previous_borrow_count
             || repay_reserve_key == withdraw_reserve_key
         {
             let repay_reserve = &mut repay_accounts.repay_reserve.load_mut()?;
 
+           
             lending_operations::refresh_reserve(
                 repay_reserve,
                 &clock,
@@ -105,15 +107,21 @@ fn process_impl(
     };
 
     let mut remaining_accounts_post_repay = {
+       
         let remaining_accounts = if previous_borrow_count == borrow_count_post_repay {
             remaining_accounts.to_vec()
         } else {
+           
+           
             let referrer_to_skip = if has_referrer {
                 pda::referrer_token_state(referrer, repay_reserve_key).0
             } else {
                 Pubkey::default()
             };
 
+           
+           
+           
             let mut reserves_iter: Vec<AccountInfo> = remaining_accounts
                 .iter()
                 .rev()
@@ -189,11 +197,13 @@ fn process_impl(
             )?;
         }
 
+       
         let remaining_accounts_post_withdrawal = if is_full_withdrawal {
             let withdraw_reserve_index = remaining_accounts_post_repay
                 .iter()
                 .position(|account| account.key() == withdraw_reserve_key)
                 .unwrap();
+
             remaining_accounts_post_repay.remove(withdraw_reserve_index);
             remaining_accounts_post_repay
         } else {

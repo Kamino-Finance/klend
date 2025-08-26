@@ -20,6 +20,11 @@ pub fn default_array<T: Default + Copy, const N: usize>() -> [T; N] {
     [T::default(); N]
 }
 
+
+
+
+
+
 pub fn is_default_array<T: Default + PartialEq>(array: &[T]) -> bool {
     let default_value = T::default();
     array.iter().all(|element| *element == default_value)

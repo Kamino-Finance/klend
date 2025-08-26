@@ -33,6 +33,7 @@ pub(crate) fn process_impl_refresh_obligation_farms_for_reserve(
     let reserve = &account_ctx.reserve.load()?;
     let reserve_address: Pubkey = *account_ctx.reserve.to_account_info().key;
 
+   
     let farm_address = reserve.get_farm(farm_kind);
     if farm_address == Pubkey::default() {
         return Err(LendingError::NoFarmForReserve.into());
@@ -87,8 +88,11 @@ pub struct RefreshObligationFarmsForReserve<'info> {
 
 #[derive(Accounts)]
 pub struct RefreshObligationFarmsForReserveBase<'info> {
+    /// CHECK: Obligation is checked against the lending market in lending_checks
+    /// CHECK: The obligation must match the `delegatee` in the farm state (checked in handler)
     pub obligation: AccountInfo<'info>,
 
+    /// CHECK: Seed checked
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -98,19 +102,24 @@ pub struct RefreshObligationFarmsForReserveBase<'info> {
     #[account(has_one = lending_market)]
     pub reserve: AccountLoader<'info, Reserve>,
 
+    /// CHECK: Checked against the reserve's stored farm account + CPI checks
     #[account(mut)]
     pub reserve_farm_state: AccountInfo<'info>,
 
+    /// CHECK: Checked against the farm state account in CPI
     #[account(mut)]
     pub obligation_farm_user_state: AccountLoader<'info, FarmsUserState>,
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
 }
 
+
 #[derive(Accounts)]
 pub struct OptionalObligationFarmsAccounts<'info> {
+    /// CHECK: `delegatee` is checked as equal to the `obligation` in `lending_checks
     #[account(mut)]
     pub obligation_farm_user_state: Option<AccountLoader<'info, FarmsUserState>>,
+    /// CHECK: Checked against the reserve's stored farm account + CPI checks
     #[account(mut)]
     pub reserve_farm_state: Option<AccountInfo<'info>>,
 }

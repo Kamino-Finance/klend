@@ -100,10 +100,12 @@ pub fn process(
     Ok(())
 }
 
+
 #[derive(Accounts)]
 pub struct FlashRepayReserveLiquidity<'info> {
     pub user_transfer_authority: Signer<'info>,
 
+    /// CHECK: Verified through create_program_address, unused needed for `FlashBorrowReserveLiquidity`
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -123,11 +125,13 @@ pub struct FlashRepayReserveLiquidity<'info> {
     )]
     pub reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
 
+   
     #[account(mut,
         address = reserve.load()?.liquidity.supply_vault,
     )]
     pub reserve_destination_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
+   
     #[account(mut)]
     pub user_source_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -142,6 +146,7 @@ pub struct FlashRepayReserveLiquidity<'info> {
     #[account(mut)]
     pub referrer_account: Option<AccountInfo<'info>>,
 
+    /// CHECK: fixed address
     #[account(address = sysvar::instructions::ID)]
     pub sysvar_info: AccountInfo<'info>,
     pub token_program: Interface<'info, TokenInterface>,

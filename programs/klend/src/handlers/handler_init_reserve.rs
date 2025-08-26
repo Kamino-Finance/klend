@@ -49,6 +49,7 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
         }),
     });
 
+   
     token_transfer::deposit_initial_reserve_liquidity_transfer(
         ctx.accounts.initial_liquidity_source.to_account_info(),
         ctx.accounts.reserve_liquidity_supply.to_account_info(),
@@ -70,6 +71,7 @@ pub struct InitReserve<'info> {
         has_one = lending_market_owner @ LendingError::InvalidMarketOwner,
     )]
     pub lending_market: AccountLoader<'info, LendingMarket>,
+    /// CHECK: Checked through create_program_address
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,

@@ -38,6 +38,7 @@ pub struct InitObligationFarmsForReserve<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
+    /// CHECK: Checked against the obligation's owner
     pub owner: AccountInfo<'info>,
 
     #[account(
@@ -47,6 +48,7 @@ pub struct InitObligationFarmsForReserve<'info> {
     )]
     pub obligation: AccountLoader<'info, Obligation>,
 
+    /// CHECK: Seed checked
     #[account(
         seeds = [seeds::LENDING_MARKET_AUTH, lending_market.key().as_ref()],
         bump = lending_market.load()?.bump_seed as u8,
@@ -59,9 +61,11 @@ pub struct InitObligationFarmsForReserve<'info> {
     )]
     pub reserve: AccountLoader<'info, Reserve>,
 
+    /// CHECK: Checked against the reserve's stored farm account
     #[account(mut)]
     pub reserve_farm_state: AccountInfo<'info>,
 
+    /// CHECK: We initialize this in the farms program
     #[account(mut)]
     pub obligation_farm: AccountInfo<'info>,
 

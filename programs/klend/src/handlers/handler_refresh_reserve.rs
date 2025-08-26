@@ -71,10 +71,14 @@ pub struct RefreshReserve<'info> {
 
     pub lending_market: AccountLoader<'info, LendingMarket>,
 
+    /// CHECK: Verified through `token_info.validate_token_info_config(..)`
     pub pyth_oracle: Option<AccountInfo<'info>>,
 
+    /// CHECK: Verified through `token_info.validate_token_info_config(..)`
     pub switchboard_price_oracle: Option<AccountInfo<'info>>,
+    /// CHECK: Verified through `token_info.validate_token_info_config(..)`
     pub switchboard_twap_oracle: Option<AccountInfo<'info>>,
 
+    /// CHECK: Verified through `token_info.validate_token_info_config(..)`
     pub scope_prices: Option<AccountInfo<'info>>,
 }

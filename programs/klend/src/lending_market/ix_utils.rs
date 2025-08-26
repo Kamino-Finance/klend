@@ -9,15 +9,28 @@ use anchor_lang::{
 
 use crate::utils::CPI_WHITELISTED_ACCOUNTS;
 
+
 pub trait InstructionLoader {
     fn load_instruction_at(&self, index: usize) -> std::result::Result<Instruction, ProgramError>;
 
     fn load_current_index(&self) -> std::result::Result<u16, ProgramError>;
 
     fn is_flash_forbidden_cpi_call(&self) -> Result<bool> {
+       
+       
+       
+       
+       
+       
+       
+       
+       
+
         let current_index = self.load_current_index()? as usize;
         let current_ixn = self.load_instruction_at(current_index)?;
 
+       
+       
         if crate::ID != current_ixn.program_id {
             return Ok(true);
         }
@@ -29,9 +42,20 @@ pub trait InstructionLoader {
     }
 
     fn is_forbidden_cpi_call(&self) -> Result<bool> {
+       
+       
+       
+       
+       
+       
+       
+       
+       
         let current_index = self.load_current_index()? as usize;
         let current_ixn = self.load_instruction_at(current_index)?;
 
+       
+       
         if crate::ID != current_ixn.program_id {
             let whitelisted_account = CPI_WHITELISTED_ACCOUNTS
                 .iter()
@@ -39,6 +63,7 @@ pub trait InstructionLoader {
 
             match whitelisted_account {
                 Some(whitelisted_account) => {
+                   
                     if get_stack_height()
                         > (TRANSACTION_LEVEL_STACK_HEIGHT + whitelisted_account.whitelist_level)
                     {
@@ -47,6 +72,7 @@ pub trait InstructionLoader {
                         Ok(false)
                     }
                 }
+               
                 None => Ok(true),
             }
         } else if get_stack_height() > TRANSACTION_LEVEL_STACK_HEIGHT {

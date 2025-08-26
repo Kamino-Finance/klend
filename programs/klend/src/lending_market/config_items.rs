@@ -7,6 +7,33 @@ use anchor_lang::prelude::*;
 use borsh::BorshDeserialize;
 use solana_program::msg;
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 pub struct ConfigItemUpdater<'h, H, T, S, G, V, R> {
     target: &'h mut H,
     name: String,
@@ -16,6 +43,10 @@ pub struct ConfigItemUpdater<'h, H, T, S, G, V, R> {
     renderer: R,
     value_type_phantom: PhantomData<T>,
 }
+
+
+
+
 
 #[must_use]
 pub fn for_field<T: Debug>(
@@ -31,12 +62,21 @@ pub fn for_field<T: Debug>(
     for_object(field).using_setter_and_getter(set_field_directly, get_field_directly)
 }
 
+
+
+
+
 macro_rules! for_named_field {
     ($expr:expr) => {
         $crate::lending_market::config_items::for_field($expr).named(stringify!($expr))
     };
 }
 pub(crate) use for_named_field;
+
+
+
+
+
 
 #[must_use]
 pub fn for_object<H>(target: &mut H) -> ConfigItemUpdater<H, (), (), (), (), ()> {
@@ -54,11 +94,13 @@ pub fn for_object<H>(target: &mut H) -> ConfigItemUpdater<H, (), (), (), (), ()>
 impl<'h, H, T, S: Setter<H, T>, G: Getter<H, T>, V: Validator<T>, R: Renderer<T>>
     ConfigItemUpdater<'h, H, T, S, G, V, R>
 {
+
     #[must_use]
     pub fn named(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
+
 
     #[must_use]
     pub fn validating<NV: Validator<T>>(self, new: NV) -> ConfigItemUpdater<'h, H, T, S, G, NV, R> {
@@ -82,6 +124,7 @@ impl<'h, H, T, S: Setter<H, T>, G: Getter<H, T>, V: Validator<T>, R: Renderer<T>
         }
     }
 
+
     #[must_use]
     pub fn rendering<NR: Renderer<T>>(self, new: NR) -> ConfigItemUpdater<'h, H, T, S, G, V, NR> {
         let Self {
@@ -103,6 +146,7 @@ impl<'h, H, T, S: Setter<H, T>, G: Getter<H, T>, V: Validator<T>, R: Renderer<T>
             renderer: new,
         }
     }
+
 
     pub fn set(self, source: &[u8]) -> Result<()>
     where
@@ -130,6 +174,7 @@ impl<'h, H, T, S: Setter<H, T>, G: Getter<H, T>, V: Validator<T>, R: Renderer<T>
 impl<'h, H, S: Setter<H, u8>, G: Getter<H, u8>, V: Validator<u8>, R: Renderer<u8>>
     ConfigItemUpdater<'h, H, u8, S, G, V, R>
 {
+
     #[must_use]
     pub fn representing_u8_enum<E: TryFrom<u8> + Debug>(
         self,
@@ -140,6 +185,7 @@ impl<'h, H, S: Setter<H, u8>, G: Getter<H, u8>, V: Validator<u8>, R: Renderer<u8
 }
 
 impl<'h, H> ConfigItemUpdater<'h, H, (), (), (), (), ()> {
+
     #[must_use]
     pub fn using_setter_and_getter<T: Debug, S: Setter<H, T>, G: Getter<H, T>>(
         self,
@@ -152,11 +198,12 @@ impl<'h, H> ConfigItemUpdater<'h, H, (), (), (), (), ()> {
             getter,
             setter,
             validator: accept_anything,
-            renderer: write_debug,
+            renderer: write_debug,     
             value_type_phantom: PhantomData,
         }
     }
 }
+
 
 pub mod validations {
     use std::{any::type_name, ops::RangeInclusive};
@@ -252,6 +299,7 @@ pub mod validations {
     }
 }
 
+
 pub mod renderings {
     use std::any::type_name;
 
@@ -285,6 +333,8 @@ pub mod renderings {
     }
 }
 
+
+
 pub trait Setter<H, T>: for<'a> Fn(&'a mut H, T) -> Result<()> {}
 impl<F: for<'a> Fn(&'a mut H, T) -> Result<()>, H, T> Setter<H, T> for F {}
 
@@ -302,6 +352,8 @@ impl<F: for<'a, 'b> Fn(&'a T, &mut std::fmt::Formatter<'b>) -> std::fmt::Result,
     for F
 {
 }
+
+
 
 struct Rendered<'a, R, T>(&'a R, &'a T);
 
