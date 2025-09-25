@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use anchor_lang::{prelude::*, Accounts};
 use anchor_spl::{
     token::Token,
@@ -5,6 +7,7 @@ use anchor_spl::{
 };
 
 use crate::{
+    lending_market::lending_operations,
     state::{
         reserve::{
             InitReserveParams, NewReserveCollateralParams, NewReserveLiquidityParams,
@@ -53,7 +56,7 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
     token_transfer::deposit_initial_reserve_liquidity_transfer(
         ctx.accounts.initial_liquidity_source.to_account_info(),
         ctx.accounts.reserve_liquidity_supply.to_account_info(),
-        ctx.accounts.lending_market_owner.to_account_info(),
+        ctx.accounts.signer.to_account_info(),
         ctx.accounts.reserve_liquidity_mint.to_account_info(),
         ctx.accounts.liquidity_token_program.to_account_info(),
         market.min_initial_deposit_amount,
@@ -65,11 +68,14 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
 
 #[derive(Accounts)]
 pub struct InitReserve<'info> {
-    #[account(mut)]
-    pub lending_market_owner: Signer<'info>,
-    #[account(
-        has_one = lending_market_owner @ LendingError::InvalidMarketOwner,
+    #[account(mut,
+        constraint = lending_operations::utils::is_allowed_signer_to_init_reserve(
+            signer.key(),
+            lending_market.load()?.deref()
+        ) @ LendingError::InvalidSigner,
     )]
+    pub signer: Signer<'info>,
+
     pub lending_market: AccountLoader<'info, LendingMarket>,
     /// CHECK: Checked through create_program_address
     #[account(
@@ -89,7 +95,7 @@ pub struct InitReserve<'info> {
     #[account(init,
         seeds = [seeds::RESERVE_LIQ_SUPPLY, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
         bump,
-        payer = lending_market_owner,
+        payer = signer,
         token::mint = reserve_liquidity_mint,
         token::authority = lending_market_authority,
         token::token_program = liquidity_token_program,
@@ -99,7 +105,7 @@ pub struct InitReserve<'info> {
     #[account(init,
         seeds = [seeds::FEE_RECEIVER, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
         bump,
-        payer = lending_market_owner,
+        payer = signer,
         token::mint = reserve_liquidity_mint,
         token::authority = lending_market_authority,
         token::token_program = liquidity_token_program,
@@ -109,7 +115,7 @@ pub struct InitReserve<'info> {
     #[account(init,
         seeds = [seeds::RESERVE_COLL_MINT, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
         bump,
-        payer = lending_market_owner,
+        payer = signer,
         mint::decimals = 6,
         mint::authority = lending_market_authority,
         mint::token_program = collateral_token_program,
@@ -119,7 +125,7 @@ pub struct InitReserve<'info> {
     #[account(init,
         seeds = [seeds::RESERVE_COLL_SUPPLY, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
         bump,
-        payer = lending_market_owner,
+        payer = signer,
         token::mint = reserve_collateral_mint,
         token::authority = lending_market_authority,
         token::token_program = collateral_token_program,
@@ -128,7 +134,7 @@ pub struct InitReserve<'info> {
 
     #[account(mut,
         token::mint = reserve_liquidity_mint,
-        token::authority = lending_market_owner,
+        token::authority = signer,
         token::token_program = liquidity_token_program,
     )]
     pub initial_liquidity_source: Box<InterfaceAccount<'info, TokenAccount>>,

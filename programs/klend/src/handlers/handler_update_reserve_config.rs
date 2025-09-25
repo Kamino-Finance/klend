@@ -1,9 +1,11 @@
+use std::ops::Deref;
+
 use anchor_lang::{prelude::*, Accounts};
 
 use crate::{
     lending_market::{lending_operations, utils::is_update_reserve_config_mode_global_admin_only},
     state::{LendingMarket, Reserve, UpdateConfigMode},
-    utils::{seeds, Fraction},
+    utils::seeds,
     GlobalConfig, LendingError,
 };
 
@@ -17,6 +19,8 @@ pub fn process(
     let market = ctx.accounts.lending_market.load()?;
     let name = reserve.config.token_info.symbol();
 
+    let reserve_usage_was_blocked = reserve.is_usage_blocked();
+
     msg!(
         "Updating reserve {:?} {} config with mode {:?}",
         ctx.accounts.reserve.key(),
@@ -24,9 +28,10 @@ pub fn process(
         mode,
     );
 
-   
     require!(
-        !market.is_immutable() || is_update_reserve_config_mode_global_admin_only(mode),
+        !market.is_immutable()
+            || (is_update_reserve_config_mode_global_admin_only(mode)
+                && ctx.accounts.signer.key() == ctx.accounts.global_config.load()?.global_admin),
         LendingError::OperationNotPermittedMarketImmutable
     );
 
@@ -36,16 +41,8 @@ pub fn process(
     lending_operations::update_reserve_config(reserve, mode, value)?;
 
     if skip_config_integrity_validation {
-        let reserve_is_used = reserve.liquidity.available_amount
-            > market.min_initial_deposit_amount
-            || reserve.liquidity.total_borrow() > Fraction::ZERO
-            || reserve.collateral.mint_total_supply > market.min_initial_deposit_amount;
-
-        let reserve_blocks_deposits = reserve.config.deposit_limit == 0;
-        let reserve_blocks_borrows = reserve.config.borrow_limit == 0;
-
         require!(
-            !reserve_is_used && reserve_blocks_deposits && reserve_blocks_borrows,
+            !reserve.is_used(market.min_initial_deposit_amount) && reserve.is_usage_blocked(),
             LendingError::InvalidConfig
         );
         msg!("WARNING! Skipping validation of the config");
@@ -58,6 +55,16 @@ pub fn process(
         )?;
     }
 
+   
+    if reserve_usage_was_blocked && !reserve.is_usage_blocked() {
+        require_keys_eq!(
+            market.lending_market_owner,
+            ctx.accounts.signer.key(),
+            LendingError::InvalidSigner
+        );
+        msg!("Reserve usage is now allowed");
+    }
+
     Ok(())
 }
 
@@ -68,11 +75,13 @@ pub fn process(
     skip_config_integrity_validation: bool,
 )]
 pub struct UpdateReserveConfig<'info> {
-    #[account(address = lending_operations::utils::allowed_signer_update_reserve_config(
+    #[account(constraint = lending_operations::utils::is_allowed_signer_to_update_reserve_config(
+        signer.key(),
         mode,
-        lending_market.load()?.lending_market_owner,
-        global_config.load()?.global_admin
-    ))]
+        lending_market.load()?.deref(),
+        reserve.load()?.deref(),
+        global_config.load()?.global_admin,
+    ) @ LendingError::InvalidSigner)]
     signer: Signer<'info>,
 
     #[account(

@@ -148,12 +148,16 @@ pub struct LendingMarket {
     #[derivative(Debug = "ignore")]
     pub padding2: [u8; 5],
 
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+    pub proposer_authority: Pubkey,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 169],
+    pub padding1: [u64; 165],
 }
 
 impl Default for LendingMarket {
@@ -188,6 +192,7 @@ impl Default for LendingMarket {
             obligation_order_execution_enabled: 0,
             immutable: 0,
             obligation_order_creation_enabled: 0,
+            proposer_authority: Pubkey::default(),
             padding2: default_array(),
             padding1: default_array(),
         }
