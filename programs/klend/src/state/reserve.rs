@@ -401,6 +401,21 @@ impl Reserve {
         let available_unclaimed: u64 = Fraction::from_bits(available_unclaimed_sf).to_floor();
         min(available_unclaimed, self.liquidity.available_amount)
     }
+
+
+
+
+
+    pub fn is_used(&self, min_initial_deposit_amount: u64) -> bool {
+        self.liquidity.available_amount > min_initial_deposit_amount
+            || self.liquidity.total_borrow() > Fraction::ZERO
+            || self.collateral.mint_total_supply > min_initial_deposit_amount
+    }
+
+
+    pub fn is_usage_blocked(&self) -> bool {
+        self.config.deposit_limit == 0 && self.config.borrow_limit == 0
+    }
 }
 
 
@@ -1010,7 +1025,7 @@ pub struct ReserveConfig {
 
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_2: [u8; 9],
+    pub reserved_1: [u8; 9],
 
     pub protocol_order_execution_fee_pct: u8,
 
@@ -1068,9 +1083,13 @@ pub struct ReserveConfig {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub autodeleverage_enabled: u8,
 
-    #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
-    #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 1],
+
+
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub proposer_authority_locked: u8,
 
 
 

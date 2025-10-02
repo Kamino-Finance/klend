@@ -162,6 +162,9 @@ pub fn process(
                 .validating(validations::check_bool)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateProposerAuthority => {
+            config_items::for_named_field!(&mut market.proposer_authority).set(&value)?;
+        }
     }
 
     Ok(())

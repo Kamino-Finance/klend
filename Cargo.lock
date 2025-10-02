@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "kamino_lending"
-version = "1.11.0"
+version = "1.12.3"
 dependencies = [
  "anchor-lang",
  "anchor-spl",

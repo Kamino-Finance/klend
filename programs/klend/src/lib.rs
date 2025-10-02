@@ -450,7 +450,7 @@ pub enum LendingError {
     InvalidAmount,
     #[msg("Input config value is invalid")]
     InvalidConfig,
-    #[msg("Input account must be a signer")]
+    #[msg("Signer is not allowed to perform this action")]
     InvalidSigner,
     #[msg("Invalid account input")]
     InvalidAccountInput,

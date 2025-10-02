@@ -75,7 +75,7 @@ pub fn refresh_reserve(
     reserve.last_update.update_slot(slot, price_status);
 
    
-    reserve.config.reserved_2 = Default::default();
+    reserve.config.reserved_1 = Default::default();
 
     Ok(())
 }
@@ -2255,6 +2255,11 @@ pub fn update_reserve_config(
            
             .set(value)?;
         }
+        UpdateConfigMode::UpdateProposerAuthorityLock => {
+            config_items::for_named_field!(&mut reserve.config.proposer_authority_locked)
+                .validating(validations::check_bool)
+                .set(value)?;
+        }
         UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
         | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
         | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
@@ -3232,12 +3237,12 @@ pub mod utils {
             UpdateConfigMode::UpdateProtocolTakeRate
             | UpdateConfigMode::UpdateProtocolLiquidationFee
             | UpdateConfigMode::UpdateHostFixedInterestRateBps
-            | UpdateConfigMode::UpdateProtocolOrderExecutionFee => true,
+            | UpdateConfigMode::UpdateProtocolOrderExecutionFee
+            | UpdateConfigMode::UpdateFeesBorrowFee
+            | UpdateConfigMode::UpdateFeesFlashLoanFee => true,
             UpdateConfigMode::UpdateLoanToValuePct
             | UpdateConfigMode::UpdateMaxLiquidationBonusBps
             | UpdateConfigMode::UpdateLiquidationThresholdPct
-            | UpdateConfigMode::UpdateFeesBorrowFee
-            | UpdateConfigMode::UpdateFeesFlashLoanFee
             | UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
             | UpdateConfigMode::UpdateDepositLimit
             | UpdateConfigMode::UpdateBorrowLimit
@@ -3278,7 +3283,50 @@ pub mod utils {
             | UpdateConfigMode::UpdateBorrowLimitOutsideElevationGroup
             | UpdateConfigMode::UpdateBorrowLimitsInElevationGroupAgainstThisReserve
             | UpdateConfigMode::UpdateAutodeleverageEnabled
-            | UpdateConfigMode::UpdateDeleveragingBonusIncreaseBpsPerDay => false,
+            | UpdateConfigMode::UpdateDeleveragingBonusIncreaseBpsPerDay
+            | UpdateConfigMode::UpdateProposerAuthorityLock => false,
+        }
+    }
+
+    pub fn is_allowed_signer_to_init_reserve(
+        signer: Pubkey,
+        lending_market: &LendingMarket,
+    ) -> bool {
+       
+        signer == lending_market.lending_market_owner || signer == lending_market.proposer_authority
+    }
+
+    pub fn is_allowed_signer_to_update_reserve_config(
+        signer: Pubkey,
+        mode: UpdateConfigMode,
+        lending_market: &LendingMarket,
+        reserve: &Reserve,
+        global_admin: Pubkey,
+    ) -> bool {
+       
+        let reserve_is_used = reserve.is_used(lending_market.min_initial_deposit_amount);
+        let reserve_is_usage_blocked = reserve.is_usage_blocked();
+
+        let initialization_phase = !reserve_is_used
+            && reserve_is_usage_blocked
+            && reserve.config.proposer_authority_locked == false as u8;
+
+        xmsg!(
+            "Reserve is used: {}, is usage blocked: {}, proposer authority locked: {}",
+            reserve_is_used,
+            reserve_is_usage_blocked,
+            reserve.config.proposer_authority_locked != false as u8
+        );
+
+        if initialization_phase && signer == lending_market.proposer_authority {
+            return true;
+        }
+
+       
+        if is_update_reserve_config_mode_global_admin_only(mode) {
+            global_admin == signer
+        } else {
+            lending_market.lending_market_owner == signer
         }
     }
 
