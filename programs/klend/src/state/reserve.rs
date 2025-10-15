@@ -25,7 +25,8 @@ use crate::{
         Fraction, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE,
         SLOTS_PER_YEAR, U256,
     },
-    CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult, ReferrerTokenState,
+    BorrowSize, CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult,
+    ReferrerTokenState,
 };
 
 #[derive(Default, Debug, PartialEq, Eq)]
@@ -294,7 +295,7 @@ impl Reserve {
 
     pub fn calculate_borrow(
         &self,
-        amount_to_borrow: u64,
+        borrow_size: BorrowSize,
         max_borrow_factor_adjusted_debt_value: Fraction,
         remaining_reserve_borrow: Fraction,
         referral_fee_bps: u16,
@@ -303,56 +304,144 @@ impl Reserve {
     ) -> Result<CalculateBorrowResult> {
         let decimals = self.liquidity.mint_factor();
         let market_price_f = self.liquidity.get_market_price();
+        let borrow_factor_f = self.borrow_factor_f(is_in_elevation_group);
 
-        if amount_to_borrow == u64::MAX {
-            let borrow_amount_f = (max_borrow_factor_adjusted_debt_value * u128::from(decimals)
-                / market_price_f
-                / self.borrow_factor_f(is_in_elevation_group))
+        match borrow_size {
+            BorrowSize::AllAvailable => self.calculate_borrow_all_available(
+                max_borrow_factor_adjusted_debt_value,
+                remaining_reserve_borrow,
+                referral_fee_bps,
+                has_referrer,
+                decimals,
+                market_price_f,
+                borrow_factor_f,
+            ),
+            BorrowSize::Exact(receive_amount) => self.calculate_borrow_exact(
+                receive_amount,
+                max_borrow_factor_adjusted_debt_value,
+                remaining_reserve_borrow,
+                referral_fee_bps,
+                has_referrer,
+                decimals,
+                market_price_f,
+                borrow_factor_f,
+            ),
+            BorrowSize::AtMost(requested_receive_amount) => {
+                let borrow_exact_result = self.calculate_borrow_exact(
+                    requested_receive_amount,
+                    max_borrow_factor_adjusted_debt_value,
+                    remaining_reserve_borrow,
+                    referral_fee_bps,
+                    has_referrer,
+                    decimals,
+                    market_price_f,
+                    borrow_factor_f,
+                );
+               
+               
+               
+               
+               
+                if borrow_exact_result == err!(LendingError::BorrowTooLarge)
+                    || borrow_exact_result == err!(LendingError::BorrowLimitExceeded)
+                {
+                    self.calculate_borrow_all_available(
+                        max_borrow_factor_adjusted_debt_value,
+                        remaining_reserve_borrow,
+                        referral_fee_bps,
+                        has_referrer,
+                        decimals,
+                        market_price_f,
+                        borrow_factor_f,
+                    )
+                } else {
+                    borrow_exact_result
+                }
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn calculate_borrow_all_available(
+        &self,
+        max_borrow_factor_adjusted_debt_value: Fraction,
+        remaining_reserve_borrow: Fraction,
+        referral_fee_bps: u16,
+        has_referrer: bool,
+        decimals: u64,
+        market_price_f: Fraction,
+        borrow_factor_f: Fraction,
+    ) -> Result<CalculateBorrowResult> {
+        let borrow_amount_f = (max_borrow_factor_adjusted_debt_value * u128::from(decimals)
+            / market_price_f
+            / borrow_factor_f)
             .min(remaining_reserve_borrow)
             .min(self.liquidity.available_amount.into());
-            let (borrow_fee, referrer_fee) = self.config.fees.calculate_borrow_fees(
-                borrow_amount_f,
-                FeeCalculation::Inclusive,
-                referral_fee_bps,
-                has_referrer,
-            )?;
-            let borrow_amount: u64 = borrow_amount_f.to_floor();
-            let receive_amount = borrow_amount - borrow_fee - referrer_fee;
+        let (origination_fee, referrer_fee) = self.config.fees.calculate_borrow_fees(
+            borrow_amount_f,
+            FeeCalculation::Inclusive,
+            referral_fee_bps,
+            has_referrer,
+        )?;
+        let borrow_amount: u64 = borrow_amount_f.to_floor();
+        let receive_amount = borrow_amount - origination_fee - referrer_fee;
 
-            Ok(CalculateBorrowResult {
-                borrow_amount_f,
-                receive_amount,
-                borrow_fee,
-                referrer_fee,
-            })
-        } else {
-            let receive_amount = amount_to_borrow;
-            let mut borrow_amount_f = Fraction::from(receive_amount);
-            let (borrow_fee, referrer_fee) = self.config.fees.calculate_borrow_fees(
-                borrow_amount_f,
-                FeeCalculation::Exclusive,
-                referral_fee_bps,
-                has_referrer,
-            )?;
+        Ok(CalculateBorrowResult {
+            borrow_amount_f,
+            receive_amount,
+            origination_fee,
+            referrer_fee,
+        })
+    }
 
-            borrow_amount_f += Fraction::from_num(borrow_fee + referrer_fee);
-            let borrow_factor_adjusted_debt_value = borrow_amount_f
-                .mul(market_price_f)
-                .div(u128::from(decimals))
-                .mul(self.borrow_factor_f(is_in_elevation_group));
-            if borrow_factor_adjusted_debt_value > max_borrow_factor_adjusted_debt_value {
-                msg!("Borrow value cannot exceed maximum borrow value, borrow borrow_factor_adjusted_debt_value: {}, max_borrow_factor_adjusted_debt_value: {}",
-                    borrow_factor_adjusted_debt_value, max_borrow_factor_adjusted_debt_value);
-                return err!(LendingError::BorrowTooLarge);
-            }
+    #[allow(clippy::too_many_arguments)]
+    fn calculate_borrow_exact(
+        &self,
+        receive_amount: u64,
+        max_borrow_factor_adjusted_debt_value: Fraction,
+        remaining_reserve_borrow: Fraction,
+        referral_fee_bps: u16,
+        has_referrer: bool,
+        decimals: u64,
+        market_price_f: Fraction,
+        borrow_factor_f: Fraction,
+    ) -> Result<CalculateBorrowResult> {
+        let receive_amount_f = Fraction::from(receive_amount);
+        let (origination_fee, referrer_fee) = self.config.fees.calculate_borrow_fees(
+            receive_amount_f,
+            FeeCalculation::Exclusive,
+            referral_fee_bps,
+            has_referrer,
+        )?;
+        let borrow_amount_f = receive_amount_f + Fraction::from_num(origination_fee + referrer_fee);
+        let borrow_factor_adjusted_debt_value = borrow_amount_f
+            .mul(market_price_f)
+            .div(u128::from(decimals))
+            .mul(borrow_factor_f);
 
-            Ok(CalculateBorrowResult {
-                borrow_amount_f,
-                receive_amount,
-                borrow_fee,
-                referrer_fee,
-            })
+        if borrow_factor_adjusted_debt_value > max_borrow_factor_adjusted_debt_value {
+            msg!(
+                "Borrow value {} cannot exceed maximum borrow value {}",
+                borrow_factor_adjusted_debt_value.to_display(),
+                max_borrow_factor_adjusted_debt_value.to_display(),
+            );
+            return err!(LendingError::BorrowTooLarge);
         }
+        if borrow_amount_f > remaining_reserve_borrow {
+            msg!(
+                "Borrowing {} (after fees: {}) would exceed the reserve's remaining limit {}",
+                receive_amount,
+                borrow_amount_f.to_display(),
+                remaining_reserve_borrow.to_display(),
+            );
+            return err!(LendingError::BorrowLimitExceeded);
+        }
+        Ok(CalculateBorrowResult {
+            borrow_amount_f,
+            receive_amount,
+            origination_fee,
+            referrer_fee,
+        })
     }
 
 
@@ -1185,7 +1274,7 @@ pub struct ReserveFees {
 
 
 
-    pub borrow_fee_sf: u64,
+    pub origination_fee_sf: u64,
 
 
     pub flash_loan_fee_sf: u64,
@@ -1213,7 +1302,7 @@ mod serde_reserve_fees {
             #[derive(serde::Deserialize)]
             #[serde(field_identifier, rename_all = "snake_case")]
             enum Field {
-                BorrowFee,
+                OriginationFee,
                 FlashLoanFee,
             }
 
@@ -1229,14 +1318,14 @@ mod serde_reserve_fees {
                 where
                     V: SeqAccess<'de>,
                 {
-                    let borrow_fee_sf = seq
+                    let origination_fee_sf = seq
                         .next_element()?
                         .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
                     let flash_loan_fee_sf = seq
                         .next_element()?
                         .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
                     Ok(ReserveFees {
-                        borrow_fee_sf,
+                        origination_fee_sf,
                         flash_loan_fee_sf,
                         padding: [0; 8],
                     })
@@ -1246,15 +1335,15 @@ mod serde_reserve_fees {
                 where
                     V: MapAccess<'de>,
                 {
-                    let mut borrow_fee_f: Option<Fraction> = None;
+                    let mut origination_fee_f: Option<Fraction> = None;
                     let mut flash_loan_fee_f: Option<Fraction> = None;
                     while let Some(key) = map.next_key()? {
                         match key {
-                            Field::BorrowFee => {
-                                if borrow_fee_f.is_some() {
-                                    return Err(de::Error::duplicate_field("borrow_fee"));
+                            Field::OriginationFee => {
+                                if origination_fee_f.is_some() {
+                                    return Err(de::Error::duplicate_field("origination_fee"));
                                 }
-                                borrow_fee_f = Some(map.next_value()?);
+                                origination_fee_f = Some(map.next_value()?);
                             }
                             Field::FlashLoanFee => {
                                 if flash_loan_fee_f.is_some() {
@@ -1286,13 +1375,14 @@ mod serde_reserve_fees {
                         }
                     }
 
-                    let borrow_fee_f =
-                        borrow_fee_f.ok_or_else(|| de::Error::missing_field("borrow_fee"))?;
+                    let origination_fee_f = origination_fee_f
+                        .ok_or_else(|| de::Error::missing_field("origination_fee"))?;
                     let flash_loan_fee_f =
                         flash_loan_fee_f.unwrap_or(Fraction::from_bits(u64::MAX.into()));
                     Ok(ReserveFees {
-                        borrow_fee_sf: u64::try_from(borrow_fee_f.to_bits())
-                            .map_err(|_| de::Error::custom("borrow_fee does not fit in u64"))?,
+                        origination_fee_sf: u64::try_from(origination_fee_f.to_bits()).map_err(
+                            |_| de::Error::custom("origination_fee does not fit in u64"),
+                        )?,
                         flash_loan_fee_sf: u64::try_from(flash_loan_fee_f.to_bits())
                             .map_err(|_| de::Error::custom("flash_loan_fee does not fit in u64"))?,
                         padding: [0; 8],
@@ -1300,7 +1390,7 @@ mod serde_reserve_fees {
                 }
             }
 
-            const FIELDS: &[&str] = &["borrow_fee", "flash_loan_fee"];
+            const FIELDS: &[&str] = &["origination_fee", "flash_loan_fee"];
             deserializer.deserialize_struct("ReserveFees", FIELDS, ReserveFeesVisitor)
         }
     }
@@ -1312,11 +1402,11 @@ mod serde_reserve_fees {
         {
             #[derive(serde::Serialize)]
             struct ReserveFeesSerde {
-                borrow_fee: Fraction,
+                origination_fee: Fraction,
                 flash_loan_fee: String,
             }
 
-            let borrow_fee_f = Fraction::from_bits(self.borrow_fee_sf.into());
+            let origination_fee_f = Fraction::from_bits(self.origination_fee_sf.into());
 
             let flash_loan_fee = if self.flash_loan_fee_sf == u64::MAX {
                 "disabled".to_string()
@@ -1325,7 +1415,7 @@ mod serde_reserve_fees {
             };
 
             let fees = ReserveFeesSerde {
-                borrow_fee: borrow_fee_f,
+                origination_fee: origination_fee_f,
                 flash_loan_fee,
             };
             fees.serialize(serializer)
@@ -1344,7 +1434,7 @@ impl ReserveFees {
     ) -> Result<(u64, u64)> {
         self.calculate_fees(
             borrow_amount,
-            self.borrow_fee_sf,
+            self.origination_fee_sf,
             fee_calculation,
             referral_fee_bps,
             has_referrer,
@@ -1379,42 +1469,43 @@ impl ReserveFees {
         referral_fee_bps: u16,
         has_referrer: bool,
     ) -> Result<(u64, u64)> {
-        let borrow_fee_rate = Fraction::from_bits(fee_sf.into());
+        let origination_fee_rate = Fraction::from_bits(fee_sf.into());
         let referral_fee_rate = Fraction::from_bps(referral_fee_bps);
-        if borrow_fee_rate > Fraction::ZERO && amount > Fraction::ZERO {
+        if origination_fee_rate > Fraction::ZERO && amount > Fraction::ZERO {
             let need_to_assess_referral_fee = referral_fee_rate > Fraction::ZERO && has_referrer;
             let minimum_fee = 1u64;
 
-            let borrow_fee_amount = match fee_calculation {
+            let origination_fee_amount = match fee_calculation {
                
-                FeeCalculation::Exclusive => amount.mul(borrow_fee_rate),
+                FeeCalculation::Exclusive => amount.mul(origination_fee_rate),
                
                 FeeCalculation::Inclusive => {
-                    let borrow_fee_rate = borrow_fee_rate.div(borrow_fee_rate.add(Fraction::ONE));
-                    amount.mul(borrow_fee_rate)
+                    let origination_fee_rate =
+                        origination_fee_rate.div(origination_fee_rate.add(Fraction::ONE));
+                    amount.mul(origination_fee_rate)
                 }
             };
 
-            let borrow_fee_f = borrow_fee_amount.max(minimum_fee.into());
-            if borrow_fee_f >= amount {
+            let origination_fee_f = origination_fee_amount.max(minimum_fee.into());
+            if origination_fee_f >= amount {
                 msg!("Borrow amount is too small to receive liquidity after fees");
                 return err!(LendingError::BorrowTooSmall);
             }
 
-            let borrow_fee: u64 = borrow_fee_f.to_round();
+            let origination_fee: u64 = origination_fee_f.to_round();
             let referral_fee = if need_to_assess_referral_fee {
                
                 if referral_fee_bps == 10_000 {
-                    borrow_fee
+                    origination_fee
                 } else {
-                    let referral_fee_f = borrow_fee_f * referral_fee_rate;
+                    let referral_fee_f = origination_fee_f * referral_fee_rate;
                     referral_fee_f.to_floor::<u64>()
                 }
             } else {
                 0
             };
 
-            let protocol_fee = borrow_fee - referral_fee;
+            let protocol_fee = origination_fee - referral_fee;
 
             Ok((protocol_fee, referral_fee))
         } else {

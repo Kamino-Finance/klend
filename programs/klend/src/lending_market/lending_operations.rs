@@ -32,11 +32,11 @@ use crate::{
         consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction, Fraction, GetPriceResult,
         IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
-    xmsg, AssetTier, DepositLiquidityResult, ElevationGroup, LendingError, LendingMarket,
-    LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
-    MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags, ReferrerTokenState,
-    RefreshObligationBorrowsResult, RefreshObligationDepositsResult, ReserveStatus,
-    UpdateConfigMode, WithdrawResult,
+    xmsg, AssetTier, BorrowSize, DepositLiquidityResult, ElevationGroup, LendingError,
+    LendingMarket, LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason,
+    LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags,
+    ReferrerTokenState, RefreshObligationBorrowsResult, RefreshObligationDepositsResult,
+    ReserveStatus, UpdateConfigMode, WithdrawResult,
 };
 
 pub fn refresh_reserve(
@@ -143,7 +143,7 @@ pub fn deposit_reserve_liquidity(
     if new_reserve_liquidity_supply_f > deposit_limit_f {
         msg!(
             "Cannot deposit liquidity above the reserve deposit limit. New total deposit: {} > limit: {}",
-            new_reserve_liquidity_supply_f,
+            new_reserve_liquidity_supply_f.to_display(),
             reserve.config.deposit_limit
         );
         return err!(LendingError::DepositLimitExceeded);
@@ -170,7 +170,7 @@ pub fn borrow_obligation_liquidity<'info, T>(
     lending_market: &LendingMarket,
     borrow_reserve: &mut Reserve,
     obligation: &mut Obligation,
-    liquidity_amount: u64,
+    borrow_size: BorrowSize,
     clock: &Clock,
     borrow_reserve_pk: Pubkey,
     referrer_token_state: Option<RefMut<ReferrerTokenState>>,
@@ -180,7 +180,7 @@ where
     T: AnyAccountLoader<'info, Reserve>,
 {
    
-    if liquidity_amount == 0 {
+    if borrow_size.is_zero() {
         msg!("Liquidity amount provided cannot be zero");
         return err!(LendingError::InvalidAmount);
     }
@@ -212,20 +212,9 @@ where
 
     let current_utilization = borrow_reserve.liquidity.utilization_rate();
     let reserve_liquidity_borrowed_f = borrow_reserve.liquidity.total_borrow();
-    let liquidity_amount_f = Fraction::from(liquidity_amount);
     let borrow_limit_f = Fraction::from(borrow_reserve.config.borrow_limit);
+    let remaining_reserve_capacity = borrow_limit_f.saturating_sub(reserve_liquidity_borrowed_f);
 
-    let new_borrowed_amount_f = liquidity_amount_f + reserve_liquidity_borrowed_f;
-   
-   
-    if liquidity_amount != u64::MAX && new_borrowed_amount_f > borrow_limit_f {
-        msg!(
-            "Cannot borrow above the borrow limit. New total borrow: {} > limit: {}",
-            new_borrowed_amount_f.to_display(),
-            borrow_reserve.config.borrow_limit
-        );
-        return err!(LendingError::BorrowLimitExceeded);
-    }
     check_obligation_fully_refreshed_and_not_null(obligation, clock.slot)?;
 
     let remaining_borrow_value = obligation.remaining_borrow_value();
@@ -240,9 +229,6 @@ where
     check_non_elevation_group_borrowing_enabled(obligation)?;
 
    
-
-    let remaining_reserve_capacity = borrow_limit_f.saturating_sub(reserve_liquidity_borrowed_f);
-
     if remaining_reserve_capacity == Fraction::ZERO {
         msg!("Borrow reserve is at full capacity");
         return err!(LendingError::BorrowLimitExceeded);
@@ -251,10 +237,10 @@ where
     let CalculateBorrowResult {
         borrow_amount_f,
         receive_amount,
-        borrow_fee,
+        origination_fee,
         referrer_fee,
     } = borrow_reserve.calculate_borrow(
-        liquidity_amount,
+        borrow_size,
         remaining_borrow_value,
         remaining_reserve_capacity,
         lending_market.referral_fee_bps,
@@ -263,7 +249,7 @@ where
     )?;
 
     let borrow_amount = borrow_amount_f.to_ceil();
-    msg!("Requested {}, allowed {}", liquidity_amount, borrow_amount);
+    msg!("Requested {:?}, allowed {}", borrow_size, borrow_amount);
 
     add_to_withdrawal_accum(
         &mut borrow_reserve.config.debt_withdrawal_cap,
@@ -353,7 +339,7 @@ where
     Ok(CalculateBorrowResult {
         borrow_amount_f,
         receive_amount,
-        borrow_fee,
+        origination_fee,
         referrer_fee,
     })
 }
@@ -1775,7 +1761,7 @@ where
         reserve.version = u64::MAX;
     }
 
-    msg!("Forgiving debt amount {}", forgive_amount_f);
+    msg!("Forgiving debt amount {}", forgive_amount_f.to_display());
 
     utils::update_elevation_group_debt_trackers_on_repay(
         forgive_amount_f.to_ceil(),
@@ -2018,8 +2004,8 @@ pub fn update_reserve_config(
                 .validating(validations::check_valid_pct)
                 .set(value)?;
         }
-        UpdateConfigMode::UpdateFeesBorrowFee => {
-            config_items::for_named_field!(&mut reserve.config.fees.borrow_fee_sf)
+        UpdateConfigMode::UpdateFeesOriginationFee => {
+            config_items::for_named_field!(&mut reserve.config.fees.origination_fee_sf)
                 .validating(validations::check_lte(Fraction::ONE.to_bits()))
                 .rendering(renderings::as_fraction)
                 .set(value)?;
@@ -2859,9 +2845,12 @@ pub mod utils {
 
             let new_ltv = debt_value_bf / new_total_deposited_mv;
 
+           
             let new_unhealthy_borrow_value =
-                Fraction::from_bits(obligation.unhealthy_borrow_value_sf)
-                    - asset_mv * Fraction::from_percent(reserve_liquidation_threshold_pct);
+                Fraction::from_bits(obligation.unhealthy_borrow_value_sf).saturating_sub(
+                    asset_mv
+                        .saturating_mul(Fraction::from_percent(reserve_liquidation_threshold_pct)),
+                );
 
             let new_unhealthy_ltv = new_unhealthy_borrow_value / new_total_deposited_mv;
 
@@ -3238,7 +3227,7 @@ pub mod utils {
             | UpdateConfigMode::UpdateProtocolLiquidationFee
             | UpdateConfigMode::UpdateHostFixedInterestRateBps
             | UpdateConfigMode::UpdateProtocolOrderExecutionFee
-            | UpdateConfigMode::UpdateFeesBorrowFee
+            | UpdateConfigMode::UpdateFeesOriginationFee
             | UpdateConfigMode::UpdateFeesFlashLoanFee => true,
             UpdateConfigMode::UpdateLoanToValuePct
             | UpdateConfigMode::UpdateMaxLiquidationBonusBps
@@ -3368,8 +3357,8 @@ pub mod utils {
             msg!("Liquidation threshold must be in range [LTV, 100]");
             return err!(LendingError::InvalidConfig);
         }
-        if u128::from(config.fees.borrow_fee_sf) >= FRACTION_ONE_SCALED {
-            msg!("Borrow fee must be in range [0, 100%)");
+        if u128::from(config.fees.origination_fee_sf) >= FRACTION_ONE_SCALED {
+            msg!("Origination fee must be in range [0, 100%)");
             return err!(LendingError::InvalidConfig);
         }
         if config.protocol_liquidation_fee_pct > 100 {

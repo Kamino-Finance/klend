@@ -102,12 +102,14 @@ pub trait FractionExtra {
 impl FractionExtra for Fraction {
     #[inline]
     fn to_percent<Dst: FromFixed>(&self) -> Option<Dst> {
-        (self * 100).round().checked_to_num()
+        self.checked_mul(fraction!(100))?.round().checked_to_num()
     }
 
     #[inline]
     fn to_bps<Dst: FromFixed>(&self) -> Option<Dst> {
-        (self * 10_000).round().checked_to_num()
+        self.checked_mul(fraction!(10_000))?
+            .round()
+            .checked_to_num()
     }
 
     #[inline]
@@ -125,7 +127,7 @@ impl FractionExtra for Fraction {
     #[inline]
     fn checked_pow(&self, power: u32) -> Option<Self>
     where
-        Self: std::marker::Sized,
+        Self: Sized,
     {
         pow_fraction(*self, power)
     }

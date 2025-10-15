@@ -15,7 +15,7 @@ use crate::{
     refresh_farms,
     state::{obligation::Obligation, CalculateBorrowResult, LendingMarket, Reserve},
     utils::{seeds, token_transfer, FatAccountLoader},
-    xmsg, LendingAction, LendingError, ReferrerTokenState, ReserveFarmKind,
+    xmsg, BorrowSize, LendingAction, LendingError, ReferrerTokenState, ReserveFarmKind,
 };
 
 pub fn process_v1<'info>(
@@ -100,22 +100,24 @@ fn process_impl<'info>(
 
     let CalculateBorrowResult {
         receive_amount,
-        borrow_fee,
+        origination_fee,
         ..
     } = lending_operations::borrow_obligation_liquidity(
         lending_market,
         borrow_reserve,
         obligation,
-        liquidity_amount,
+        BorrowSize::exact_or_all_available(liquidity_amount),
         clock,
         accounts.borrow_reserve.key(),
         referrer_token_state_option,
         deposit_reserves_iter,
     )?;
 
-    xmsg!("pnl: Borrow obligation liquidity {receive_amount} with borrow_fee {borrow_fee}",);
+    xmsg!(
+        "pnl: Borrow obligation liquidity {receive_amount} with origination_fee {origination_fee}",
+    );
 
-    if borrow_fee > 0 {
+    if origination_fee > 0 {
         token_transfer::send_origination_fees_transfer(
             accounts.token_program.to_account_info(),
             accounts.borrow_reserve_liquidity_mint.to_account_info(),
@@ -125,7 +127,7 @@ fn process_impl<'info>(
                 .to_account_info(),
             accounts.lending_market_authority.to_account_info(),
             authority_signer_seeds,
-            borrow_fee,
+            origination_fee,
             accounts.borrow_reserve_liquidity_mint.decimals,
         )?;
     }
@@ -147,7 +149,7 @@ fn process_impl<'info>(
         borrow_reserve.liquidity.available_amount,
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
-        LendingAction::Subtractive(borrow_fee + receive_amount),
+        LendingAction::Subtractive(origination_fee + receive_amount),
     )?;
 
     Ok(())

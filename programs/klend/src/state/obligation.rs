@@ -140,7 +140,7 @@ impl Display for Obligation {
             Fraction::from_bits(self.deposited_value_sf).to_display(),
             Fraction::from_bits(self.borrow_factor_adjusted_debt_value_sf).to_display(),
             Fraction::from_bits(self.borrowed_assets_market_value_sf).to_display(),
-            if self.deposited_value_sf > 0 {self.loan_to_value().to_percent::<u16>().unwrap()} else { 0 },
+            if self.deposited_value_sf > 0 {self.loan_to_value().to_percent().unwrap_or(u16::MAX)} else { 0 },
         )?;
 
         for collateral in self.active_deposits() {
@@ -159,7 +159,10 @@ impl Display for Obligation {
                 "\n  Borrowed reserve  : {}, value: ${}, lamports: {}",
                 liquidity.borrow_reserve,
                 liquidity.market_value().to_display(),
-                liquidity.borrowed_amount().to_num::<u128>(),
+                liquidity
+                    .borrowed_amount()
+                    .checked_to_num()
+                    .unwrap_or(u128::MAX),
             )?;
         }
 

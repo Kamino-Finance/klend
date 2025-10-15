@@ -98,7 +98,10 @@ fn process_impl(accounts: &WithdrawObligationCollateral, collateral_amount: u64)
 
 #[derive(Accounts)]
 pub struct WithdrawObligationCollateral<'info> {
+   
+    #[account(mut)]
     pub owner: Signer<'info>,
+
     #[account(mut,
         has_one = lending_market,
         has_one = owner

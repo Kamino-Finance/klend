@@ -7,6 +7,7 @@ use solana_program::msg;
 
 use crate::{
     fraction,
+    fraction::FractionExtra,
     utils::{accounts::is_default_array, Fraction},
     LendingError, LendingMarket, Obligation, ObligationOrder, Reserve,
 };
@@ -201,9 +202,9 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             if !VALID_DEBT_COLL_PRICE_RATIO_RANGE.contains(&order.condition_threshold()) {
                 msg!(
                     "Invalid price ratio threshold {}; should be in range [{}; {}]",
-                    order.condition_threshold(),
-                    VALID_DEBT_COLL_PRICE_RATIO_RANGE.start(),
-                    VALID_DEBT_COLL_PRICE_RATIO_RANGE.end()
+                    order.condition_threshold().to_display(),
+                    VALID_DEBT_COLL_PRICE_RATIO_RANGE.start().to_display(),
+                    VALID_DEBT_COLL_PRICE_RATIO_RANGE.end().to_display(),
                 );
                 return err!(LendingError::InvalidOrderConfiguration);
             }
@@ -212,9 +213,9 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             if !VALID_USER_LTV_RANGE.contains(&order.condition_threshold()) {
                 msg!(
                     "Invalid LTV threshold {}; should be in range [{}; {})",
-                    order.condition_threshold(),
-                    VALID_USER_LTV_RANGE.start,
-                    VALID_USER_LTV_RANGE.end,
+                    order.condition_threshold().to_display(),
+                    VALID_USER_LTV_RANGE.start.to_display(),
+                    VALID_USER_LTV_RANGE.end.to_display(),
                 );
                 return err!(LendingError::InvalidOrderConfiguration);
             }
@@ -266,16 +267,16 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
     if execution_bonus_rate_range.start() > execution_bonus_rate_range.end() {
         msg!(
             "Minimum execution bonus {} higher than maximum {}",
-            execution_bonus_rate_range.start(),
-            execution_bonus_rate_range.end(),
+            execution_bonus_rate_range.start().to_display(),
+            execution_bonus_rate_range.end().to_display(),
         );
         return err!(LendingError::InvalidOrderConfiguration);
     }
     if execution_bonus_rate_range.end() > &EXECUTION_BONUS_SANITY_LIMIT {
         msg!(
             "Maximum execution bonus {} higher than sanity limit {}",
-            execution_bonus_rate_range.end(),
-            EXECUTION_BONUS_SANITY_LIMIT
+            execution_bonus_rate_range.end().to_display(),
+            EXECUTION_BONUS_SANITY_LIMIT.to_display()
         );
         return err!(LendingError::InvalidOrderConfiguration);
     }
