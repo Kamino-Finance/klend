@@ -61,8 +61,9 @@ impl Display for ReferrerTokenState {
             bump: _,
             padding: _,
         } = self;
-        let amount_unclaimed: u64 = Fraction::from_bits(*amount_unclaimed_sf).to_num();
-        let amount_cumulative: u64 = Fraction::from_bits(*amount_cumulative_sf).to_num();
+        let amount_unclaimed = Fraction::from_bits(*amount_unclaimed_sf).saturating_to_num::<u64>();
+        let amount_cumulative =
+            Fraction::from_bits(*amount_cumulative_sf).saturating_to_num::<u64>();
         write!(
             f,
             "Referrer Account: referrer: {}, mint: {}, amount_unclaimed (integer part): {}, amount_cumulative (integer part): {}",

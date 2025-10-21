@@ -130,8 +130,8 @@ pub fn calculate_liquidation(
         if debt_amount_to_liquidate < borrowed_amount {
             msg!(
                 "Liquidator-provided debt repay amount {} is too small to satisfy the required full liquidation {}",
-                debt_amount_to_liquidate,
-                borrowed_amount
+                debt_amount_to_liquidate.to_display(),
+                borrowed_amount.to_display()
             );
             return err!(LendingError::RepayTooSmallForFullLiquidation);
         }
@@ -164,8 +164,8 @@ pub fn calculate_liquidation(
 
     xmsg!(
         "Obligation is liquidated with liquidation bonus: {} bps, liquidation amount (rounded): {}",
-        liquidation_bonus_rate.to_bps::<u32>().unwrap(),
-        settle_amount.round().to_num::<u64>()
+        liquidation_bonus_rate.to_bps().unwrap_or(u32::MAX),
+        settle_amount.round().to_display(),
     );
 
     Ok(CalculateLiquidationResult {
@@ -229,7 +229,7 @@ pub fn get_liquidation_params(
     xmsg!(
         "Obligation is eligible for liquidation because of {:?} with liquidation bonus: {}bps",
         params.liquidation_reason,
-        params.liquidation_bonus_rate.to_bps::<u64>().unwrap()
+        params.liquidation_bonus_rate.to_bps().unwrap_or(u64::MAX),
     );
     Ok(params)
 }
@@ -255,9 +255,9 @@ pub fn check_liquidate_obligation(
         xmsg!("Obligation is eligible for liquidation, borrowed value (scaled): {}, unhealthy borrow value (scaled): {}, LTV: {}%/{}%, max_allowed_ltv_user {}%, max_allowed_ltv_override {:?}%",
             Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf).to_display(),
             Fraction::from_bits(obligation.unhealthy_borrow_value_sf).to_display(),
-            user_ltv.to_percent::<u64>().unwrap(),
-            max_allowed_ltv.to_percent::<u64>().unwrap(),
-            max_allowed_ltv_user.to_percent::<u64>().unwrap(),
+            user_ltv.to_percent().unwrap_or(u64::MAX),
+            max_allowed_ltv.to_percent().unwrap_or(u64::MAX),
+            max_allowed_ltv_user.to_percent().unwrap_or(u64::MAX),
             max_allowed_ltv_override_pct_opt,
         );
 

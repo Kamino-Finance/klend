@@ -152,6 +152,7 @@ pub(super) fn process_impl(
 
 #[derive(Accounts)]
 pub struct WithdrawObligationCollateralAndRedeemReserveCollateral<'info> {
+   
     #[account(mut)]
     pub owner: Signer<'info>,
 

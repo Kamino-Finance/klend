@@ -96,7 +96,7 @@ pub enum UpdateConfigMode {
     UpdateLiquidationThresholdPct = 3,
     UpdateProtocolLiquidationFee = 4,
     UpdateProtocolTakeRate = 5,
-    UpdateFeesBorrowFee = 6,
+    UpdateFeesOriginationFee = 6,
     UpdateFeesFlashLoanFee = 7,
     DeprecatedUpdateFeesReferralFeeBps = 8,
     UpdateDepositLimit = 9,

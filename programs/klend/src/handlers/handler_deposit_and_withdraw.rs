@@ -17,6 +17,12 @@ pub fn process(
 ) -> Result<()> {
     let initial_ltv = {
         let obligation = ctx.accounts.deposit_accounts.obligation.load()?;
+       
+        require_gt!(
+            obligation.deposited_value_sf,
+            0,
+            LendingError::ObligationDepositsEmpty
+        );
         obligation.loan_to_value()
     };
 

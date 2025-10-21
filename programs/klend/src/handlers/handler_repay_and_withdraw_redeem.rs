@@ -66,6 +66,13 @@ fn process_impl(
     {
         let obligation = withdraw_accounts.obligation.load()?;
 
+       
+        require_gt!(
+            obligation.deposited_value_sf,
+            0,
+            LendingError::ObligationDepositsEmpty
+        );
+
         deposit_count = obligation.active_deposits_count();
         previous_borrow_count = obligation.active_borrows_count();
         referrer = obligation.referrer;

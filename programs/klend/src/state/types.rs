@@ -9,6 +9,46 @@ pub struct DepositLiquidityResult {
     pub collateral_amount: u64,
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BorrowSize {
+
+
+
+    Exact(u64),
+
+
+
+    AllAvailable,
+
+   
+   
+   
+
+    AtMost(u64),
+}
+
+impl BorrowSize {
+
+
+    pub fn exact_or_all_available(liquidity_amount: u64) -> BorrowSize {
+        if liquidity_amount == u64::MAX {
+            BorrowSize::AllAvailable
+        } else {
+            BorrowSize::Exact(liquidity_amount)
+        }
+    }
+
+
+    pub fn is_zero(&self) -> bool {
+        match self {
+            BorrowSize::Exact(amount_lte) | BorrowSize::AtMost(amount_lte) => *amount_lte == 0,
+            BorrowSize::AllAvailable => false,
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalculateBorrowResult {
 
@@ -16,7 +56,7 @@ pub struct CalculateBorrowResult {
 
     pub receive_amount: u64,
 
-    pub borrow_fee: u64,
+    pub origination_fee: u64,
 
     pub referrer_fee: u64,
 }
