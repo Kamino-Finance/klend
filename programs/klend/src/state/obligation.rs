@@ -911,6 +911,11 @@ impl ObligationOrder {
                 "ratio of (debt token price / collateral token price) < {}",
                 self.condition_threshold()
             ),
+            ConditionType::Always => "<unconditional>".to_string(),
+            ConditionType::LiquidationLtvCloserThan => format!(
+                "LTV closer than {} to liquidation",
+                self.condition_threshold()
+            ),
         }
     }
 

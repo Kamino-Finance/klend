@@ -15,10 +15,7 @@ use anchor_lang::{err, prelude::msg, Result};
 use crate::{
     fraction::FractionExtra,
     order_operations::{find_applicable_obligation_order, ConditionHit, OpportunityType},
-    utils::{
-        fraction::fraction, secs, Fraction, DUST_LAMPORT_THRESHOLD, ELEVATION_GROUP_NONE,
-        MIN_AUTODELEVERAGE_BONUS_BPS,
-    },
+    utils::{fraction::fraction, secs, Fraction, DUST_LAMPORT_THRESHOLD, ELEVATION_GROUP_NONE},
     xmsg, CalculateLiquidationResult, LendingError, LendingMarket, LiquidationCheckInputs,
     LiquidationParams, LiquidationReason, Obligation, ObligationCollateral, ObligationLiquidity,
     ObligationOrder, Reserve, ReserveConfig,
@@ -251,37 +248,44 @@ pub fn check_liquidate_obligation(
     let max_allowed_ltv_override_opt = max_allowed_ltv_override_pct_opt.map(Fraction::from_percent);
     let max_allowed_ltv = max_allowed_ltv_override_opt.unwrap_or(max_allowed_ltv_user);
 
-    if user_ltv >= max_allowed_ltv {
-        xmsg!("Obligation is eligible for liquidation, borrowed value (scaled): {}, unhealthy borrow value (scaled): {}, LTV: {}%/{}%, max_allowed_ltv_user {}%, max_allowed_ltv_override {:?}%",
-            Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf).to_display(),
-            Fraction::from_bits(obligation.unhealthy_borrow_value_sf).to_display(),
-            user_ltv.to_percent().unwrap_or(u64::MAX),
-            max_allowed_ltv.to_percent().unwrap_or(u64::MAX),
-            max_allowed_ltv_user.to_percent().unwrap_or(u64::MAX),
-            max_allowed_ltv_override_pct_opt,
-        );
+    if user_ltv < max_allowed_ltv {
+       
+        return None;
+    }
 
-        let emode_max_liquidation_bonus_bps = get_emode_max_liquidation_bonus(
-            lending_market,
+    if lending_market.is_price_triggered_liquidation_disabled() {
+        xmsg!("Obligation is eligible for ltv-exceeded liquidation, but price-triggered liquidations are disabled");
+        return None;
+    }
+
+    xmsg!("Obligation is eligible for liquidation, borrowed value (scaled): {}, unhealthy borrow value (scaled): {}, LTV: {}%/{}%, max_allowed_ltv_user {}%, max_allowed_ltv_override {:?}%",
+        Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf).to_display(),
+        Fraction::from_bits(obligation.unhealthy_borrow_value_sf).to_display(),
+        user_ltv.to_percent().unwrap_or(u64::MAX),
+        max_allowed_ltv.to_percent().unwrap_or(u64::MAX),
+        max_allowed_ltv_user.to_percent().unwrap_or(u64::MAX),
+        max_allowed_ltv_override_pct_opt,
+    );
+
+    let emode_max_liquidation_bonus_bps = get_emode_max_liquidation_bonus(
+        lending_market,
+        &collateral_reserve.config,
+        &debt_reserve.config,
+        obligation,
+    );
+
+    Some(LiquidationParams {
+        user_ltv,
+        liquidation_bonus_rate: calculate_liquidation_bonus(
             &collateral_reserve.config,
             &debt_reserve.config,
-            obligation,
-        );
-
-        return Some(LiquidationParams {
+            max_allowed_ltv,
             user_ltv,
-            liquidation_bonus_rate: calculate_liquidation_bonus(
-                &collateral_reserve.config,
-                &debt_reserve.config,
-                max_allowed_ltv,
-                user_ltv,
-                user_no_bf_ltv,
-                emode_max_liquidation_bonus_bps,
-            ),
-            liquidation_reason: LiquidationReason::LtvExceeded,
-        });
-    }
-    None
+            user_no_bf_ltv,
+            emode_max_liquidation_bonus_bps,
+        ),
+        liquidation_reason: LiquidationReason::LtvExceeded,
+    })
 }
 
 pub(crate) fn get_emode_max_liquidation_bonus(
@@ -487,6 +491,7 @@ fn check_individual_autodeleverage_obligation(
         })
         .expect("must exist for a statically-constructed non-empty array");
     let liquidation_bonus_rate = calculate_autodeleverage_bonus_rate(
+        selected_reserve_config.min_deleveraging_bonus_bps,
         selected_reserve_config.deleveraging_bonus_increase_bps_per_day,
         selected_reserve_config.max_liquidation_bonus_bps,
         get_emode_max_liquidation_bonus(
@@ -569,23 +574,27 @@ fn check_obligation_order_execution(
         ..
     }: &LiquidationCheckInputs,
 ) -> Option<LiquidationParams> {
-    let (order_index, condition_hit) =
-        find_applicable_obligation_order(collateral_reserve, debt_reserve, obligation)?;
+    let (order_index, condition_hit) = find_applicable_obligation_order(
+        collateral_reserve,
+        debt_reserve,
+        obligation,
+        lending_market.is_price_triggered_liquidation_disabled(),
+    )?;
     let order = &obligation.orders[order_index];
     if !lending_market.is_obligation_order_execution_enabled() {
         xmsg!(
-            "Obligation's order {}. condition {} is exceeded by a normalized factor {}, but the feature is disabled",
+            "Obligation's order {}. condition {} is hit with {}, but the feature is disabled",
             order_index,
             order.condition_to_display(),
-            condition_hit.normalized_distance_from_threshold
+            condition_hit
         );
         return None;
     }
     xmsg!(
-        "Obligation's order {}. condition {} is exceeded by a normalized factor {}, enabling the liquidator to {}",
+        "Obligation's order {}. condition {} is hit with {}, enabling the liquidator to {}",
         order_index,
         order.condition_to_display(),
-        condition_hit.normalized_distance_from_threshold,
+        condition_hit,
         order.opportunity_to_display()
     );
     Some(LiquidationParams {
@@ -612,6 +621,7 @@ fn get_autodeleverage_liquidation_params(
     let user_ltv = obligation.loan_to_value();
     if user_ltv.ge(&autodeleverage_ltv_threshold) {
         let liquidation_bonus_rate = calculate_autodeleverage_bonus_rate(
+            autodeleverage_reserve.config.min_deleveraging_bonus_bps,
             autodeleverage_reserve
                 .config
                 .deleveraging_bonus_increase_bps_per_day,
@@ -621,22 +631,16 @@ fn get_autodeleverage_liquidation_params(
             &obligation.no_bf_loan_to_value(),
         );
 
-        xmsg!("Auto-deleveraging LTV threshold crossed: {user_ltv}/{autodeleverage_ltv_threshold}, seconds: {secs_since_deleveraging_started} ({days_since_deleveraging_started} days), liquidation bonus: {liquidation_bonus_rate}",
-                user_ltv = user_ltv.to_display(),
-                autodeleverage_ltv_threshold = autodeleverage_ltv_threshold.to_display(),
-                days_since_deleveraging_started = days_since_deleveraging_started.to_display(),
-                liquidation_bonus_rate = liquidation_bonus_rate.to_display());
-
+       
+        xmsg!("Auto-deleveraging LTV threshold crossed: {user_ltv}/{autodeleverage_ltv_threshold}, seconds: {secs_since_deleveraging_started} ({days_since_deleveraging_started} days), liquidation bonus: {liquidation_bonus_rate}", );
         Some(LiquidationParams {
             user_ltv,
             liquidation_bonus_rate,
             liquidation_reason: LiquidationReason::MarketWideDeleveraging,
         })
     } else {
-        xmsg!("LTV is below the current auto-deleverage threshold: {user_ltv}/{autodeleverage_ltv_threshold}, seconds since deleveraging started: {secs_since_deleveraging_started} ({days_since_deleveraging_started} days)",
-               user_ltv = user_ltv.to_display(),
-               autodeleverage_ltv_threshold = autodeleverage_ltv_threshold.to_display(),
-               days_since_deleveraging_started = days_since_deleveraging_started.to_display());
+       
+        xmsg!("LTV is below the current auto-deleverage threshold: {user_ltv}/{autodeleverage_ltv_threshold}, seconds since deleveraging started: {secs_since_deleveraging_started}", );
         None
     }
 }
@@ -731,21 +735,24 @@ pub(crate) fn calculate_autodeleverage_threshold(
 
 
 pub(crate) fn calculate_autodeleverage_bonus_rate(
+    reserve_min_deleveraging_bonus_bps: u16,
     deleveraging_bonus_increase_bps_per_day: u64,
-    reserve_max_bonus_bps: u16,
+    reserve_max_liquidation_bonus_bps: u16,
     emode_max_liquidation_bonus_bps: u16,
     days_since_deleveraging_started: Fraction,
     user_no_bf_ltv: &Fraction,
 ) -> Fraction {
-    let static_min_bonus_rate = Fraction::from_bps(MIN_AUTODELEVERAGE_BONUS_BPS);
+    let configured_min_bonus_rate = Fraction::from_bps(reserve_min_deleveraging_bonus_bps);
     let daily_bonus_increase = Fraction::from_bps(deleveraging_bonus_increase_bps_per_day);
 
     let liquidation_bonus_rate =
-        static_min_bonus_rate + (daily_bonus_increase * days_since_deleveraging_started);
+        configured_min_bonus_rate + (daily_bonus_increase * days_since_deleveraging_started);
 
    
-    let configured_max_bonus_rate =
-        Fraction::from_bps(min(reserve_max_bonus_bps, emode_max_liquidation_bonus_bps));
+    let configured_max_bonus_rate = Fraction::from_bps(min(
+        reserve_max_liquidation_bonus_bps,
+        emode_max_liquidation_bonus_bps,
+    ));
 
    
    
@@ -775,18 +782,21 @@ pub(crate) fn calculate_order_execution_bonus_rate(
     condition_hit: &ConditionHit,
     user_no_bf_ltv: Fraction,
 ) -> Fraction {
-    let interpolated_bonus_rate = interpolate_bonus_rate(
-        condition_hit.normalized_distance_from_threshold,
-        order.execution_bonus_rate_range(),
-    );
+    let theoretic_bonus_rate = match condition_hit.normalized_distance_from_threshold {
+        Some(normalized_distance_from_threshold) => interpolate_bonus_rate(
+            normalized_distance_from_threshold,
+            order.execution_bonus_rate_range(),
+        ),
+        None => get_constant_bonus_rate(order),
+    };
    
    
     let diff_to_bad_debt = Fraction::ONE.saturating_sub(user_no_bf_ltv);
-    if interpolated_bonus_rate > diff_to_bad_debt {
-        xmsg!("At user_no_bf_ltv = {user_no_bf_ltv}, the interpolated order execution bonus {interpolated_bonus_rate} is capped at {diff_to_bad_debt}", );
+    if theoretic_bonus_rate > diff_to_bad_debt {
+        xmsg!("At user_no_bf_ltv = {user_no_bf_ltv}, the interpolated order execution bonus {theoretic_bonus_rate} is capped at {diff_to_bad_debt}", );
         diff_to_bad_debt
     } else {
-        interpolated_bonus_rate
+        theoretic_bonus_rate
     }
 }
 
@@ -796,6 +806,19 @@ fn interpolate_bonus_rate(
 ) -> Fraction {
     bonus_rate_range.start()
         + normalized_distance_from_threshold * (bonus_rate_range.end() - bonus_rate_range.start())
+}
+
+fn get_constant_bonus_rate(order: &ObligationOrder) -> Fraction {
+    let range = order.execution_bonus_rate_range();
+    if range.end() != range.start() {
+        panic!(
+            "The order validation should not have allowed non-constant bonus range when condition is {}; got: [{}; {}]",
+            order.condition_to_display(),
+            range.start(),
+            range.end()
+        );
+    }
+    *range.start()
 }
 
 

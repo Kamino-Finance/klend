@@ -2241,6 +2241,11 @@ pub fn update_reserve_config(
            
             .set(value)?;
         }
+        UpdateConfigMode::UpdateMinDeleveragingBonusBps => {
+            config_items::for_named_field!(&mut reserve.config.min_deleveraging_bonus_bps)
+                .validating(validations::check_valid_bps)
+                .set(value)?;
+        }
         UpdateConfigMode::UpdateProposerAuthorityLock => {
             config_items::for_named_field!(&mut reserve.config.proposer_authority_locked)
                 .validating(validations::check_bool)
@@ -3273,6 +3278,7 @@ pub mod utils {
             | UpdateConfigMode::UpdateBorrowLimitsInElevationGroupAgainstThisReserve
             | UpdateConfigMode::UpdateAutodeleverageEnabled
             | UpdateConfigMode::UpdateDeleveragingBonusIncreaseBpsPerDay
+            | UpdateConfigMode::UpdateMinDeleveragingBonusBps
             | UpdateConfigMode::UpdateProposerAuthorityLock => false,
         }
     }
@@ -3388,6 +3394,10 @@ pub mod utils {
         }
         if config.min_liquidation_bonus_bps > config.max_liquidation_bonus_bps {
             msg!("Invalid min liquidation bonus");
+            return err!(LendingError::InvalidConfig);
+        }
+        if config.min_deleveraging_bonus_bps > config.max_liquidation_bonus_bps {
+            msg!("Invalid min deleveraging bonus");
             return err!(LendingError::InvalidConfig);
         }
         if config.borrow_factor_pct < 100 {

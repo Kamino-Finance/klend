@@ -142,6 +142,7 @@ pub enum UpdateConfigMode {
     UpdateDeleveragingBonusIncreaseBpsPerDay = 49,
     UpdateProtocolOrderExecutionFee = 50,
     UpdateProposerAuthorityLock = 51,
+    UpdateMinDeleveragingBonusBps = 52,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -233,6 +234,7 @@ pub enum UpdateLendingMarketMode {
     UpdateImmutableFlag = 23,
     UpdateObligationOrderCreationEnabled = 24,
     UpdateProposerAuthority = 25,
+    UpdatePriceTriggeredLiquidationDisabled = 26,
 }
 
 #[cfg(feature = "serde")]

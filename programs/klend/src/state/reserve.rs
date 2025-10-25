@@ -1109,12 +1109,11 @@ pub struct ReserveConfig {
 
     pub host_fixed_interest_rate_bps: u16,
 
-
-
+    pub min_deleveraging_bonus_bps: u16,
 
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 9],
+    pub reserved_1: [u8; 7],
 
     pub protocol_order_execution_fee_pct: u8,
 

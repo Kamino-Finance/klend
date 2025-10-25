@@ -141,12 +141,21 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub obligation_order_creation_enabled: u8,
 
+
+
+
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub price_triggered_liquidation_disabled: u8,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding2: [u8; 5],
+    pub padding2: [u8; 4],
 
 
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
@@ -167,18 +176,19 @@ impl Default for LendingMarket {
             bump_seed: 0,
             lending_market_owner: Pubkey::default(),
             risk_council: Pubkey::default(),
-            quote_currency: [0; 32],
+            quote_currency: default_array(),
             lending_market_owner_cached: Pubkey::default(),
             emergency_mode: 0,
             borrow_disabled: 0,
+            price_triggered_liquidation_disabled: 0,
             autodeleverage_enabled: 0,
             liquidation_max_debt_close_factor_pct: LIQUIDATION_CLOSE_FACTOR,
             insolvency_risk_unhealthy_ltv_pct: CLOSE_TO_INSOLVENCY_RISKY_LTV,
             max_liquidatable_debt_market_value_at_once: MAX_LIQUIDATABLE_VALUE_AT_ONCE,
             global_allowed_borrow_value: GLOBAL_ALLOWED_BORROW_VALUE,
             min_full_liquidation_value_threshold: LIQUIDATION_CLOSE_VALUE,
-            reserved0: [0; 8],
-            reserved1: [0; 8],
+            reserved0: default_array(),
+            reserved1: default_array(),
             referral_fee_bps: 0,
             price_refresh_trigger_to_max_age_pct: 0,
             elevation_groups: [ElevationGroup::default(); 32],
@@ -186,7 +196,7 @@ impl Default for LendingMarket {
             min_value_skip_liquidation_bf_checks: 0,
             elevation_group_padding: default_array(),
             min_net_value_in_obligation_sf: MIN_NET_VALUE_IN_OBLIGATION.to_bits(),
-            name: [0; 32],
+            name: default_array(),
             individual_autodeleverage_margin_call_period_secs: 0,
             min_initial_deposit_amount: DEFAULT_MIN_DEPOSIT_AMOUNT,
             obligation_order_execution_enabled: 0,
@@ -234,6 +244,10 @@ impl LendingMarket {
 
     pub fn is_borrowing_disabled(&self) -> bool {
         self.borrow_disabled != false as u8
+    }
+
+    pub fn is_price_triggered_liquidation_disabled(&self) -> bool {
+        self.price_triggered_liquidation_disabled != false as u8
     }
 
     pub fn is_autodeleverage_enabled(&self) -> bool {
