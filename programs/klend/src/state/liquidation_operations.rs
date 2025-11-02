@@ -487,6 +487,7 @@ fn check_individual_autodeleverage_obligation(
             (
                 reserve.max_liquidation_bonus_bps,
                 reserve.deleveraging_bonus_increase_bps_per_day,
+                reserve.min_deleveraging_bonus_bps,
             )
         })
         .expect("must exist for a statically-constructed non-empty array");
