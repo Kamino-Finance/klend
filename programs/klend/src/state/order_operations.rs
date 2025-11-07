@@ -1,4 +1,7 @@
-use std::ops::{Range, RangeInclusive};
+use std::{
+    fmt::Display,
+    ops::{Range, RangeInclusive},
+};
 
 use anchor_lang::{err, Result};
 use fixed::prelude::ToFixed;
@@ -9,7 +12,7 @@ use crate::{
     fraction,
     fraction::FractionExtra,
     utils::{accounts::is_default_array, Fraction},
-    LendingError, LendingMarket, Obligation, ObligationOrder, Reserve,
+    xmsg, LendingError, LendingMarket, Obligation, ObligationOrder, Reserve,
 };
 
 
@@ -23,17 +26,51 @@ const VALID_DEBT_COLL_PRICE_RATIO_RANGE: RangeInclusive<Fraction> =
 const VALID_USER_LTV_RANGE: Range<Fraction> = fraction!(0.01)..fraction!(1.0);
 
 
+const VALID_DIFF_TO_LIQUIDATION_LTV_RANGE: Range<Fraction> = VALID_USER_LTV_RANGE;
+
+
 const EXECUTION_BONUS_SANITY_LIMIT: Fraction = fraction!(0.1);
 
 
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
 pub enum ConditionType {
+
+
+
     Never = 0,
+
+
     UserLtvAbove = 1,
+
+
     UserLtvBelow = 2,
+
+
+
+
     DebtCollPriceRatioAbove = 3,
+
+
+
+
     DebtCollPriceRatioBelow = 4,
+
+
+
+
+
+    Always = 5,
+
+
+
+
+
+
+
+
+
+    LiquidationLtvCloserThan = 6,
 }
 
 
@@ -41,7 +78,15 @@ pub enum ConditionType {
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
 pub enum OpportunityType {
+
+
+
+
     DeleverageSingleDebtAmount = 0,
+
+
+
+
     DeleverageAllDebt = 1,
 }
 
@@ -61,7 +106,25 @@ pub struct ConditionHit {
 
 
 
-    pub normalized_distance_from_threshold: Fraction,
+
+
+
+
+    pub normalized_distance_from_threshold: Option<Fraction>,
+}
+
+
+impl Display for ConditionHit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.normalized_distance_from_threshold {
+            None => f.write_str("<undefined distance from threshold>"),
+            Some(normalized_distance_from_threshold) => write!(
+                f,
+                "distance from threshold = {}",
+                normalized_distance_from_threshold
+            ),
+        }
+    }
 }
 
 
@@ -72,12 +135,22 @@ pub fn find_applicable_obligation_order(
     collateral_reserve: &Reserve,
     debt_reserve: &Reserve,
     obligation: &Obligation,
+    price_triggered_liquidation_disabled: bool,
 ) -> Option<ApplicableObligationOrder> {
     for (order_index, order) in obligation.orders.iter().enumerate() {
-        if let Some(met_condition) =
+        if let Some(condition_hit) =
             evaluate_order_condition(collateral_reserve, debt_reserve, obligation, order)
         {
-            return Some((order_index, met_condition));
+            if order.condition_type().is_price_triggered() && price_triggered_liquidation_disabled {
+                xmsg!(
+                    "Obligation's order {}. condition {} is hit with {}, but price-triggered liquidations are disabled",
+                    order_index,
+                    order.condition_to_display(),
+                    condition_hit
+                );
+                continue;
+            }
+            return Some((order_index, condition_hit));
         }
     }
     None
@@ -183,6 +256,23 @@ impl ConditionType {
             Self::DebtCollPriceRatioAbove | Self::DebtCollPriceRatioBelow => {
                 obligation.is_single_debt_single_coll()
             }
+            Self::Always => true,
+            Self::LiquidationLtvCloserThan => true,
+        }
+    }
+
+
+
+
+
+    pub fn is_price_triggered(&self) -> bool {
+        match self {
+            ConditionType::Never | ConditionType::Always => false,
+            ConditionType::UserLtvAbove
+            | ConditionType::UserLtvBelow
+            | ConditionType::DebtCollPriceRatioAbove
+            | ConditionType::DebtCollPriceRatioBelow
+            | ConditionType::LiquidationLtvCloserThan => true,
         }
     }
 }
@@ -220,6 +310,24 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
                 return err!(LendingError::InvalidOrderConfiguration);
             }
         }
+        Ok(ConditionType::Always) => {
+            if order.condition_threshold() != Fraction::default() {
+                msg!(
+                    "An unconditional order should use zeroed condition threshold; got {}",
+                    order.condition_threshold()
+                );
+                return err!(LendingError::InvalidOrderConfiguration);
+            }
+            let bonus_range = order.execution_bonus_rate_range();
+            if bonus_range.start() != bonus_range.end() {
+                msg!(
+                    "An unconditional order should define a constant bonus; got range [{}; {}]",
+                    bonus_range.start(),
+                    bonus_range.end()
+                );
+                return err!(LendingError::InvalidOrderConfiguration);
+            }
+        }
         Ok(ConditionType::Never) => {
             if order != ObligationOrder::default() {
                 msg!("A void order should be entirely zeroed; got {:?}", order);
@@ -227,6 +335,17 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             }
            
             return Ok(());
+        }
+        Ok(ConditionType::LiquidationLtvCloserThan) => {
+            if !VALID_DIFF_TO_LIQUIDATION_LTV_RANGE.contains(&order.condition_threshold()) {
+                msg!(
+                    "Invalid difference to liquidation LTV {}; should be in range [{}; {})",
+                    order.condition_threshold(),
+                    VALID_USER_LTV_RANGE.start,
+                    VALID_USER_LTV_RANGE.end,
+                );
+                return err!(LendingError::InvalidOrderConfiguration);
+            }
         }
         Err(error) => {
             msg!(
@@ -294,6 +413,7 @@ fn evaluate_order_condition(
     order: &ObligationOrder,
 ) -> Option<ConditionHit> {
     match order.condition_type() {
+        ConditionType::Always => Some(ConditionHit::without_distance()),
         ConditionType::Never => None,
         ConditionType::UserLtvAbove => evaluate_stop_loss(
             obligation.loan_to_value(),
@@ -318,6 +438,14 @@ fn evaluate_order_condition(
             calculate_price_ratio(debt_reserve, collateral_reserve),
             order.condition_threshold(),
         ),
+        ConditionType::LiquidationLtvCloserThan => {
+            let unhealthy_ltv = obligation.unhealthy_loan_to_value();
+            evaluate_stop_loss(
+                obligation.loan_to_value(),
+                unhealthy_ltv.saturating_sub(order.condition_threshold()),
+                unhealthy_ltv,
+            )
+        }
     }
 }
 
@@ -341,7 +469,9 @@ fn evaluate_stop_loss(
         let maximum_distance = liquidation_threshold - condition_threshold;
         current_distance / maximum_distance
     };
-    Some(ConditionHit::from(normalized_distance_towards_liquidation))
+    Some(ConditionHit::with_distance(
+        normalized_distance_towards_liquidation,
+    ))
 }
 
 fn evaluate_take_profit(
@@ -352,7 +482,9 @@ fn evaluate_take_profit(
         return None;
     }
     let distance_towards_0 = condition_threshold - current_value;
-    Some(ConditionHit::from(distance_towards_0 / condition_threshold))
+    Some(ConditionHit::with_distance(
+        distance_towards_0 / condition_threshold,
+    ))
 }
 
 fn calculate_price_ratio(numerator_reserve: &Reserve, denominator_reserve: &Reserve) -> Fraction {
@@ -362,11 +494,20 @@ fn calculate_price_ratio(numerator_reserve: &Reserve, denominator_reserve: &Rese
 }
 
 impl ConditionHit {
-    pub fn from(normalized_distance_from_threshold: impl ToFixed) -> Self {
+
+    pub fn with_distance(normalized_distance_from_threshold: impl ToFixed) -> Self {
         Self {
-            normalized_distance_from_threshold: Fraction::from_num(
+            normalized_distance_from_threshold: Some(Fraction::from_num(
                 normalized_distance_from_threshold,
-            ),
+            )),
+        }
+    }
+
+
+
+    pub fn without_distance() -> Self {
+        Self {
+            normalized_distance_from_threshold: None,
         }
     }
 }

@@ -165,6 +165,11 @@ pub fn process(
         UpdateLendingMarketMode::UpdateProposerAuthority => {
             config_items::for_named_field!(&mut market.proposer_authority).set(&value)?;
         }
+        UpdateLendingMarketMode::UpdatePriceTriggeredLiquidationDisabled => {
+            config_items::for_named_field!(&mut market.price_triggered_liquidation_disabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
     }
 
     Ok(())

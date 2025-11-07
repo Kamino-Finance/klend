@@ -92,11 +92,19 @@ pub struct CalculateLiquidationResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiquidationReason {
 
+
+
     LtvExceeded,
+
 
     IndividualDeleveraging,
 
+
     MarketWideDeleveraging,
+
+
+
+
 
 
     ObligationOrder(usize),
