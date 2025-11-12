@@ -35,6 +35,11 @@ pub fn process(
         LendingError::OperationNotPermittedMarketImmutable
     );
 
+    require!(
+        reserve.has_initial_deposit(),
+        LendingError::ReserveHasNotReceivedInitialDeposit
+    );
+
     let clock = Clock::get()?;
     lending_operations::refresh_reserve(reserve, &clock, None, market.referral_fee_bps)?;
 

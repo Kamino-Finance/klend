@@ -54,31 +54,19 @@ pub mod pda {
         pub fee_vault: Pubkey,
     }
 
-    pub fn init_reserve_pdas(market: &Pubkey, mint: &Pubkey) -> InitReservePdas {
-        init_reserve_pdas_program_id(&ID, market, mint)
+    pub fn init_reserve_pdas(reserve: &Pubkey) -> InitReservePdas {
+        init_reserve_pdas_program_id(&ID, reserve)
     }
 
-    pub fn init_reserve_pdas_program_id(
-        program_id: &Pubkey,
-        market: &Pubkey,
-        mint: &Pubkey,
-    ) -> InitReservePdas {
-        let (fee_vault, _fee_vault_bump) = Pubkey::find_program_address(
-            &[FEE_RECEIVER, market.as_ref(), mint.as_ref()],
-            program_id,
-        );
-        let (liquidity_supply_vault, _liquidity_supply_vault_bump) = Pubkey::find_program_address(
-            &[RESERVE_LIQ_SUPPLY, market.as_ref(), mint.as_ref()],
-            program_id,
-        );
-        let (collateral_ctoken_mint, _collateral_ctoken_mint_bump) = Pubkey::find_program_address(
-            &[RESERVE_COLL_MINT, market.as_ref(), mint.as_ref()],
-            program_id,
-        );
-        let (collateral_supply_vault, _collateral_supply_vault_bump) = Pubkey::find_program_address(
-            &[RESERVE_COLL_SUPPLY, market.as_ref(), mint.as_ref()],
-            program_id,
-        );
+    pub fn init_reserve_pdas_program_id(program_id: &Pubkey, reserve: &Pubkey) -> InitReservePdas {
+        let (fee_vault, _fee_vault_bump) =
+            Pubkey::find_program_address(&[FEE_RECEIVER, reserve.as_ref()], program_id);
+        let (liquidity_supply_vault, _liquidity_supply_vault_bump) =
+            Pubkey::find_program_address(&[RESERVE_LIQ_SUPPLY, reserve.as_ref()], program_id);
+        let (collateral_ctoken_mint, _collateral_ctoken_mint_bump) =
+            Pubkey::find_program_address(&[RESERVE_COLL_MINT, reserve.as_ref()], program_id);
+        let (collateral_supply_vault, _collateral_supply_vault_bump) =
+            Pubkey::find_program_address(&[RESERVE_COLL_SUPPLY, reserve.as_ref()], program_id);
 
         InitReservePdas {
             liquidity_supply_vault,

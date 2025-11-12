@@ -505,6 +505,10 @@ impl Reserve {
     pub fn is_usage_blocked(&self) -> bool {
         self.config.deposit_limit == 0 && self.config.borrow_limit == 0
     }
+
+    pub fn has_initial_deposit(&self) -> bool {
+        self.liquidity.available_amount > 0 || self.collateral.mint_total_supply > 0
+    }
 }
 
 
@@ -1111,9 +1115,16 @@ pub struct ReserveConfig {
 
     pub min_deleveraging_bonus_bps: u16,
 
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub block_ctoken_usage: u8,
+
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 7],
+    pub reserved_1: [u8; 6],
+
 
     pub protocol_order_execution_fee_pct: u8,
 
@@ -1216,6 +1227,10 @@ impl ReserveConfig {
 
     pub fn is_autodeleverage_enabled(&self) -> bool {
         self.autodeleverage_enabled != false as u8
+    }
+
+    pub fn is_ctoken_usage_blocked(&self) -> bool {
+        self.block_ctoken_usage != false as u8
     }
 }
 

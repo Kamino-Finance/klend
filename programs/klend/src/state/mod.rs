@@ -143,6 +143,7 @@ pub enum UpdateConfigMode {
     UpdateProtocolOrderExecutionFee = 50,
     UpdateProposerAuthorityLock = 51,
     UpdateMinDeleveragingBonusBps = 52,
+    UpdateBlockCTokenUsage = 53,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]

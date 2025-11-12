@@ -12,6 +12,13 @@ macro_rules! gen_signer_seeds {
 }
 
 #[macro_export]
+macro_rules! gen_reserve_token_account_signer_seeds {
+    ($seeds_tag: expr, $reserve_key: expr, $bump: expr) => {
+        &[$seeds_tag.as_ref(), $reserve_key.as_ref(), &[$bump]]
+    };
+}
+
+#[macro_export]
 macro_rules! try_block {
     ($($expr:expr)*) => {
         match $($expr)* {
