@@ -7,6 +7,7 @@ use anchor_spl::{
 };
 
 use crate::{
+    gen_reserve_token_account_signer_seeds,
     lending_market::lending_operations,
     state::{
         reserve::{
@@ -15,19 +16,64 @@ use crate::{
         },
         LendingMarket, Reserve, ReserveConfig,
     },
-    utils::{constraints, seeds, token_transfer},
+    utils::{account_ops, constraints, seeds, spltoken, token_transfer},
     LendingError, ReserveStatus,
 };
 
 pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Result<()> {
     let clock = &Clock::get()?;
     let reserve = &mut ctx.accounts.reserve.load_init()?;
+    let market = &ctx.accounts.lending_market.load()?;
+    let reserve_key = ctx.accounts.reserve.key();
+    let reserve_liquidity_supply_signer_seeds = gen_reserve_token_account_signer_seeds!(
+        seeds::RESERVE_LIQ_SUPPLY,
+        reserve_key,
+        ctx.bumps.reserve_liquidity_supply
+    );
+    let fee_receiver_signer_seeds = gen_reserve_token_account_signer_seeds!(
+        seeds::FEE_RECEIVER,
+        reserve_key,
+        ctx.bumps.fee_receiver
+    );
+
+    account_ops::initialize_pda_token_account(
+        &ctx.accounts.signer.to_account_info(),
+        &ctx.accounts.reserve_liquidity_supply,
+        &ctx.accounts.reserve_liquidity_mint,
+        &ctx.accounts.lending_market_authority.to_account_info(),
+        &ctx.accounts.liquidity_token_program,
+        &ctx.accounts.system_program.to_account_info(),
+        &[reserve_liquidity_supply_signer_seeds],
+    )?;
+
+    account_ops::initialize_pda_token_account(
+        &ctx.accounts.signer.to_account_info(),
+        &ctx.accounts.fee_receiver,
+        &ctx.accounts.reserve_liquidity_mint,
+        &ctx.accounts.lending_market_authority.to_account_info(),
+        &ctx.accounts.liquidity_token_program,
+        &ctx.accounts.system_program.to_account_info(),
+        &[fee_receiver_signer_seeds],
+    )?;
+
     constraints::token_2022::validate_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
 
-    let market = &ctx.accounts.lending_market.load()?;
+    let is_frozen_default_account_state_extension =
+        spltoken::is_frozen_default_account_state_extension(
+            &ctx.accounts.reserve_liquidity_mint.to_account_info(),
+        )?;
+
+   
+   
+   
+    let min_initial_deposit_amount = if is_frozen_default_account_state_extension {
+        0
+    } else {
+        market.min_initial_deposit_amount
+    };
 
     reserve.init(InitReserveParams {
         current_slot: clock.slot,
@@ -39,12 +85,12 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
             supply_vault: ctx.accounts.reserve_liquidity_supply.key(),
             fee_vault: ctx.accounts.fee_receiver.key(),
             market_price_sf: 0,
-            initial_amount_deposited_in_reserve: market.min_initial_deposit_amount,
+            initial_amount_deposited_in_reserve: min_initial_deposit_amount,
         })),
         collateral: Box::new(ReserveCollateral::new(NewReserveCollateralParams {
             mint_pubkey: ctx.accounts.reserve_collateral_mint.key(),
             supply_vault: ctx.accounts.reserve_collateral_supply.key(),
-            initial_collateral_supply: market.min_initial_deposit_amount,
+            initial_collateral_supply: min_initial_deposit_amount,
         })),
         config: Box::new(ReserveConfig {
             status: ReserveStatus::Hidden.into(),
@@ -59,7 +105,7 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
         ctx.accounts.signer.to_account_info(),
         ctx.accounts.reserve_liquidity_mint.to_account_info(),
         ctx.accounts.liquidity_token_program.to_account_info(),
-        market.min_initial_deposit_amount,
+        min_initial_deposit_amount,
         ctx.accounts.reserve_liquidity_mint.decimals,
     )?;
 
@@ -92,28 +138,20 @@ pub struct InitReserve<'info> {
     )]
     pub reserve_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    #[account(init,
-        seeds = [seeds::RESERVE_LIQ_SUPPLY, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
-        bump,
-        payer = signer,
-        token::mint = reserve_liquidity_mint,
-        token::authority = lending_market_authority,
-        token::token_program = liquidity_token_program,
+    #[account(mut,
+        seeds = [seeds::RESERVE_LIQ_SUPPLY, reserve.key().as_ref()],
+        bump
     )]
-    pub reserve_liquidity_supply: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub reserve_liquidity_supply: AccountInfo<'info>,
+
+    #[account(mut,
+        seeds = [seeds::FEE_RECEIVER, reserve.key().as_ref()],
+        bump
+    )]
+    pub fee_receiver: AccountInfo<'info>,
 
     #[account(init,
-        seeds = [seeds::FEE_RECEIVER, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
-        bump,
-        payer = signer,
-        token::mint = reserve_liquidity_mint,
-        token::authority = lending_market_authority,
-        token::token_program = liquidity_token_program,
-    )]
-    pub fee_receiver: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    #[account(init,
-        seeds = [seeds::RESERVE_COLL_MINT, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
+        seeds = [seeds::RESERVE_COLL_MINT, reserve.key().as_ref()],
         bump,
         payer = signer,
         mint::decimals = 6,
@@ -123,7 +161,7 @@ pub struct InitReserve<'info> {
     pub reserve_collateral_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(init,
-        seeds = [seeds::RESERVE_COLL_SUPPLY, lending_market.key().as_ref(), reserve_liquidity_mint.key().as_ref()],
+        seeds = [seeds::RESERVE_COLL_SUPPLY, reserve.key().as_ref()],
         bump,
         payer = signer,
         token::mint = reserve_collateral_mint,

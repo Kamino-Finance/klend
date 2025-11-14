@@ -2,6 +2,13 @@ use anchor_lang::{
     prelude::{AccountInfo, CpiContext},
     Result,
 };
+use anchor_spl::token_2022::{
+    self,
+    spl_token_2022::{
+        self,
+        extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions},
+    },
+};
 
 pub fn mint<'info>(
     token_program: AccountInfo<'info>,
@@ -71,4 +78,58 @@ pub fn burn_with_signer<'info>(
     )?;
 
     Ok(())
+}
+
+
+pub fn is_frozen_default_account_state_extension(mint_account_info: &AccountInfo) -> Result<bool> {
+    let mint_data = mint_account_info.data.borrow();
+
+   
+    if mint_account_info.owner == &anchor_spl::token::spl_token::id() {
+        return Ok(false);
+    }
+
+    let mint = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+
+    let extension_types = mint.get_extension_types()?;
+
+   
+    if !extension_types.contains(&ExtensionType::DefaultAccountState) {
+        return Ok(false);
+    }
+
+    let extension = mint
+        .get_extension::<spl_token_2022::extension::default_account_state::DefaultAccountState>()?;
+
+    Ok(extension.state == spl_token_2022::state::AccountState::Frozen as u8)
+}
+
+pub fn initialize_immutable_owner<'info>(
+    token_program: AccountInfo<'info>,
+    account: AccountInfo<'info>,
+) -> Result<()> {
+    let cpi_context = CpiContext::new(
+        token_program,
+        token_2022::InitializeImmutableOwner { account },
+    );
+
+    token_2022::initialize_immutable_owner(cpi_context)?;
+
+    Ok(())
+}
+
+pub fn initialize_token_account<'info>(
+    token_program: AccountInfo<'info>,
+    mint: AccountInfo<'info>,
+    token_account: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+) -> Result<()> {
+    token_2022::initialize_account3(CpiContext::new(
+        token_program,
+        token_2022::InitializeAccount3 {
+            mint,
+            account: token_account,
+            authority,
+        },
+    ))
 }

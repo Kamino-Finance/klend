@@ -79,6 +79,10 @@ pub mod kamino_lending {
         handler_withdraw_protocol_fees::process(ctx, amount)
     }
 
+    pub fn seed_deposit_on_init_reserve(ctx: Context<SeedDepositOnInitReserve>) -> Result<()> {
+        handler_seed_deposit_on_init_reserve::process(ctx)
+    }
+
    
     #[deprecated(
         since = "1.8.0",
@@ -700,6 +704,12 @@ pub enum LendingError {
     OrderCreationDisabled,
     #[msg("Cannot initialize global config because there is no upgrade authority to the program")]
     NoUpgradeAuthority,
+    #[msg("Initial admin deposit in reserve already executed")]
+    InitialAdminDepositExecuted,
+    #[msg("Reserve has not received the initial deposit, cannot update config")]
+    ReserveHasNotReceivedInitialDeposit,
+    #[msg("CToken minting/redeeming is blocked for this reserve")]
+    CTokenUsageBlocked,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

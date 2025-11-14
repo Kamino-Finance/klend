@@ -2251,6 +2251,11 @@ pub fn update_reserve_config(
                 .validating(validations::check_bool)
                 .set(value)?;
         }
+        UpdateConfigMode::UpdateBlockCTokenUsage => {
+            config_items::for_named_field!(&mut reserve.config.block_ctoken_usage)
+                .validating(validations::check_bool)
+                .set(value)?;
+        }
         UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
         | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
         | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
@@ -3233,7 +3238,8 @@ pub mod utils {
             | UpdateConfigMode::UpdateHostFixedInterestRateBps
             | UpdateConfigMode::UpdateProtocolOrderExecutionFee
             | UpdateConfigMode::UpdateFeesOriginationFee
-            | UpdateConfigMode::UpdateFeesFlashLoanFee => true,
+            | UpdateConfigMode::UpdateFeesFlashLoanFee
+            | UpdateConfigMode::UpdateBlockCTokenUsage => true,
             UpdateConfigMode::UpdateLoanToValuePct
             | UpdateConfigMode::UpdateMaxLiquidationBonusBps
             | UpdateConfigMode::UpdateLiquidationThresholdPct

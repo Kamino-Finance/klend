@@ -30,7 +30,8 @@ pub mod token_2022 {
     use anchor_spl::{
         token::spl_token,
         token_2022::{
-            spl_token_2022, spl_token_2022::extension::confidential_transfer::EncryptedBalance,
+            spl_token_2022::extension::confidential_transfer::EncryptedBalance,
+            spl_token_2022::{self, state::AccountState as DefaultAccountState},
         },
         token_interface::spl_token_2022::extension::{
             BaseStateWithExtensions, ExtensionType, StateWithExtensions,
@@ -142,9 +143,11 @@ pub mod token_2022 {
                 }
                 ExtensionType::DefaultAccountState => {
                     let ext = mint.get_extension::<spl_token_2022::extension::default_account_state::DefaultAccountState>()?;
-                    if ext.state != spl_token_2022::state::AccountState::Initialized as u8 {
+                    if !(ext.state == DefaultAccountState::Initialized as u8
+                        || ext.state == DefaultAccountState::Frozen as u8)
+                    {
                         xmsg!(
-                            "Default account state extension only supports \"Initialized\" state"
+                            "Default account state extension only supports \"Initialized\" or \"Frozen\" states"
                         );
                         return err!(LendingError::UnsupportedTokenExtension);
                     }

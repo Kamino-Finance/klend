@@ -2,7 +2,7 @@ use anchor_lang::{
     accounts::account_loader::AccountLoader,
     err, error,
     prelude::{msg, Context, Pubkey},
-    require_eq, require_gte, Key, Result, ToAccountInfo,
+    require, require_eq, require_gte, Key, Result, ToAccountInfo,
 };
 
 use crate::{
@@ -92,6 +92,11 @@ pub fn deposit_reserve_liquidity_checks(
         msg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
+
+    require!(
+        !reserve.config.is_ctoken_usage_blocked(),
+        LendingError::CTokenUsageBlocked
+    );
 
     constraints::token_2022::validate_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
@@ -261,6 +266,10 @@ pub fn withdraw_obligation_collateral_checks(
         return err!(LendingError::InvalidAccountInput);
     }
 
+    require!(
+        !withdraw_reserve.config.is_ctoken_usage_blocked(),
+        LendingError::CTokenUsageBlocked
+    );
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "kamino_lending"
-version = "1.12.4"
+version = "1.12.6"
 description = "Kamino lending Solana program"
 edition = "2021"
 license = "BUSL-1.1"
