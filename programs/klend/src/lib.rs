@@ -155,7 +155,7 @@ pub mod kamino_lending {
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_obligation(ctx: Context<RefreshObligation>) -> Result<()> {
-        handler_refresh_obligation::process(ctx, MaxReservesAsCollateralCheck::Perform)
+        handler_refresh_obligation::process(ctx)
     }
 
     #[deprecated(
@@ -253,7 +253,12 @@ pub mod kamino_lending {
         liquidity_amount: u64,
         withdraw_collateral_amount: u64,
     ) -> Result<()> {
-        handler_deposit_and_withdraw::process(ctx, liquidity_amount, withdraw_collateral_amount)
+        handler_deposit_and_withdraw::process(
+            ctx,
+            liquidity_amount,
+            withdraw_collateral_amount,
+            MaxReservesAsCollateralCheck::Perform,
+        )
     }
 
     #[deprecated(
@@ -430,7 +435,6 @@ pub mod kamino_lending {
     pub fn idl_missing_types(
         _ctx: Context<UpdateReserveConfig>,
         _reserve_farm_kind: ReserveFarmKind,
-        _asset_tier: AssetTier,
         _fee_calculation: FeeCalculation,
         _reserve_status: ReserveStatus,
         _update_config_mode: UpdateConfigMode,
@@ -710,6 +714,8 @@ pub enum LendingError {
     ReserveHasNotReceivedInitialDeposit,
     #[msg("CToken minting/redeeming is blocked for this reserve")]
     CTokenUsageBlocked,
+    #[msg("Cannot call ix with same reserve")]
+    CannotUseSameReserve,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

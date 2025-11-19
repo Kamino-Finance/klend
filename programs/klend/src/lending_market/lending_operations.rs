@@ -16,7 +16,6 @@ use self::utils::{
     get_max_ltv_and_liquidation_threshold, post_borrow_obligation_invariants,
     post_deposit_obligation_invariants, post_repay_obligation_invariants,
     post_withdraw_obligation_invariants, update_elevation_group_debt_trackers_on_repay,
-    validate_obligation_asset_tiers,
 };
 use super::{
     config_items, validate_referrer_token_state,
@@ -32,11 +31,11 @@ use crate::{
         consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction, Fraction, GetPriceResult,
         IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
-    xmsg, AssetTier, BorrowSize, DepositLiquidityResult, ElevationGroup, LendingError,
-    LendingMarket, LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason,
-    LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags,
-    ReferrerTokenState, RefreshObligationBorrowsResult, RefreshObligationDepositsResult,
-    ReserveStatus, UpdateConfigMode, WithdrawResult,
+    xmsg, BorrowSize, DepositLiquidityResult, ElevationGroup, LendingError, LendingMarket,
+    LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
+    MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags, ReferrerTokenState,
+    RefreshObligationBorrowsResult, RefreshObligationDepositsResult, ReserveStatus,
+    UpdateConfigMode, WithdrawResult,
 };
 
 pub fn refresh_reserve(
@@ -272,11 +271,8 @@ where
 
     let borrow_index = {
        
-        let (obligation_liquidity, borrow_index) = obligation.find_or_add_liquidity_to_borrows(
-            borrow_reserve_pk,
-            cumulative_borrow_rate_bf,
-            borrow_reserve.config.get_asset_tier(),
-        )?;
+        let (obligation_liquidity, borrow_index) = obligation
+            .find_or_add_liquidity_to_borrows(borrow_reserve_pk, cumulative_borrow_rate_bf)?;
 
         obligation_liquidity.borrow(borrow_amount_f);
 
@@ -314,8 +310,6 @@ where
         );
         return err!(LendingError::BorrowingAboveUtilizationRateDisabled);
     }
-
-    validate_obligation_asset_tiers(obligation)?;
 
     let elevation_group = lending_market.get_elevation_group(obligation.elevation_group)?;
     utils::update_elevation_group_debt_trackers_on_borrow(
@@ -397,11 +391,10 @@ pub fn deposit_obligation_collateral(
 
     let pre_deposit_count = obligation.active_deposits_count();
     let total_borrowed_amount = obligation.get_borrowed_amount_if_single_token();
-    let asset_tier = deposit_reserve.config.get_asset_tier();
 
     let pre_collateral_market_value_f = {
         let (obligation_collateral, newly_added) =
-            obligation.find_or_add_collateral_to_deposits(deposit_reserve_pk, asset_tier)?;
+            obligation.find_or_add_collateral_to_deposits(deposit_reserve_pk)?;
         if newly_added {
             utils::update_elevation_group_debt_trackers_on_new_deposit(
                 total_borrowed_amount,
@@ -426,7 +419,6 @@ pub fn deposit_obligation_collateral(
 
    
 
-    validate_obligation_asset_tiers(obligation)?;
     post_deposit_obligation_invariants(
         deposit_reserve
             .collateral_exchange_rate()
@@ -808,6 +800,11 @@ where
             0,
             LendingError::ElevationGroupMaxCollateralReserveZero
         );
+        require_gte!(
+            usize::from(elevation_group.max_reserves_as_collateral),
+            obligation.active_deposits_count(),
+            LendingError::ObligationCollateralExceedsElevationGroupLimit
+        );
     }
 
     let RefreshObligationBorrowsResult {
@@ -833,7 +830,6 @@ where
         obligation,
         lending_market,
         slot,
-        MaxReservesAsCollateralCheck::Perform,
         elevation_group,
         deposit_reserves_iter.clone(),
         borrowed_amount_in_elevation_group,
@@ -955,7 +951,6 @@ pub fn refresh_obligation_deposits<'info, T>(
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
     slot: Slot,
-    max_reserves_as_collateral_check: MaxReservesAsCollateralCheck,
     elevation_group: Option<&ElevationGroup>,
     mut reserves_iter: impl Iterator<Item = T>,
     borrowed_amount_in_elevation_group: Option<u64>,
@@ -971,7 +966,6 @@ where
     let mut num_of_obsolete_reserves = 0;
     let mut prices_state = PriceStatusFlags::all();
     let mut borrowing_disabled = false;
-    let mut collaterals_count = 0;
 
     let elevation_group_and_borrowed_amount: Option<(&ElevationGroup, u64)> = match (
         elevation_group,
@@ -1018,10 +1012,6 @@ where
             index,
             slot,
         )?;
-
-        if deposit.deposited_amount > 0 {
-            collaterals_count += 1;
-        }
 
         if let Some((elevation_group, debt_amount)) = elevation_group_and_borrowed_amount {
             let elevation_group_index = elevation_group.get_index();
@@ -1070,8 +1060,6 @@ where
         unhealthy_borrow_value +=
             market_value_f * Fraction::from_percent(coll_liquidation_threshold_pct);
 
-        obligation.deposits_asset_tiers[index] = deposit_reserve.config.asset_tier;
-
        
         prices_state &= deposit_reserve.last_update.get_price_status();
 
@@ -1084,16 +1072,6 @@ where
                 .to_display(),
             market_value_f.to_display()
         );
-    }
-
-    if max_reserves_as_collateral_check == MaxReservesAsCollateralCheck::Perform {
-        if let Some(elevation_group) = elevation_group {
-            require_gte!(
-                elevation_group.max_reserves_as_collateral,
-                collaterals_count,
-                LendingError::ObligationCollateralExceedsElevationGroupLimit
-            );
-        }
     }
 
     Ok(RefreshObligationDepositsResult {
@@ -1226,8 +1204,6 @@ where
 
         borrow_factor_adjusted_debt_value += borrow_factor_adjusted_market_value;
 
-        obligation.borrows_asset_tiers[index] = borrow_reserve.config.asset_tier;
-
        
         obligation.has_debt = 1;
 
@@ -1271,7 +1247,6 @@ pub fn refresh_obligation<'info, T, U>(
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
     slot: Slot,
-    max_reserves_as_collateral_check: MaxReservesAsCollateralCheck,
     mut deposit_reserves_iter: impl Iterator<Item = T>,
     mut borrow_reserves_iter: impl Iterator<Item = T>,
     mut referrer_token_states_iter: impl Iterator<Item = U>,
@@ -1313,7 +1288,6 @@ where
         obligation,
         lending_market,
         slot,
-        max_reserves_as_collateral_check,
         elevation_group,
         &mut deposit_reserves_iter,
         borrowed_amount_in_elevation_group,
@@ -2167,11 +2141,6 @@ pub fn update_reserve_config(
                 .validating(validations::check_gte(100u64))
                 .set(value)?;
         }
-        UpdateConfigMode::UpdateAssetTier => {
-            config_items::for_named_field!(&mut reserve.config.asset_tier)
-                .representing_u8_enum::<AssetTier>()
-                .set(value)?;
-        }
         UpdateConfigMode::UpdateElevationGroup => {
             config_items::for_named_field!(&mut reserve.config.elevation_groups).set(value)?;
         }
@@ -2260,6 +2229,7 @@ pub fn update_reserve_config(
         | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
         | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
         | UpdateConfigMode::DeprecatedUpdateDebtWithdrawalCapCurrentTotal
+        | UpdateConfigMode::DeprecatedUpdateAssetTier
         | UpdateConfigMode::DeprecatedUpdateDepositWithdrawalCapCurrentTotal => {
             panic!("Deprecated endpoint")
         }
@@ -2276,8 +2246,9 @@ pub mod utils {
     use super::*;
     use crate::{
         fraction::FRACTION_ONE_SCALED,
+        state::ReserveConfig,
         utils::{ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
-        ElevationGroup, ObligationCollateral, ObligationLiquidity, ReserveConfig,
+        ElevationGroup, ObligationCollateral, ObligationLiquidity,
     };
 
     pub(crate) fn repay_and_withdraw_from_obligation_post_liquidation(
@@ -2937,6 +2908,7 @@ pub mod utils {
         withdraw_reserve: &Reserve,
         lending_market: &LendingMarket,
         initial_ltv: Fraction,
+        max_reserves_as_collateral_check: MaxReservesAsCollateralCheck,
     ) -> Result<()> {
         let debt_value = Fraction::from_bits(obligation.borrow_factor_adjusted_debt_value_sf);
 
@@ -2989,14 +2961,16 @@ pub mod utils {
 
        
        
-        if let Some(elevation_group) =
-            get_elevation_group(obligation.elevation_group, lending_market)?
-        {
-            require_gte!(
-                usize::from(elevation_group.max_reserves_as_collateral),
-                obligation.active_deposits_count(),
-                LendingError::ObligationCollateralExceedsElevationGroupLimit
-            );
+        if max_reserves_as_collateral_check == MaxReservesAsCollateralCheck::Perform {
+            if let Some(elevation_group) =
+                get_elevation_group(obligation.elevation_group, lending_market)?
+            {
+                require_gte!(
+                    usize::from(elevation_group.max_reserves_as_collateral),
+                    obligation.active_deposits_count(),
+                    LendingError::ObligationCollateralExceedsElevationGroupLimit
+                );
+            }
         }
 
         Ok(())
@@ -3269,7 +3243,7 @@ pub mod utils {
             | UpdateConfigMode::UpdateMinLiquidationBonusBps
             | UpdateConfigMode::UpdateDeleveragingMarginCallPeriod
             | UpdateConfigMode::UpdateBorrowFactor
-            | UpdateConfigMode::UpdateAssetTier
+            | UpdateConfigMode::DeprecatedUpdateAssetTier
             | UpdateConfigMode::UpdateElevationGroup
             | UpdateConfigMode::UpdateDeleveragingThresholdDecreaseBpsPerDay
             | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
@@ -3424,16 +3398,6 @@ pub mod utils {
                 return err!(LendingError::InvalidConfig);
             }
         }
-        if config.get_asset_tier() == AssetTier::IsolatedDebt
-            && !(config.loan_to_value_pct == 0 && config.liquidation_threshold_pct == 0)
-        {
-            msg!("LTV ratio and liquidation threshold must be 0 for isolated debt assets");
-            return Err(LendingError::InvalidConfig.into());
-        }
-        if config.get_asset_tier() == AssetTier::IsolatedCollateral && config.borrow_limit != 0 {
-            msg!("Borrow limit must be 0 for isolated collateral assets");
-            return Err(LendingError::InvalidConfig.into());
-        }
         if config.borrow_limit_outside_elevation_group != u64::MAX
             && config.borrow_limit < config.borrow_limit_outside_elevation_group
         {
@@ -3493,68 +3457,6 @@ pub mod utils {
         }
 
         config.borrow_rate_curve.validate()?;
-        Ok(())
-    }
-
-    pub fn validate_obligation_asset_tiers(obligation: &Obligation) -> Result<()> {
-        let deposit_tiers = obligation.get_deposit_asset_tiers();
-
-        let borrow_tiers = obligation.get_borrows_asset_tiers();
-
-        let count_isolated_deposits = deposit_tiers
-            .iter()
-            .filter(|&tier| *tier == AssetTier::IsolatedCollateral)
-            .count();
-        let count_isolated_borrows = borrow_tiers
-            .iter()
-            .filter(|&tier| *tier == AssetTier::IsolatedDebt)
-            .count();
-
-        if count_isolated_deposits > 1 {
-            msg!("Cannot deposit more than one isolated collateral tier asset");
-            return Err(LendingError::IsolatedAssetTierViolation.into());
-        }
-
-        if count_isolated_borrows > 1 {
-            msg!("Cannot borrow more than one isolated debt tier asset");
-            return Err(LendingError::IsolatedAssetTierViolation.into());
-        }
-
-        if count_isolated_deposits > 0 && count_isolated_borrows > 0 {
-            msg!("Cannot borrow an isolated tier asset while depositing and isolated tier asset");
-            return Err(LendingError::IsolatedAssetTierViolation.into());
-        }
-
-        if deposit_tiers.len() > 1 && count_isolated_deposits > 0 {
-            msg!("Cannot deposit isolated collateral tier asset with other assets");
-            return Err(LendingError::IsolatedAssetTierViolation.into());
-        }
-
-        if borrow_tiers.len() > 1 && count_isolated_borrows > 0 {
-            msg!("Cannot borrow isolated debt tier asset with other assets");
-            return Err(LendingError::IsolatedAssetTierViolation.into());
-        }
-
-        if deposit_tiers
-            .iter()
-            .filter(|&tier| *tier == AssetTier::IsolatedDebt)
-            .count()
-            > 0
-        {
-            msg!("Cannot deposit an isolated debt tier asset");
-            return Err(LendingError::IsolatedAssetTierViolation.into());
-        }
-
-        if borrow_tiers
-            .iter()
-            .filter(|&tier| *tier == AssetTier::IsolatedCollateral)
-            .count()
-            > 0
-        {
-            msg!("Cannot borrow an isolated collateral tier asset");
-            return Err(LendingError::IsolatedAssetTierViolation.into());
-        }
-
         Ok(())
     }
 }

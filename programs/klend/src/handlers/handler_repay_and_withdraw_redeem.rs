@@ -8,8 +8,8 @@ use crate::{
     lending_market::lending_operations,
     refresh_farms,
     utils::seeds::pda,
-    LendingError, LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck, RefreshObligation,
-    RefreshObligationBumps, ReserveFarmKind,
+    LendingError, LtvMaxWithdrawalCheck, RefreshObligation, RefreshObligationBumps,
+    ReserveFarmKind,
 };
 
 pub fn process(
@@ -162,10 +162,7 @@ fn process_impl(
             bumps: RefreshObligationBumps {},
         };
 
-        handler_refresh_obligation::process(
-            refresh_obligation_ctx,
-            MaxReservesAsCollateralCheck::Perform,
-        )?;
+        handler_refresh_obligation::process(refresh_obligation_ctx)?;
 
         remaining_accounts
     };
@@ -227,10 +224,7 @@ fn process_impl(
             bumps: RefreshObligationBumps {},
         };
 
-        handler_refresh_obligation::process(
-            refresh_obligation_ctx,
-            MaxReservesAsCollateralCheck::Perform,
-        )?;
+        handler_refresh_obligation::process(refresh_obligation_ctx)?;
 
         let mut obligation = withdraw_accounts.obligation.load_mut()?;
         obligation.last_update.mark_stale();

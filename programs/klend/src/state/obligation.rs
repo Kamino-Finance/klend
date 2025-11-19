@@ -14,7 +14,7 @@ use crate::{
     utils::{
         BigFraction, Fraction, FractionExtra, IterExt, ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256,
     },
-    xmsg, AssetTier, BigFractionBytes, LendingError,
+    xmsg, BigFractionBytes, LendingError,
 };
 
 static_assertions::const_assert_eq!(OBLIGATION_SIZE, std::mem::size_of::<Obligation>());
@@ -52,9 +52,7 @@ pub struct Obligation {
     pub unhealthy_borrow_value_sf: u128,
 
 
-    pub deposits_asset_tiers: [u8; 8],
-
-    pub borrows_asset_tiers: [u8; 5],
+    pub padding_deprecated_asset_tiers: [u8; 13],
 
 
     pub elevation_group: u8,
@@ -111,10 +109,9 @@ impl Default for Obligation {
             borrowed_assets_market_value_sf: 0,
             allowed_borrow_value_sf: 0,
             unhealthy_borrow_value_sf: 0,
+            padding_deprecated_asset_tiers: [0; 13],
             lowest_reserve_deposit_liquidation_ltv: 0,
             borrow_factor_adjusted_debt_value_sf: 0,
-            deposits_asset_tiers: [u8::MAX; 8],
-            borrows_asset_tiers: [u8::MAX; 5],
             elevation_group: ELEVATION_GROUP_NONE,
             num_of_obsolete_deposit_reserves: 0,
             num_of_obsolete_borrow_reserves: 0,
@@ -192,8 +189,6 @@ impl Obligation {
         self.deposits = params.deposits;
         self.borrows = params.borrows;
         self.referrer = params.referrer;
-        self.deposits_asset_tiers = [u8::MAX; 8];
-        self.borrows_asset_tiers = [u8::MAX; 5];
     }
 
 
@@ -218,7 +213,6 @@ impl Obligation {
         let liquidity = &mut self.borrows[liquidity_index];
         if settle_amount == liquidity.borrowed_amount() {
             self.borrows[liquidity_index] = ObligationLiquidity::default();
-            self.borrows_asset_tiers[liquidity_index] = u8::MAX;
         } else {
             liquidity.repay(settle_amount);
         }
@@ -235,7 +229,6 @@ impl Obligation {
         let collateral = &mut self.deposits[collateral_index];
         if withdraw_amount == collateral.deposited_amount {
             self.deposits[collateral_index] = ObligationCollateral::default();
-            self.deposits_asset_tiers[collateral_index] = u8::MAX;
             Ok(WithdrawResult::Full)
         } else {
             collateral.withdraw(withdraw_amount)?;
@@ -312,7 +305,6 @@ impl Obligation {
     pub fn find_or_add_collateral_to_deposits(
         &mut self,
         deposit_reserve: Pubkey,
-        deposit_reserve_asset_tier: AssetTier,
     ) -> Result<(&mut ObligationCollateral, bool)> {
         if let Some(collateral_index) = self
             .deposits
@@ -323,7 +315,6 @@ impl Obligation {
         } else if let Some(collateral_index) = self.deposits.iter().position(|c| !c.is_active()) {
             let collateral = &mut self.deposits[collateral_index];
             *collateral = ObligationCollateral::new(deposit_reserve);
-            self.deposits_asset_tiers[collateral_index] = deposit_reserve_asset_tier.into();
             Ok((collateral, true))
         } else {
             xmsg!("Obligation has no empty deposits");
@@ -378,7 +369,6 @@ impl Obligation {
         &mut self,
         borrow_reserve: Pubkey,
         cumulative_borrow_rate: BigFraction,
-        borrow_reserve_asset_tier: AssetTier,
     ) -> Result<(&mut ObligationLiquidity, usize)> {
         if let Some(liquidity_index) = self.find_liquidity_index_in_borrows(borrow_reserve) {
             Ok((&mut self.borrows[liquidity_index], liquidity_index))
@@ -389,7 +379,6 @@ impl Obligation {
             .find(|c| !c.1.is_active())
         {
             *liquidity = ObligationLiquidity::new(borrow_reserve, cumulative_borrow_rate);
-            self.borrows_asset_tiers[index] = borrow_reserve_asset_tier.into();
 
             Ok((liquidity, index))
         } else {
@@ -438,34 +427,6 @@ impl Obligation {
 
     pub fn active_borrows_mut(&mut self) -> impl Iterator<Item = &mut ObligationLiquidity> {
         self.borrows.iter_mut().filter(|c| c.is_active())
-    }
-
-    pub fn get_deposit_asset_tiers(&self) -> Vec<AssetTier> {
-        self.deposits
-            .iter()
-            .enumerate()
-            .filter_map(|(index, deposit)| {
-                if deposit.is_active() && deposit.deposited_amount > 0 {
-                    Some(AssetTier::try_from(self.deposits_asset_tiers[index]).unwrap())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<AssetTier>>()
-    }
-
-    pub fn get_borrows_asset_tiers(&self) -> Vec<AssetTier> {
-        self.borrows
-            .iter()
-            .enumerate()
-            .filter_map(|(index, borrow)| {
-                if borrow.is_active() && borrow.borrowed_amount_sf > 0 {
-                    Some(AssetTier::try_from(self.borrows_asset_tiers[index]).unwrap())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<AssetTier>>()
     }
 
 
