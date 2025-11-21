@@ -1109,7 +1109,7 @@ pub struct ReserveConfig {
 
     pub status: u8,
 
-    pub asset_tier: u8,
+    pub padding_deprecated_asset_tier: u8,
 
     pub host_fixed_interest_rate_bps: u16,
 
@@ -1207,11 +1207,6 @@ pub struct ReserveConfig {
 }
 
 impl ReserveConfig {
-
-    pub fn get_asset_tier(&self) -> AssetTier {
-        AssetTier::try_from(self.asset_tier).unwrap()
-    }
-
 
     pub fn get_borrow_factor(&self) -> Fraction {
         max(
@@ -1535,22 +1530,6 @@ pub enum FeeCalculation {
     Exclusive,
 
     Inclusive,
-}
-
-#[derive(
-    AnchorSerialize,
-    AnchorDeserialize,
-    Debug,
-    PartialEq,
-    Eq,
-    num_enum::IntoPrimitive,
-    num_enum::TryFromPrimitive,
-)]
-#[repr(u8)]
-pub enum AssetTier {
-    Regular = 0,
-    IsolatedCollateral = 1,
-    IsolatedDebt = 2,
 }
 
 

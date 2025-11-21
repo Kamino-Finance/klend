@@ -14,7 +14,13 @@ pub fn process(
     ctx: Context<DepositAndWithdraw>,
     liquidity_amount: u64,
     withdraw_collateral_amount: u64,
+    final_max_reserves_as_collateral_check: MaxReservesAsCollateralCheck,
 ) -> Result<()> {
+    require_neq!(
+        ctx.accounts.deposit_accounts.reserve.key(),
+        ctx.accounts.withdraw_accounts.withdraw_reserve.key(),
+        LendingError::CannotUseSameReserve
+    );
     let initial_ltv = {
         let obligation = ctx.accounts.deposit_accounts.obligation.load()?;
        
@@ -60,10 +66,7 @@ pub fn process(
             bumps: RefreshObligationBumps {},
         };
 
-        handler_refresh_obligation::process(
-            refresh_obligation_ctx,
-            MaxReservesAsCollateralCheck::Skip,
-        )?;
+        handler_refresh_obligation::process(refresh_obligation_ctx)?;
     }
 
     let is_obligation_closed = {
@@ -127,10 +130,7 @@ pub fn process(
             bumps: RefreshObligationBumps {},
         };
 
-        handler_refresh_obligation::process(
-            refresh_obligation_ctx,
-            MaxReservesAsCollateralCheck::Perform,
-        )?;
+        handler_refresh_obligation::process(refresh_obligation_ctx)?;
 
         let mut obligation = ctx.accounts.withdraw_accounts.obligation.load_mut()?;
         obligation.last_update.mark_stale();
@@ -144,6 +144,7 @@ pub fn process(
             &withdraw_reserve,
             &lending_market,
             initial_ltv,
+            final_max_reserves_as_collateral_check,
         )?;
     }
 

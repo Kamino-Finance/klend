@@ -124,7 +124,7 @@ pub enum UpdateConfigMode {
     UpdateMinLiquidationBonusBps = 31,
     UpdateDeleveragingMarginCallPeriod = 32,
     UpdateBorrowFactor = 33,
-    UpdateAssetTier = 34,
+    DeprecatedUpdateAssetTier = 34,
     UpdateElevationGroup = 35,
     UpdateDeleveragingThresholdDecreaseBpsPerDay = 36,
     DeprecatedUpdateMultiplierSideBoost = 37,
