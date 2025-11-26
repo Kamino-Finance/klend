@@ -25,6 +25,10 @@ pub fn default_array<T: Default + Copy, const N: usize>() -> [T; N] {
     [T::default(); N]
 }
 
+pub fn filled_array<T: Copy, const N: usize>(fill: T) -> [T; N] {
+    [fill; N]
+}
+
 
 
 

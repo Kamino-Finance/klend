@@ -142,7 +142,7 @@ pub(super) fn process_impl(
             LendingAction::Subtractive(withdraw_liquidity_amount),
         )?;
 
-        obligation.active_deposits_empty() && obligation.active_borrows_empty()
+        obligation.is_active_deposits_empty() && obligation.is_active_borrows_empty()
     };
 
     close_account_loader(close_obligation, &accounts.owner, &accounts.obligation)?;

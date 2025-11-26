@@ -54,6 +54,7 @@ pub const fn bps_u128_to_fraction(bps: u128) -> Fraction {
     if bps == 10_000 {
         return Fraction::ONE;
     }
+   
     Fraction::const_from_int(bps).unwrapped_div_int(10_000)
 }
 
@@ -63,6 +64,7 @@ pub const fn pct_u128_to_fraction(percent: u128) -> Fraction {
     if percent == 100 {
         return Fraction::ONE;
     }
+   
     Fraction::const_from_int(percent).unwrapped_div_int(100)
 }
 

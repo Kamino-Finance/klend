@@ -10,11 +10,12 @@ use derivative::Derivative;
 
 use super::{LastUpdate, LtvMaxWithdrawalCheck};
 use crate::{
-    order_operations::{ConditionType, OpportunityType},
+    obligation_order_operations::{ConditionType, OpportunityType},
     utils::{
-        BigFraction, Fraction, FractionExtra, IterExt, ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256,
+        accounts::default_array, BigFraction, Fraction, FractionExtra, IterExt,
+        ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256,
     },
-    xmsg, BigFractionBytes, LendingError,
+    xmsg, BigFractionBytes, LendingError, ReserveConfig,
 };
 
 static_assertions::const_assert_eq!(OBLIGATION_SIZE, std::mem::size_of::<Obligation>());
@@ -90,10 +91,14 @@ pub struct Obligation {
 
 
 
-    pub orders: [ObligationOrder; 2],
+    pub obligation_orders: [ObligationOrder; 2],
+
+
+
+    pub borrow_order: BorrowOrder,
 
     #[derivative(Debug = "ignore")]
-    pub padding_3: [u64; 93],
+    pub padding_3: [u64; 73],
 }
 
 impl Default for Obligation {
@@ -103,13 +108,13 @@ impl Default for Obligation {
             last_update: LastUpdate::default(),
             lending_market: Pubkey::default(),
             owner: Pubkey::default(),
-            deposits: [ObligationCollateral::default(); 8],
-            borrows: [ObligationLiquidity::default(); 5],
+            deposits: default_array(),
+            borrows: default_array(),
             deposited_value_sf: 0,
             borrowed_assets_market_value_sf: 0,
             allowed_borrow_value_sf: 0,
             unhealthy_borrow_value_sf: 0,
-            padding_deprecated_asset_tiers: [0; 13],
+            padding_deprecated_asset_tiers: default_array(),
             lowest_reserve_deposit_liquidation_ltv: 0,
             borrow_factor_adjusted_debt_value_sf: 0,
             elevation_group: ELEVATION_GROUP_NONE,
@@ -119,12 +124,13 @@ impl Default for Obligation {
             borrowing_disabled: 0,
             highest_borrow_factor_pct: 0,
             lowest_reserve_deposit_max_ltv_pct: 0,
-            reserved: [0; 4],
-            padding_3: [0; 93],
+            reserved: default_array(),
+            padding_3: default_array(),
             referrer: Pubkey::default(),
             autodeleverage_target_ltv_pct: 0,
             autodeleverage_margin_call_started_timestamp: 0,
-            orders: [ObligationOrder::default(); 2],
+            obligation_orders: default_array(),
+            borrow_order: Default::default(),
         }
     }
 }
@@ -288,7 +294,7 @@ impl Obligation {
         &self,
         deposit_reserve: Pubkey,
     ) -> Result<&ObligationCollateral> {
-        if self.active_deposits_empty() {
+        if self.is_active_deposits_empty() {
             xmsg!("Obligation has no deposits");
             return err!(LendingError::ObligationDepositsEmpty);
         }
@@ -323,7 +329,7 @@ impl Obligation {
     }
 
     pub fn position_of_collateral_in_deposits(&self, deposit_reserve: Pubkey) -> Result<usize> {
-        if self.active_deposits_empty() {
+        if self.is_active_deposits_empty() {
             xmsg!("Obligation has no deposits");
             return err!(LendingError::ObligationDepositsEmpty);
         }
@@ -338,7 +344,7 @@ impl Obligation {
         &self,
         borrow_reserve: Pubkey,
     ) -> Result<(&ObligationLiquidity, usize)> {
-        if self.active_borrows_empty() {
+        if self.is_active_borrows_empty() {
             xmsg!("Obligation has no borrows");
             return err!(LendingError::ObligationBorrowsEmpty);
         }
@@ -353,7 +359,7 @@ impl Obligation {
         &mut self,
         borrow_reserve: Pubkey,
     ) -> Result<(&mut ObligationLiquidity, usize)> {
-        if self.active_borrows_empty() {
+        if self.is_active_borrows_empty() {
             xmsg!("Obligation has no borrows");
             return err!(LendingError::ObligationBorrowsEmpty);
         }
@@ -369,6 +375,7 @@ impl Obligation {
         &mut self,
         borrow_reserve: Pubkey,
         cumulative_borrow_rate: BigFraction,
+        current_timestamp: u64,
     ) -> Result<(&mut ObligationLiquidity, usize)> {
         if let Some(liquidity_index) = self.find_liquidity_index_in_borrows(borrow_reserve) {
             Ok((&mut self.borrows[liquidity_index], liquidity_index))
@@ -378,7 +385,8 @@ impl Obligation {
             .enumerate()
             .find(|c| !c.1.is_active())
         {
-            *liquidity = ObligationLiquidity::new(borrow_reserve, cumulative_borrow_rate);
+            *liquidity =
+                ObligationLiquidity::new(borrow_reserve, cumulative_borrow_rate, current_timestamp);
 
             Ok((liquidity, index))
         } else {
@@ -393,13 +401,13 @@ impl Obligation {
             .position(|liquidity| liquidity.borrow_reserve == borrow_reserve)
     }
 
-    pub fn active_deposits_empty(&self) -> bool {
+    pub fn is_active_deposits_empty(&self) -> bool {
        
        
         self.deposits.iter().all(|deposit| !deposit.is_active())
     }
 
-    pub fn active_borrows_empty(&self) -> bool {
+    pub fn is_active_borrows_empty(&self) -> bool {
        
        
         self.borrows.iter().all(|borrow| !borrow.is_active())
@@ -469,11 +477,7 @@ impl Obligation {
     }
 
     pub fn update_has_debt(&mut self) {
-        if self.active_borrows_empty() {
-            self.has_debt = 0;
-        } else {
-            self.has_debt = 1;
-        }
+        self.has_debt = u8::from(!self.is_active_borrows_empty());
     }
 
 
@@ -633,7 +637,17 @@ pub struct ObligationLiquidity {
     pub borrow_reserve: Pubkey,
 
     pub cumulative_borrow_rate_bsf: BigFractionBytes,
-    pub padding: u64,
+
+
+
+
+
+
+
+
+
+    pub first_borrowed_at_timestamp: u64,
+
 
     pub borrowed_amount_sf: u128,
 
@@ -649,16 +663,20 @@ pub struct ObligationLiquidity {
 
 impl ObligationLiquidity {
 
-    pub fn new(borrow_reserve: Pubkey, cumulative_borrow_rate_bf: BigFraction) -> Self {
+    pub fn new(
+        borrow_reserve: Pubkey,
+        cumulative_borrow_rate_bf: BigFraction,
+        first_borrowed_at_timestamp: u64,
+    ) -> Self {
         Self {
             borrow_reserve,
             cumulative_borrow_rate_bsf: cumulative_borrow_rate_bf.into(),
-            padding: 0,
+            first_borrowed_at_timestamp,
             borrowed_amount_sf: 0,
             market_value_sf: 0,
             borrow_factor_adjusted_market_value_sf: 0,
             borrowed_amount_outside_elevation_groups: 0,
-            padding2: [0; 7],
+            padding2: default_array(),
         }
     }
 
@@ -719,6 +737,27 @@ impl ObligationLiquidity {
 
     pub fn borrowed_amount(&self) -> Fraction {
         Fraction::from_bits(self.borrowed_amount_sf)
+    }
+
+
+
+    pub fn get_secs_since_reserve_debt_term_end(
+        &self,
+        reserve_config: &ReserveConfig,
+        timestamp: u64,
+    ) -> Option<u64> {
+        let Some(debt_term_seconds) = reserve_config.get_debt_term_seconds() else {
+            return None;
+        };
+        if self.first_borrowed_at_timestamp == 0 {
+            xmsg!(
+                "Debt reserve has a debt term of {} seconds, but an Obligation did not track its first borrow timestamp; ignoring it",
+                debt_term_seconds,
+            );
+            return None;
+        }
+        let debt_term_end_timestamp = self.first_borrowed_at_timestamp + debt_term_seconds;
+        timestamp.checked_sub(debt_term_end_timestamp)
     }
 }
 
@@ -918,5 +957,93 @@ impl ObligationOrder {
     pub fn is_active(&self) -> bool {
         self.condition_type != 0
     }
+}
+
+
+
+
+
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Default, PartialEq, Eq)]
+#[zero_copy]
+#[repr(C)]
+pub struct BorrowOrder {
+
+
+    pub debt_liquidity_mint: Pubkey,
+
+
+    pub remaining_debt_amount: u64,
+
+
+
+    pub filled_debt_destination: Pubkey,
+
+
+
+
+
+    pub min_debt_term_seconds: u64,
+
+
+    pub fillable_until_timestamp: u64,
+
+
+
+    pub placed_at_timestamp: u64,
+
+
+
+    pub last_updated_at_timestamp: u64,
+
+
+
+
+
+    pub requested_debt_amount: u64,
+
+
+
+
+    pub max_borrow_rate_bps: u32,
+
+
+    pub padding1: [u8; 4],
+
+
+    pub end_padding: [u64; 5],
+}
+
+impl BorrowOrder {
+
+    pub fn get_min_debt_term_seconds(&self) -> Option<u64> {
+        if self.min_debt_term_seconds == 0 {
+            return None;
+        }
+        Some(self.min_debt_term_seconds)
+    }
+
+
+    pub fn clear_if_past_fillable_timestamp(&mut self, timestamp: u64) {
+        if self != &Default::default() && self.fillable_until_timestamp < timestamp {
+            xmsg!(
+                "Clearing expired borrow order - fillable until {}",
+                self.fillable_until_timestamp
+            );
+            *self = Default::default();
+        }
+    }
+}
+
+
+
+#[derive(Clone, Debug)]
+pub struct BorrowOrderConfig {
+    pub debt_liquidity_mint: Pubkey,
+    pub remaining_debt_amount: u64,
+    pub filled_debt_destination: Pubkey,
+    pub max_borrow_rate_bps: u32,
+    pub min_debt_term_seconds: u64,
+    pub fillable_until_timestamp: u64,
 }
 

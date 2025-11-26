@@ -43,7 +43,7 @@ pub fn process(
     let clock = Clock::get()?;
     lending_operations::refresh_reserve(reserve, &clock, None, market.referral_fee_bps)?;
 
-    lending_operations::update_reserve_config(reserve, mode, value)?;
+    lending_operations::update_reserve_config(reserve, mode, value, &clock)?;
 
     if skip_config_integrity_validation {
         require!(

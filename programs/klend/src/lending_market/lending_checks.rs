@@ -190,6 +190,7 @@ pub fn redeem_reserve_collateral_checks(accounts: &RedeemReserveCollateralAccoun
         msg!("Reserve collateral supply cannot be used as the source collateral provided");
         return err!(LendingError::InvalidAccountInput);
     }
+   
     if reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
         msg!("Reserve liquidity supply cannot be used as the destination liquidity provided");
         return err!(LendingError::InvalidAccountInput);
@@ -261,6 +262,7 @@ pub fn withdraw_obligation_collateral_checks(
         msg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
+   
     if withdraw_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
         msg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
         return err!(LendingError::InvalidAccountInput);
@@ -455,7 +457,7 @@ pub fn validate_referrer_token_state(
     mint: Pubkey,
     owner_referrer: Pubkey,
     reserve_key: Pubkey,
-) -> anchor_lang::Result<()> {
+) -> Result<()> {
     if referrer_token_state.mint == Pubkey::default()
         || referrer_token_state.referrer == Pubkey::default()
     {

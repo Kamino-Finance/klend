@@ -34,9 +34,9 @@ solana_security_txt::security_txt! {
 pub mod kamino_lending {
     use super::*;
 
-   
     pub fn init_lending_market(
         ctx: Context<InitLendingMarket>,
+
         quote_currency: [u8; 32],
     ) -> Result<()> {
         handler_init_lending_market::process(ctx, quote_currency)
@@ -83,7 +83,6 @@ pub mod kamino_lending {
         handler_seed_deposit_on_init_reserve::process(ctx)
     }
 
-   
     #[deprecated(
         since = "1.8.0",
         note = "Please use `_v2` variant of the handler instead"
@@ -103,7 +102,6 @@ pub mod kamino_lending {
         handler_mark_obligation_for_deleveraging::process(ctx, autodeleverage_target_ltv_pct)
     }
 
-   
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
         handler_refresh_reserve::process(ctx)
@@ -415,6 +413,26 @@ pub mod kamino_lending {
         handler_set_obligation_order::process(ctx, index, order)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn set_borrow_order(
+        ctx: Context<SetBorrowOrder>,
+        order_config: BorrowOrderConfigArgs,
+        min_expected_current_remaining_debt_amount: u64,
+    ) -> Result<()> {
+        handler_set_borrow_order::process(
+            ctx,
+            order_config,
+            min_expected_current_remaining_debt_amount,
+        )
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.borrow_accounts.lending_market))]
+    pub fn fill_borrow_order<'info>(
+        ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>,
+    ) -> Result<()> {
+        handler_fill_borrow_order::process(ctx)
+    }
+
     pub fn init_global_config(ctx: Context<InitGlobalConfig>) -> Result<()> {
         handler_init_global_config::process(ctx)
     }
@@ -718,7 +736,24 @@ pub enum LendingError {
     CannotUseSameReserve,
     #[msg("Transaction includes restricted programs")]
     TransactionIncludesRestrictedPrograms,
+    #[msg("There is no borrow order requesting debt in the given asset")]
+    BorrowOrderDebtLiquidityMintMismatch,
+    #[msg("Reserve used for fill exceeds the maximum borrow rate specified by the order")]
+    BorrowOrderMaxBorrowRateExceeded,
+    #[msg("Reserve used for fill defines a debt term shorter than specified by the order")]
+    BorrowOrderMinDebtTermInsufficient,
+    #[msg("Borrow order can no longer be filled")]
+    BorrowOrderFillTimeLimitExceeded,
+    #[msg("Cannot borrow from a reserve that reached its debt maturity timestamp")]
+    ReserveDebtMaturityReached,
+    #[msg("Some piece of the order's configuration cannot be updated (the order should be cancelled and placed again)")]
+    NonUpdatableOrderConfiguration,
+    #[msg("Execution of borrow orders is disabled")]
+    BorrowOrderExecutionDisabled,
+    #[msg("Cannot increase the debt that has reached its end of term configured by the reserve")]
+    DebtReachedReserveDebtTerm,
+    #[msg("The on-chain state does not meet expectation specified by the caller, so the operation must be aborted (to avoid race conditions)")]
+    ExpectationNotMet,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
-

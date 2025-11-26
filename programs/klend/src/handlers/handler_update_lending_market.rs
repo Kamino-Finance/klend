@@ -162,8 +162,30 @@ pub fn process(
                 .validating(validations::check_bool)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateMatureReserveDebtLiquidationEnabled => {
+            config_items::for_named_field!(&mut market.mature_reserve_debt_liquidation_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateObligationBorrowDebtTermLiquidationEnabled => {
+            config_items::for_named_field!(
+                &mut market.obligation_borrow_debt_term_liquidation_enabled
+            )
+            .validating(validations::check_bool)
+            .set(&value)?;
+        }
         UpdateLendingMarketMode::UpdateProposerAuthority => {
             config_items::for_named_field!(&mut market.proposer_authority).set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateBorrowOrderCreationEnabled => {
+            config_items::for_named_field!(&mut market.borrow_order_creation_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateBorrowOrderExecutionEnabled => {
+            config_items::for_named_field!(&mut market.borrow_order_execution_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdatePriceTriggeredLiquidationDisabled => {
             config_items::for_named_field!(&mut market.price_triggered_liquidation_disabled)

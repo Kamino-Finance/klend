@@ -29,9 +29,9 @@ pub mod token_2022 {
     use anchor_lang::err;
     use anchor_spl::{
         token::spl_token,
-        token_2022::{
-            spl_token_2022::extension::confidential_transfer::EncryptedBalance,
-            spl_token_2022::{self, state::AccountState as DefaultAccountState},
+        token_2022::spl_token_2022::{
+            self, extension::confidential_transfer::EncryptedBalance,
+            state::AccountState as DefaultAccountState,
         },
         token_interface::spl_token_2022::extension::{
             BaseStateWithExtensions, ExtensionType, StateWithExtensions,

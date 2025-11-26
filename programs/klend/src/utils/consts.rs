@@ -36,6 +36,8 @@ pub const FULL_BPS: u16 = 10_000;
 pub const UNINITIALIZED_VERSION: u8 = 0;
 
 
+
+
 pub const INITIAL_COLLATERAL_RATIO: u64 = 1;
 pub const INITIAL_COLLATERAL_RATE: CollateralExchangeRate = CollateralExchangeRate::ONE;
 
@@ -74,7 +76,7 @@ pub const NULL_PUBKEY: solana_program::pubkey::Pubkey =
 pub const LENDING_MARKET_SIZE: usize = 4656;
 pub const RESERVE_SIZE: usize = 8616;
 pub const OBLIGATION_SIZE: usize = 3336;
-pub const RESERVE_CONFIG_SIZE: usize = 920;
+pub const RESERVE_CONFIG_SIZE: usize = 936;
 pub const REFERRER_TOKEN_STATE_SIZE: usize = 352;
 pub const USER_METADATA_SIZE: usize = 1024;
 pub const REFERRER_STATE_SIZE: usize = 64;

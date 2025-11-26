@@ -150,12 +150,24 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub price_triggered_liquidation_disabled: u8,
 
-    #[cfg_attr(
-        feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_array")
-    )]
-    #[derivative(Debug = "ignore")]
-    pub padding2: [u8; 4],
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub mature_reserve_debt_liquidation_enabled: u8,
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub obligation_borrow_debt_term_liquidation_enabled: u8,
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub borrow_order_creation_enabled: u8,
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub borrow_order_execution_enabled: u8,
 
 
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
@@ -202,8 +214,11 @@ impl Default for LendingMarket {
             obligation_order_execution_enabled: 0,
             immutable: 0,
             obligation_order_creation_enabled: 0,
+            mature_reserve_debt_liquidation_enabled: 0,
+            obligation_borrow_debt_term_liquidation_enabled: 0,
+            borrow_order_creation_enabled: 0,
+            borrow_order_execution_enabled: 0,
             proposer_authority: Pubkey::default(),
-            padding2: default_array(),
             padding1: default_array(),
         }
     }
@@ -260,6 +275,22 @@ impl LendingMarket {
 
     pub fn is_obligation_order_creation_enabled(&self) -> bool {
         self.obligation_order_creation_enabled != false as u8
+    }
+
+    pub fn is_mature_reserve_debt_liquidation_enabled(&self) -> bool {
+        self.mature_reserve_debt_liquidation_enabled != false as u8
+    }
+
+    pub fn is_obligation_borrow_debt_term_liquidation_enabled(&self) -> bool {
+        self.obligation_borrow_debt_term_liquidation_enabled != false as u8
+    }
+
+    pub fn is_borrow_order_creation_enabled(&self) -> bool {
+        self.borrow_order_creation_enabled != false as u8
+    }
+
+    pub fn is_borrow_order_execution_enabled(&self) -> bool {
+        self.borrow_order_execution_enabled != false as u8
     }
 
     pub fn is_immutable(&self) -> bool {

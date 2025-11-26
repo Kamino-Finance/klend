@@ -1,16 +1,19 @@
+pub mod borrow_order_operations;
+pub mod events;
 pub mod global_config;
 pub mod last_update;
 pub mod lending_market;
 pub mod liquidation_operations;
 pub mod nested_accounts;
 pub mod obligation;
-pub mod order_operations;
+pub mod obligation_order_operations;
 pub mod referral;
 pub mod reserve;
 pub mod token_info;
 pub mod types;
 
 use anchor_lang::prelude::*;
+pub use events::*;
 pub use global_config::*;
 pub use last_update::*;
 pub use lending_market::*;
@@ -144,6 +147,8 @@ pub enum UpdateConfigMode {
     UpdateProposerAuthorityLock = 51,
     UpdateMinDeleveragingBonusBps = 52,
     UpdateBlockCTokenUsage = 53,
+    UpdateDebtMaturityTimestamp = 54,
+    UpdateDebtTermSeconds = 55,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -236,6 +241,10 @@ pub enum UpdateLendingMarketMode {
     UpdateObligationOrderCreationEnabled = 24,
     UpdateProposerAuthority = 25,
     UpdatePriceTriggeredLiquidationDisabled = 26,
+    UpdateMatureReserveDebtLiquidationEnabled = 27,
+    UpdateObligationBorrowDebtTermLiquidationEnabled = 28,
+    UpdateBorrowOrderCreationEnabled = 29,
+    UpdateBorrowOrderExecutionEnabled = 30,
 }
 
 #[cfg(feature = "serde")]

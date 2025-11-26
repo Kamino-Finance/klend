@@ -8,6 +8,7 @@ pub const BASE_SEED_USER_METADATA: &[u8] = b"user_meta";
 pub const BASE_SEED_REFERRER_STATE: &[u8] = b"ref_state";
 pub const BASE_SEED_SHORT_URL: &[u8] = b"short_url";
 pub const GLOBAL_CONFIG_STATE: &[u8] = b"global_config";
+pub const EVENT_AUTHORITY: &[u8] = b"__event_authority";
 
 pub mod pda {
     use anchor_lang::prelude::Pubkey;
@@ -85,6 +86,12 @@ pub mod pda {
             ],
             &crate::ID,
         )
+    }
+
+    pub fn event_authority() -> Pubkey {
+        let (event_authority, _) = Pubkey::find_program_address(&[EVENT_AUTHORITY], &crate::ID);
+
+        event_authority
     }
 }
 
