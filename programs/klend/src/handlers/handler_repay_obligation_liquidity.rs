@@ -8,11 +8,11 @@ use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
 use crate::{
     check_refresh_ixs,
     handler_refresh_obligation_farms_for_reserve::*,
-    lending_market::{lending_checks, lending_operations},
+    lending_market::{ix_utils, lending_checks, lending_operations},
     refresh_farms,
     state::{obligation::Obligation, LendingMarket, Reserve},
     utils::{seeds, token_transfer, FatAccountLoader},
-    xmsg, LendingAction, ReserveFarmKind,
+    xmsg, LendingAction, LendingError, ReserveFarmKind,
 };
 
 pub fn process_v1(ctx: Context<RepayObligationLiquidity>, liquidity_amount: u64) -> Result<()> {
@@ -56,7 +56,6 @@ where
     'info: 'a,
 {
     lending_checks::repay_obligation_liquidity_checks(accounts)?;
-
     let clock = Clock::get()?;
 
     let repay_reserve = &mut accounts.repay_reserve.load_mut()?;
@@ -147,7 +146,10 @@ pub struct RepayObligationLiquidity<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 
     /// CHECK: Syvar Instruction allowing introspection, fixed address
-    #[account(address = SysInstructions::id())]
+    #[account(
+        address = SysInstructions::id(),
+        constraint = ix_utils::no_restricted_programs_within_tx(&instruction_sysvar_account)? @ LendingError::TransactionIncludesRestrictedPrograms
+    )]
     pub instruction_sysvar_account: AccountInfo<'info>,
    
 }

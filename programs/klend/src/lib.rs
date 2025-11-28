@@ -716,6 +716,8 @@ pub enum LendingError {
     CTokenUsageBlocked,
     #[msg("Cannot call ix with same reserve")]
     CannotUseSameReserve,
+    #[msg("Transaction includes restricted programs")]
+    TransactionIncludesRestrictedPrograms,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
