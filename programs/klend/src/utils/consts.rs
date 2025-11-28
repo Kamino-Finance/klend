@@ -218,3 +218,6 @@ impl CpiWhitelistedAccount {
         }
     }
 }
+
+pub const RESTRICTED_PROGRAMS: [Pubkey; 1] =
+    [pubkey!("jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi")];
