@@ -34,9 +34,10 @@ solana_security_txt::security_txt! {
 pub mod kamino_lending {
     use super::*;
 
+   
     pub fn init_lending_market(
         ctx: Context<InitLendingMarket>,
-
+       
         quote_currency: [u8; 32],
     ) -> Result<()> {
         handler_init_lending_market::process(ctx, quote_currency)
@@ -83,6 +84,7 @@ pub mod kamino_lending {
         handler_seed_deposit_on_init_reserve::process(ctx)
     }
 
+   
     #[deprecated(
         since = "1.8.0",
         note = "Please use `_v2` variant of the handler instead"
@@ -102,6 +104,7 @@ pub mod kamino_lending {
         handler_mark_obligation_for_deleveraging::process(ctx, autodeleverage_target_ltv_pct)
     }
 
+   
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn refresh_reserve(ctx: Context<RefreshReserve>) -> Result<()> {
         handler_refresh_reserve::process(ctx)
@@ -757,3 +760,4 @@ pub enum LendingError {
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
+
