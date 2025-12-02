@@ -148,7 +148,7 @@ pub struct RepayObligationLiquidity<'info> {
     /// CHECK: Syvar Instruction allowing introspection, fixed address
     #[account(
         address = SysInstructions::id(),
-        constraint = ix_utils::no_restricted_programs_within_tx(&instruction_sysvar_account)? @ LendingError::TransactionIncludesRestrictedPrograms
+        // constraint = ix_utils::no_restricted_programs_within_tx(&instruction_sysvar_account)? @ LendingError::TransactionIncludesRestrictedPrograms
     )]
     pub instruction_sysvar_account: AccountInfo<'info>,
    
