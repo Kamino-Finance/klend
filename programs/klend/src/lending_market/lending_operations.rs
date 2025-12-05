@@ -2110,27 +2110,6 @@ pub fn update_reserve_config(
         UpdateConfigMode::UpdateBorrowRateCurve => {
             config_items::for_named_field!(&mut reserve.config.borrow_rate_curve).set(value)?;
         }
-        UpdateConfigMode::UpdateEntireReserveConfig => {
-           
-           
-            msg!(
-                r"Updating entire reserve config, fields `protocol_take_rate_pct`, 
-                `protocol_liquidation_fee_pct`, `protocol_order_execution_fee_pct` and 
-                `host_fixed_interest_rate_bps` will remain unchanged"
-            );
-            let old_protocol_take_rate_pct = reserve.config.protocol_take_rate_pct;
-            let old_protocol_liquidation_fee_pct = reserve.config.protocol_liquidation_fee_pct;
-            let old_host_fixed_interest_rate_bps = reserve.config.host_fixed_interest_rate_bps;
-            let old_protocol_order_execution_fee_pct =
-                reserve.config.protocol_order_execution_fee_pct;
-
-            config_items::for_named_field!(&mut reserve.config).set(value)?;
-
-            reserve.config.protocol_take_rate_pct = old_protocol_take_rate_pct;
-            reserve.config.protocol_liquidation_fee_pct = old_protocol_liquidation_fee_pct;
-            reserve.config.host_fixed_interest_rate_bps = old_host_fixed_interest_rate_bps;
-            reserve.config.protocol_order_execution_fee_pct = old_protocol_order_execution_fee_pct;
-        }
         UpdateConfigMode::UpdateDebtWithdrawalCap => {
            
             config_items::for_named_field!(&mut reserve.config.debt_withdrawal_cap.config_capacity)
@@ -2287,6 +2266,7 @@ pub fn update_reserve_config(
         | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
         | UpdateConfigMode::DeprecatedUpdateDebtWithdrawalCapCurrentTotal
         | UpdateConfigMode::DeprecatedUpdateAssetTier
+        | UpdateConfigMode::DeprecatedUpdateEntireReserveConfig
         | UpdateConfigMode::DeprecatedUpdateDepositWithdrawalCapCurrentTotal => {
             panic!("Deprecated endpoint")
         }
@@ -3348,7 +3328,7 @@ pub mod utils {
             | UpdateConfigMode::UpdateSwitchboardFeed
             | UpdateConfigMode::UpdateSwitchboardTwapFeed
             | UpdateConfigMode::UpdateBorrowRateCurve
-            | UpdateConfigMode::UpdateEntireReserveConfig
+            | UpdateConfigMode::DeprecatedUpdateEntireReserveConfig
             | UpdateConfigMode::UpdateDebtWithdrawalCap
             | UpdateConfigMode::UpdateDepositWithdrawalCap
             | UpdateConfigMode::DeprecatedUpdateDebtWithdrawalCapCurrentTotal

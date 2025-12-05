@@ -118,7 +118,7 @@ pub enum UpdateConfigMode {
     UpdateSwitchboardFeed = 22,
     UpdateSwitchboardTwapFeed = 23,
     UpdateBorrowRateCurve = 24,
-    UpdateEntireReserveConfig = 25,
+    DeprecatedUpdateEntireReserveConfig = 25,
     UpdateDebtWithdrawalCap = 26,
     UpdateDepositWithdrawalCap = 27,
     DeprecatedUpdateDebtWithdrawalCapCurrentTotal = 28,
