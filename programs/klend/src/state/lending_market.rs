@@ -12,7 +12,7 @@ use crate::{
         accounts::default_array, CLOSE_TO_INSOLVENCY_RISKY_LTV, DEFAULT_MIN_DEPOSIT_AMOUNT,
         ELEVATION_GROUP_NONE, GLOBAL_ALLOWED_BORROW_VALUE, LENDING_MARKET_SIZE,
         LIQUIDATION_CLOSE_FACTOR, LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE,
-        MIN_NET_VALUE_IN_OBLIGATION, PROGRAM_VERSION,
+        MIN_BORROW_ORDER_FILL_VALUE, MIN_NET_VALUE_IN_OBLIGATION, PROGRAM_VERSION,
     },
     LendingError,
 };
@@ -173,12 +173,18 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
     pub proposer_authority: Pubkey,
 
+
+
+   
+   
+    pub min_borrow_order_fill_value: u64,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 165],
+    pub padding1: [u64; 164],
 }
 
 impl Default for LendingMarket {
@@ -219,6 +225,7 @@ impl Default for LendingMarket {
             borrow_order_creation_enabled: 0,
             borrow_order_execution_enabled: 0,
             proposer_authority: Pubkey::default(),
+            min_borrow_order_fill_value: MIN_BORROW_ORDER_FILL_VALUE,
             padding1: default_array(),
         }
     }

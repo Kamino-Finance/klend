@@ -245,6 +245,7 @@ pub enum UpdateLendingMarketMode {
     UpdateObligationBorrowDebtTermLiquidationEnabled = 28,
     UpdateBorrowOrderCreationEnabled = 29,
     UpdateBorrowOrderExecutionEnabled = 30,
+    UpdateMinBorrowOrderFillValue = 31,
 }
 
 #[cfg(feature = "serde")]
@@ -252,9 +253,23 @@ pub mod serde_iter {
     use strum::IntoEnumIterator;
 
     use super::*;
+
+
+
+    const PRIORITIZED_UPDATE_MODES: &[UpdateLendingMarketMode] = &[
+        UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue,
+    ];
+
     impl UpdateLendingMarketMode {
-        pub fn iter_without_deprecated() -> impl Iterator<Item = Self> {
-            Self::iter().filter(|mode| !mode.is_deprecated())
+
+
+        pub fn iter_for_batch_update() -> impl Iterator<Item = Self> {
+            let non_prioritized_update_modes =
+                Self::iter().filter(|mode| !mode.is_deprecated() && !mode.is_prioritized());
+            PRIORITIZED_UPDATE_MODES
+                .iter()
+                .cloned()
+                .chain(non_prioritized_update_modes)
         }
 
         pub fn is_deprecated(&self) -> bool {
@@ -263,6 +278,11 @@ pub mod serde_iter {
                 UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints
                     | UpdateLendingMarketMode::DeprecatedUpdateGlobalUnhealthyBorrow
             )
+        }
+
+
+        pub fn is_prioritized(&self) -> bool {
+            PRIORITIZED_UPDATE_MODES.contains(self)
         }
     }
 }

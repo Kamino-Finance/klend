@@ -757,6 +757,8 @@ pub enum LendingError {
     DebtReachedReserveDebtTerm,
     #[msg("The on-chain state does not meet expectation specified by the caller, so the operation must be aborted (to avoid race conditions)")]
     ExpectationNotMet,
+    #[msg("Available liquidity could not satisfy the minimum required borrow order fill value")]
+    BorrowOrderFillValueTooSmall,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

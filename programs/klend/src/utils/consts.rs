@@ -51,6 +51,9 @@ pub const LIQUIDATION_CLOSE_VALUE: u64 = 2;
 pub const MAX_LIQUIDATABLE_VALUE_AT_ONCE: u64 = 500_000;
 
 
+pub const MIN_BORROW_ORDER_FILL_VALUE: u64 = 2;
+
+
 pub const NO_DELEVERAGING_MARKER: u8 = u8::MAX;
 
 

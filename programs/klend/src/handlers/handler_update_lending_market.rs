@@ -186,6 +186,19 @@ pub fn process(
             config_items::for_named_field!(&mut market.borrow_order_execution_enabled)
                 .validating(validations::check_bool)
                 .set(&value)?;
+
+           
+           
+            if market.is_borrow_order_execution_enabled() && market.min_borrow_order_fill_value == 0
+            {
+                msg!("Cannot enable borrow order execution before configuring min_borrow_order_fill_value");
+                return err!(LendingError::InvalidConfig);
+            }
+        }
+        UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue => {
+            config_items::for_named_field!(&mut market.min_borrow_order_fill_value)
+                .validating(validations::check_not_zero)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdatePriceTriggeredLiquidationDisabled => {
             config_items::for_named_field!(&mut market.price_triggered_liquidation_disabled)

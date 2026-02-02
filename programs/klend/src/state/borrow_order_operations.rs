@@ -4,10 +4,11 @@ use anchor_lang::{err, Result};
 use solana_program::{clock::Clock, msg};
 
 use crate::{
-    utils::{accounts::default_array, EventEmitter},
+    lending_market::utils::calculate_market_value_from_liquidity_amount,
+    utils::{accounts::default_array, EventEmitter, Fraction, FractionExtra},
     BorrowOrder, BorrowOrderCancelEvent, BorrowOrderConfig, BorrowOrderFullFillEvent,
     BorrowOrderPartialFillEvent, BorrowOrderPlaceEvent, BorrowOrderUpdateEvent, LendingError,
-    LendingMarket, ReserveConfig,
+    LendingMarket, Reserve,
 };
 
 
@@ -69,7 +70,7 @@ pub fn set_borrow_order(
 
 pub fn fill_borrow_order(
     lending_market: &LendingMarket,
-    reserve_config: &ReserveConfig,
+    reserve: &Reserve,
     borrow_order: &mut BorrowOrder,
     clock: &Clock,
     amount: u64,
@@ -78,7 +79,7 @@ pub fn fill_borrow_order(
     check_borrow_order_execution_enabled(lending_market)?;
 
    
-    let reserve_max_borrow_rate_bps = reserve_config.max_borrow_rate_bps();
+    let reserve_max_borrow_rate_bps = reserve.config.max_borrow_rate_bps();
     if reserve_max_borrow_rate_bps > borrow_order.max_borrow_rate_bps {
         msg!(
             "Cannot use reserve with max borrow rate of {} bps on an order requesting max {} bps",
@@ -91,11 +92,11 @@ pub fn fill_borrow_order(
    
     if !is_term_satisfied(
         borrow_order.get_min_debt_term_seconds(),
-        reserve_config.get_debt_term_seconds(),
+        reserve.config.get_debt_term_seconds(),
     ) {
         msg!(
             "Cannot use reserve with debt term of {} seconds on an order requesting min {} seconds",
-            reserve_config.debt_term_seconds,
+            reserve.config.debt_term_seconds,
             borrow_order.min_debt_term_seconds
         );
         return err!(LendingError::BorrowOrderMinDebtTermInsufficient);
@@ -106,7 +107,8 @@ pub fn fill_borrow_order(
    
    
     let seconds_until_reserve_debt_maturity =
-        reserve_config
+        reserve
+            .config
             .get_debt_maturity_timestamp()
             .map(|reserve_debt_maturity_timestamp| {
                 reserve_debt_maturity_timestamp.saturating_sub(current_timestamp)
@@ -119,7 +121,7 @@ pub fn fill_borrow_order(
     ) {
         msg!(
             "Cannot use reserve with debt maturity timestamp {} (i.e. in {:?} seconds) on an order requesting min {} seconds",
-            reserve_config.debt_maturity_timestamp,
+            reserve.config.debt_maturity_timestamp,
             seconds_until_reserve_debt_maturity,
             borrow_order.min_debt_term_seconds,
         );
@@ -134,6 +136,22 @@ pub fn fill_borrow_order(
             borrow_order.fillable_until_timestamp
         );
         return err!(LendingError::BorrowOrderFillTimeLimitExceeded);
+    }
+
+   
+    if amount < borrow_order.remaining_debt_amount {
+       
+        let fill_value =
+            calculate_market_value_from_liquidity_amount(reserve, Fraction::from_num(amount));
+        if fill_value < lending_market.min_borrow_order_fill_value {
+            msg!(
+                "Filled amount {} would have value {}, lower than the configured minimum {}",
+                amount,
+                fill_value.to_display(),
+                lending_market.min_borrow_order_fill_value
+            );
+            return err!(LendingError::BorrowOrderFillValueTooSmall);
+        }
     }
 
     let borrow_order_initial_state = *borrow_order;

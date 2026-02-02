@@ -56,7 +56,7 @@ fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>)
    
     borrow_order_operations::fill_borrow_order(
         lending_market.deref(),
-        &borrow_reserve.config,
+        &borrow_reserve,
         &mut obligation.borrow_order,
         clock,
         fill_amount,
