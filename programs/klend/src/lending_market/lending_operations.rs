@@ -2019,13 +2019,13 @@ pub fn update_reserve_config(
         }
         UpdateConfigMode::UpdateFeesOriginationFee => {
             config_items::for_named_field!(&mut reserve.config.fees.origination_fee_sf)
-                .validating(validations::check_lte(Fraction::ONE.to_bits()))
+                .validating(check_proper_fraction)
                 .rendering(renderings::as_fraction)
                 .set(value)?;
         }
         UpdateConfigMode::UpdateFeesFlashLoanFee => {
             config_items::for_named_field!(&mut reserve.config.fees.flash_loan_fee_sf)
-                .validating(validations::check_lte(Fraction::ONE.to_bits()))
+                .validating(check_proper_fraction_or_max)
                 .rendering(renderings::as_fraction)
                 .set(value)?;
         }
@@ -2318,6 +2318,19 @@ fn check_not_set_in_the_past(subject_timestamp: u64, clock: &Clock) -> Result<()
         return err!(LendingError::InvalidConfig);
     }
     Ok(())
+}
+
+
+fn check_proper_fraction(sf: &u64) -> Result<()> {
+    validations::check_lte(Fraction::ONE.to_bits())(sf)
+}
+
+
+fn check_proper_fraction_or_max(sf: &u64) -> Result<()> {
+    if *sf == u64::MAX {
+        return Ok(());
+    }
+    check_proper_fraction(sf)
 }
 
 pub mod utils {
