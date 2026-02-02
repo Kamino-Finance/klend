@@ -1,5 +1,6 @@
 use anchor_lang::{prelude::*, Accounts};
 use anchor_spl::token_interface::{Mint, TokenAccount};
+use solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId};
 
 use crate::{
     borrow_order_operations, utils::ctx_event_emitter, BorrowOrderConfig, LendingError,
@@ -65,6 +66,10 @@ pub struct SetBorrowOrder<'info> {
 
    
     pub debt_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }
 
 

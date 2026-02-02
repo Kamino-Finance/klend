@@ -2,6 +2,7 @@ use std::ops::Deref;
 
 use anchor_lang::{prelude::*, Accounts};
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId};
 
 use super::handler_refresh_obligation_farms_for_reserve::*;
 use crate::{
@@ -78,6 +79,7 @@ impl<'info> From<FillBorrowOrderAccounts<'info>> for BorrowObligationLiquidity<'
             user_destination_liquidity,
             referrer_token_state,
             token_program,
+            instruction_sysvar_account,
         } = accounts;
 
        
@@ -88,11 +90,6 @@ impl<'info> From<FillBorrowOrderAccounts<'info>> for BorrowObligationLiquidity<'
        
        
         let owner = payer.clone();
-
-       
-       
-       
-        let instruction_sysvar_account = payer.to_account_info();
 
        
        
@@ -184,6 +181,10 @@ pub struct FillBorrowOrderAccounts<'info> {
 
 
     pub token_program: Interface<'info, TokenInterface>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }
 
 #[event_cpi]
