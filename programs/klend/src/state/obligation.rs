@@ -1008,7 +1008,15 @@ pub struct BorrowOrder {
     pub max_borrow_rate_bps: u32,
 
 
-    pub padding1: [u8; 4],
+
+
+
+
+
+    pub active: u8,
+
+
+    pub padding1: [u8; 3],
 
 
     pub end_padding: [u64; 5],

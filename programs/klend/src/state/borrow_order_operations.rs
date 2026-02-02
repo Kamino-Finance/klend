@@ -244,6 +244,7 @@ fn initialize_borrow_order(
 
    
     *borrow_order = BorrowOrder {
+        active: true as u8,
         debt_liquidity_mint,
         remaining_debt_amount,
         filled_debt_destination,
@@ -269,6 +270,7 @@ fn update_borrow_order_config(
    
    
     let BorrowOrder {
+        active: _,
         debt_liquidity_mint: current_debt_liquidity_mint,
         remaining_debt_amount: current_remaining_debt_amount,
         filled_debt_destination: current_filled_debt_destination,
