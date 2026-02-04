@@ -1,10 +1,11 @@
-use super::{accounts, spltoken};
 use anchor_lang::{prelude::*, AccountsClose, Owner, Result, ToAccountInfo, ZeroCopy};
 use anchor_spl::{
     token_2022::spl_token_2022::extension::ExtensionType,
     token_interface::{Mint, TokenInterface},
 };
 use solana_program::msg;
+
+use super::{accounts, spltoken};
 
 pub fn close_account_loader<'info, T: ZeroCopy + Owner>(
     close_account: bool,

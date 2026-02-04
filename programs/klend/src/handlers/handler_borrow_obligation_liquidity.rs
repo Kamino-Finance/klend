@@ -27,17 +27,22 @@ pub fn process_v1<'info>(
         ctx.accounts.borrow_reserve,
         ReserveFarmKind::Debt
     );
-    process_impl(ctx.accounts, ctx.remaining_accounts, liquidity_amount)
+    borrow_obligation_liquidity_process_impl(
+        ctx.accounts,
+        ctx.remaining_accounts,
+        BorrowSize::exact_or_all_available(liquidity_amount),
+    )?;
+    Ok(())
 }
 
 pub fn process_v2<'info>(
     ctx: Context<'_, '_, '_, 'info, BorrowObligationLiquidityV2<'info>>,
     liquidity_amount: u64,
 ) -> Result<()> {
-    process_impl(
+    borrow_obligation_liquidity_process_impl(
         &ctx.accounts.borrow_accounts,
         ctx.remaining_accounts,
-        liquidity_amount,
+        BorrowSize::exact_or_all_available(liquidity_amount),
     )?;
     refresh_farms!(
         ctx.accounts.borrow_accounts,
@@ -50,12 +55,12 @@ pub fn process_v2<'info>(
     Ok(())
 }
 
-fn process_impl<'info>(
+pub fn borrow_obligation_liquidity_process_impl<'info>(
     accounts: &BorrowObligationLiquidity<'info>,
     remaining_accounts: &[AccountInfo<'info>],
-    liquidity_amount: u64,
-) -> Result<()> {
-    msg!("liquidity_amount {}", liquidity_amount);
+    borrow_size: BorrowSize,
+) -> Result<u64> {
+    msg!("borrow_size {:?}", borrow_size);
     lending_checks::borrow_obligation_liquidity_checks(accounts)?;
 
     let borrow_reserve = &mut accounts.borrow_reserve.load_mut()?;
@@ -106,7 +111,7 @@ fn process_impl<'info>(
         lending_market,
         borrow_reserve,
         obligation,
-        BorrowSize::exact_or_all_available(liquidity_amount),
+        borrow_size,
         clock,
         accounts.borrow_reserve.key(),
         referrer_token_state_option,
@@ -152,7 +157,7 @@ fn process_impl<'info>(
         LendingAction::Subtractive(origination_fee + receive_amount),
     )?;
 
-    Ok(())
+    Ok(receive_amount)
 }
 
 #[derive(Accounts)]

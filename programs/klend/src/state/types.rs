@@ -1,4 +1,6 @@
-use crate::{utils::Fraction, LendingMarket, Obligation, PriceStatusFlags, Reserve};
+use crate::{
+    utils::Fraction, LendingMarket, Obligation, ObligationLiquidity, PriceStatusFlags, Reserve,
+};
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,9 +23,6 @@ pub enum BorrowSize {
 
     AllAvailable,
 
-   
-   
-   
 
     AtMost(u64),
 }
@@ -108,6 +107,12 @@ pub enum LiquidationReason {
 
 
     ObligationOrder(usize),
+
+
+    ReserveDebtMaturityReached,
+
+
+    ObligationBorrowDebtTermReached,
 }
 
 
@@ -146,6 +151,7 @@ pub struct LiquidateAndRedeemResult {
 pub struct LiquidationCheckInputs<'l> {
     pub lending_market: &'l LendingMarket,
     pub collateral_reserve: &'l Reserve,
+    pub liquidity: &'l ObligationLiquidity,
     pub debt_reserve: &'l Reserve,
     pub obligation: &'l Obligation,
     pub timestamp: u64,
@@ -180,6 +186,15 @@ pub struct RefreshObligationBorrowsResult {
 
     pub borrowed_amount_in_elevation_group: Option<u64>,
     pub num_of_obsolete_reserves: u8,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WithdrawAndRedeemResult {
+
+    pub close_obligation: bool,
+
+    pub withdraw_liquidity_amount: u64,
 }
 
 pub enum LendingAction {

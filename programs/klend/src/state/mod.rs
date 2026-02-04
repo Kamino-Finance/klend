@@ -1,16 +1,19 @@
+pub mod borrow_order_operations;
+pub mod events;
 pub mod global_config;
 pub mod last_update;
 pub mod lending_market;
 pub mod liquidation_operations;
 pub mod nested_accounts;
 pub mod obligation;
-pub mod order_operations;
+pub mod obligation_order_operations;
 pub mod referral;
 pub mod reserve;
 pub mod token_info;
 pub mod types;
 
 use anchor_lang::prelude::*;
+pub use events::*;
 pub use global_config::*;
 pub use last_update::*;
 pub use lending_market::*;
@@ -144,6 +147,8 @@ pub enum UpdateConfigMode {
     UpdateProposerAuthorityLock = 51,
     UpdateMinDeleveragingBonusBps = 52,
     UpdateBlockCTokenUsage = 53,
+    UpdateDebtMaturityTimestamp = 54,
+    UpdateDebtTermSeconds = 55,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -236,6 +241,11 @@ pub enum UpdateLendingMarketMode {
     UpdateObligationOrderCreationEnabled = 24,
     UpdateProposerAuthority = 25,
     UpdatePriceTriggeredLiquidationDisabled = 26,
+    UpdateMatureReserveDebtLiquidationEnabled = 27,
+    UpdateObligationBorrowDebtTermLiquidationEnabled = 28,
+    UpdateBorrowOrderCreationEnabled = 29,
+    UpdateBorrowOrderExecutionEnabled = 30,
+    UpdateMinBorrowOrderFillValue = 31,
 }
 
 #[cfg(feature = "serde")]
@@ -243,9 +253,23 @@ pub mod serde_iter {
     use strum::IntoEnumIterator;
 
     use super::*;
+
+
+
+    const PRIORITIZED_UPDATE_MODES: &[UpdateLendingMarketMode] = &[
+        UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue,
+    ];
+
     impl UpdateLendingMarketMode {
-        pub fn iter_without_deprecated() -> impl Iterator<Item = Self> {
-            Self::iter().filter(|mode| !mode.is_deprecated())
+
+
+        pub fn iter_for_batch_update() -> impl Iterator<Item = Self> {
+            let non_prioritized_update_modes =
+                Self::iter().filter(|mode| !mode.is_deprecated() && !mode.is_prioritized());
+            PRIORITIZED_UPDATE_MODES
+                .iter()
+                .cloned()
+                .chain(non_prioritized_update_modes)
         }
 
         pub fn is_deprecated(&self) -> bool {
@@ -254,6 +278,11 @@ pub mod serde_iter {
                 UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints
                     | UpdateLendingMarketMode::DeprecatedUpdateGlobalUnhealthyBorrow
             )
+        }
+
+
+        pub fn is_prioritized(&self) -> bool {
+            PRIORITIZED_UPDATE_MODES.contains(self)
         }
     }
 }

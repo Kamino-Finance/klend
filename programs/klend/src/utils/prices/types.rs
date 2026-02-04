@@ -95,4 +95,3 @@ pub(super) struct TimestampedPriceWithTwap {
     pub twap: Option<TimestampedPrice>,
 }
 
-

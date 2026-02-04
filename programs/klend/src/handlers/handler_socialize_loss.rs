@@ -14,6 +14,29 @@ use crate::{
     ReserveFarmKind,
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 pub fn process_v1(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
     check_refresh_ixs!(ctx.accounts, ctx.accounts.reserve, ReserveFarmKind::Debt);
     process_impl(ctx.accounts, ctx.remaining_accounts, liquidity_amount)

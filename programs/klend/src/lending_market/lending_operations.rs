@@ -25,7 +25,7 @@ use crate::{
     approximate_compounded_interest,
     fraction::FractionExtra,
     lending_market::config_items::{renderings, validations},
-    liquidation_operations, order_operations,
+    liquidation_operations, obligation_order_operations,
     state::{CalculateBorrowResult, CalculateLiquidationResult, CalculateRepayResult, Reserve},
     utils::{
         consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction, Fraction, GetPriceResult,
@@ -209,6 +209,22 @@ where
         return err!(LendingError::ObligationInObsoleteReserve);
     }
 
+    let current_timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+
+   
+   
+   
+    if let Some(secs_since_debt_maturity_reached) = borrow_reserve
+        .config
+        .get_secs_since_debt_maturity_reached(current_timestamp)
+    {
+        msg!(
+            "Cannot borrow from a reserve that reached its debt maturity {} seconds ago",
+            secs_since_debt_maturity_reached
+        );
+        return err!(LendingError::ReserveDebtMaturityReached);
+    }
+
     let current_utilization = borrow_reserve.liquidity.utilization_rate();
     let reserve_liquidity_borrowed_f = borrow_reserve.liquidity.total_borrow();
     let borrow_limit_f = Fraction::from(borrow_reserve.config.borrow_limit);
@@ -248,12 +264,18 @@ where
     )?;
 
     let borrow_amount = borrow_amount_f.to_ceil();
-    msg!("Requested {:?}, allowed {}", borrow_size, borrow_amount);
+    msg!(
+        "Requested: {:?}, calculated: borrow_amount_f {}, receive_amount {}",
+        borrow_size,
+        borrow_amount_f.to_display(),
+        receive_amount
+    );
 
+    let current_timestamp = u64::try_from(clock.unix_timestamp).unwrap();
     add_to_withdrawal_accum(
         &mut borrow_reserve.config.debt_withdrawal_cap,
         borrow_amount,
-        u64::try_from(clock.unix_timestamp).unwrap(),
+        current_timestamp,
     )?;
 
     if receive_amount == 0 {
@@ -271,8 +293,23 @@ where
 
     let borrow_index = {
        
-        let (obligation_liquidity, borrow_index) = obligation
-            .find_or_add_liquidity_to_borrows(borrow_reserve_pk, cumulative_borrow_rate_bf)?;
+        let (obligation_liquidity, borrow_index) = obligation.find_or_add_liquidity_to_borrows(
+            borrow_reserve_pk,
+            cumulative_borrow_rate_bf,
+            current_timestamp,
+        )?;
+
+       
+       
+        if let Some(secs_since_debt_term_end) = obligation_liquidity
+            .get_secs_since_reserve_debt_term_end(&borrow_reserve.config, current_timestamp)
+        {
+            msg!(
+                "Obligation borrow's debt term has been reached {} seconds ago, cannot borrow more",
+                secs_since_debt_term_end
+            );
+            return err!(LendingError::DebtReachedReserveDebtTerm);
+        }
 
         obligation_liquidity.borrow(borrow_amount_f);
 
@@ -291,7 +328,7 @@ where
         }
     }
 
-    order_operations::check_orders_supported_after_user_operation(obligation)?;
+    obligation_order_operations::check_orders_supported_after_user_operation(obligation)?;
 
     obligation.has_debt = 1;
     obligation.last_update.mark_stale();
@@ -411,7 +448,7 @@ pub fn deposit_obligation_collateral(
 
         Fraction::from_bits(obligation_collateral.market_value_sf)
     };
-    order_operations::check_orders_supported_after_user_operation(obligation)?;
+    obligation_order_operations::check_orders_supported_after_user_operation(obligation)?;
 
     obligation.last_update.mark_stale();
 
@@ -446,7 +483,7 @@ pub fn withdraw_obligation_collateral(
         return err!(LendingError::InvalidAmount);
     }
 
-    let is_borrows_empty = obligation.active_borrows_empty();
+    let is_borrows_empty = obligation.is_active_borrows_empty();
 
     let required_price_status = if is_borrows_empty {
         PriceStatusFlags::NONE
@@ -727,10 +764,12 @@ where
     repay_reserve.last_update.mark_stale();
 
     obligation.repay(settle_amount, liquidity_index);
+
     obligation.update_has_debt();
+    utils::clear_obligation_orders_if_no_debt(obligation);
     obligation.last_update.mark_stale();
 
-    order_operations::check_orders_supported_after_user_operation(obligation)?;
+    obligation_order_operations::check_orders_supported_after_user_operation(obligation)?;
 
    
 
@@ -1155,6 +1194,8 @@ where
                         .contains(&elevation_group.id),
                     LendingError::InconsistentElevationGroup
                 );
+               
+               
                 require_keys_eq!(
                     borrow_reserve_info_key,
                     elevation_group.debt_reserve,
@@ -1246,7 +1287,7 @@ pub fn refresh_obligation<'info, T, U>(
     program_id: &Pubkey,
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
-    slot: Slot,
+    clock: &Clock,
     mut deposit_reserves_iter: impl Iterator<Item = T>,
     mut borrow_reserves_iter: impl Iterator<Item = T>,
     mut referrer_token_states_iter: impl Iterator<Item = U>,
@@ -1255,6 +1296,9 @@ where
     T: AnyAccountLoader<'info, Reserve>,
     U: AnyAccountLoader<'info, ReferrerTokenState>,
 {
+    let timestamp = clock.unix_timestamp.try_into().expect("negative timestamp");
+    let slot = clock.slot;
+
    
     let elevation_group = get_elevation_group(obligation.elevation_group, lending_market)?;
 
@@ -1316,6 +1360,10 @@ where
 
     obligation.borrowing_disabled = borrowing_disabled.into();
     obligation.highest_borrow_factor_pct = highest_borrow_factor_pct;
+
+    obligation
+        .borrow_order
+        .clear_if_past_fillable_timestamp(timestamp);
 
     let prices_state = deposits_prices_state.intersection(borrows_prices_state);
     obligation.last_update.update_slot(slot, Some(prices_state));
@@ -1500,14 +1548,8 @@ where
        
         if let LiquidationReason::ObligationOrder(obligation_order_index) = liquidation_reason {
            
-            let order = &mut obligation.orders[obligation_order_index];
+            let order = &mut obligation.obligation_orders[obligation_order_index];
             order.consume(repay_amount);
-        }
-    } else {
-       
-        let obligation_had_orders = order_operations::remove_all_orders(obligation);
-        if obligation_had_orders {
-            xmsg!("Liquidation has left the obligation with no debt; removing all its orders");
         }
     }
 
@@ -1560,7 +1602,9 @@ pub(crate) fn post_liquidate_redeem(
         let protocol_liquidation_fee_pct = match liquidation_reason {
             LiquidationReason::LtvExceeded
             | LiquidationReason::IndividualDeleveraging
-            | LiquidationReason::MarketWideDeleveraging => {
+            | LiquidationReason::MarketWideDeleveraging
+            | LiquidationReason::ReserveDebtMaturityReached
+            | LiquidationReason::ObligationBorrowDebtTermReached => {
                 withdraw_reserve.config.protocol_liquidation_fee_pct
             }
             LiquidationReason::ObligationOrder(_) => {
@@ -1708,12 +1752,12 @@ where
         return Err(LendingError::ObligationStale.into());
     }
 
-    if !obligation.active_deposits_empty() {
+    if !obligation.is_active_deposits_empty() {
         msg!("Obligation hasn't been fully liquidated!");
         return Err(LendingError::CannotSocializeObligationWithCollateral.into());
     }
 
-    if obligation.active_deposits_empty() && obligation.active_borrows_empty() {
+    if obligation.is_active_deposits_empty() && obligation.is_active_borrows_empty() {
         msg!("Obligation has no deposits or borrows");
         return Err(LendingError::ObligationEmpty.into());
     }
@@ -1749,16 +1793,9 @@ where
     reserve.last_update.mark_stale();
 
     obligation.repay(forgive_amount_f, liquidity_index);
-    obligation.update_has_debt();
-    if !obligation.has_debt() {
-       
-       
-        let obligation_had_orders = order_operations::remove_all_orders(obligation);
-        if obligation_had_orders {
-            msg!("Socializing loss has left the obligation with no debt; removing all its orders");
-        }
-    }
 
+    obligation.update_has_debt();
+    utils::clear_obligation_orders_if_no_debt(obligation);
     obligation.last_update.mark_stale();
 
     Ok(forgive_amount_f)
@@ -1946,7 +1983,9 @@ pub fn update_reserve_config(
     reserve: &mut Reserve,
     mode: UpdateConfigMode,
     value: &[u8],
+    clock: &Clock,
 ) -> Result<()> {
+   
     match mode {
         UpdateConfigMode::UpdateLoanToValuePct => {
             config_items::for_named_field!(&mut reserve.config.loan_to_value_pct)
@@ -2215,9 +2254,27 @@ pub fn update_reserve_config(
                 .validating(validations::check_valid_bps)
                 .set(value)?;
         }
+        UpdateConfigMode::UpdateDebtMaturityTimestamp => {
+            config_items::for_named_field!(&mut reserve.config.debt_maturity_timestamp)
+                .validating(|timestamp| check_not_set_in_the_past(*timestamp, clock))
+                .set(value)?;
+        }
         UpdateConfigMode::UpdateProposerAuthorityLock => {
             config_items::for_named_field!(&mut reserve.config.proposer_authority_locked)
                 .validating(validations::check_bool)
+                .set(value)?;
+        }
+        UpdateConfigMode::UpdateDebtTermSeconds => {
+            let reserve_has_borrows = reserve.liquidity.borrowed_amount_sf > 0;
+            let previous_debt_term_seconds = reserve.config.get_debt_term_seconds();
+            config_items::for_named_field!(&mut reserve.config.debt_term_seconds)
+                .validating(|new_debt_term_seconds| {
+                    check_debt_term_not_shortened_on_reserve_having_borrows(
+                        previous_debt_term_seconds,
+                        Some(*new_debt_term_seconds).filter(|non_zero| *non_zero > 0),
+                        reserve_has_borrows,
+                    )
+                })
                 .set(value)?;
         }
         UpdateConfigMode::UpdateBlockCTokenUsage => {
@@ -2236,6 +2293,50 @@ pub fn update_reserve_config(
     }
 
     reserve.last_update.mark_stale();
+    Ok(())
+}
+
+
+
+fn check_debt_term_not_shortened_on_reserve_having_borrows(
+    previous_debt_term_seconds: Option<u64>,
+    new_debt_term_seconds: Option<u64>,
+    reserve_has_borrows: bool,
+) -> Result<()> {
+    if !reserve_has_borrows {
+        return Ok(());
+    }
+    let Some(new_debt_term_seconds) = new_debt_term_seconds else {
+        return Ok(());
+    };
+    let Some(previous_debt_term_seconds) = previous_debt_term_seconds else {
+        msg!(
+            "Cannot introduce debt term of {} seconds on a reserve with active borrows",
+            new_debt_term_seconds
+        );
+        return err!(LendingError::InvalidConfig);
+    };
+    if new_debt_term_seconds < previous_debt_term_seconds {
+        msg!(
+            "Cannot shorten the debt term from {} seconds down to {} seconds on a reserve with active borrows",
+            previous_debt_term_seconds, new_debt_term_seconds
+        );
+        return err!(LendingError::InvalidConfig);
+    }
+    Ok(())
+}
+
+
+fn check_not_set_in_the_past(subject_timestamp: u64, clock: &Clock) -> Result<()> {
+    let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+    if subject_timestamp != 0 && subject_timestamp < timestamp {
+        msg!(
+            "Timestamp must not be set in the past; got {} < current timestamp {}",
+            subject_timestamp,
+            timestamp
+        );
+        return err!(LendingError::InvalidConfig);
+    }
     Ok(())
 }
 
@@ -2274,7 +2375,9 @@ pub mod utils {
 
         obligation.repay(settle_amount, liquidity_index);
         obligation.withdraw(withdraw_amount, collateral_index)?;
+
         obligation.update_has_debt();
+        clear_obligation_orders_if_no_debt(obligation);
         obligation.last_update.mark_stale();
 
         Ok(())
@@ -2507,7 +2610,7 @@ pub mod utils {
             }
 
            
-            if !obligation.active_borrows_empty() {
+            if !obligation.is_active_borrows_empty() {
                 check_non_elevation_group_borrowing_enabled(obligation)?;
             }
         }
@@ -2709,6 +2812,17 @@ pub mod utils {
         }
        
         Ok(())
+    }
+
+
+
+    pub fn clear_obligation_orders_if_no_debt(obligation: &mut Obligation) {
+        if !obligation.has_debt() {
+            let obligation_had_orders = obligation_order_operations::remove_all_orders(obligation);
+            if obligation_had_orders {
+                xmsg!("All obligation's debts were cleared; removing all its orders");
+            }
+        }
     }
 
     pub fn check_non_elevation_group_borrowing_enabled(obligation: &Obligation) -> Result<()> {
@@ -3132,7 +3246,7 @@ pub mod utils {
         );
             return err!(LendingError::ObligationStale);
         }
-        if obligation.active_deposits_empty() {
+        if obligation.is_active_deposits_empty() {
             msg!("Obligation has no deposits to borrow against");
             return err!(LendingError::ObligationDepositsEmpty);
         }
@@ -3259,6 +3373,8 @@ pub mod utils {
             | UpdateConfigMode::UpdateAutodeleverageEnabled
             | UpdateConfigMode::UpdateDeleveragingBonusIncreaseBpsPerDay
             | UpdateConfigMode::UpdateMinDeleveragingBonusBps
+            | UpdateConfigMode::UpdateDebtMaturityTimestamp
+            | UpdateConfigMode::UpdateDebtTermSeconds
             | UpdateConfigMode::UpdateProposerAuthorityLock => false,
         }
     }

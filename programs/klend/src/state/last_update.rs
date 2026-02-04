@@ -112,11 +112,6 @@ impl LastUpdate {
             || !is_price_status_ok)
     }
 
-
-    pub fn is_marked_stale(&self) -> bool {
-        self.stale != (false as u8)
-    }
-
     pub fn get_price_status(&self) -> PriceStatusFlags {
         PriceStatusFlags::from_bits_truncate(self.price_status)
     }
@@ -133,4 +128,6 @@ impl PartialOrd for LastUpdate {
         self.slot.partial_cmp(&other.slot)
     }
 }
+
+
 

@@ -87,7 +87,7 @@ pub struct Reserve {
     pub config: ReserveConfig,
 
     #[derivative(Debug = "ignore")]
-    pub config_padding: [u64; 116],
+    pub config_padding: [u64; 114],
 
     pub borrowed_amount_outside_elevation_group: u64,
 
@@ -344,6 +344,7 @@ impl Reserve {
                
                 if borrow_exact_result == err!(LendingError::BorrowTooLarge)
                     || borrow_exact_result == err!(LendingError::BorrowLimitExceeded)
+                    || borrow_exact_result == err!(LendingError::InsufficientLiquidity)
                 {
                     self.calculate_borrow_all_available(
                         max_borrow_factor_adjusted_debt_value,
@@ -435,6 +436,16 @@ impl Reserve {
                 remaining_reserve_borrow.to_display(),
             );
             return err!(LendingError::BorrowLimitExceeded);
+        }
+        let reserve_available_liquidity_f = Fraction::from(self.liquidity.available_amount);
+        if borrow_amount_f > reserve_available_liquidity_f {
+            msg!(
+                "Borrowing {} (after fees: {}) would exceed the reserve's remaining liquidity {}",
+                receive_amount,
+                borrow_amount_f.to_display(),
+                reserve_available_liquidity_f.to_display(),
+            );
+            return err!(LendingError::InsufficientLiquidity);
         }
         Ok(CalculateBorrowResult {
             borrow_amount_f,
@@ -739,6 +750,7 @@ impl ReserveLiquidity {
     pub fn utilization_rate(&self) -> Fraction {
         let total_supply = self.total_supply();
         if total_supply == Fraction::ZERO {
+           
             return Fraction::ZERO;
         }
         Fraction::from_bits(self.borrowed_amount_sf) / total_supply
@@ -1204,6 +1216,21 @@ pub struct ReserveConfig {
 
 
     pub deleveraging_bonus_increase_bps_per_day: u64,
+
+
+
+
+
+
+
+    pub debt_maturity_timestamp: u64,
+
+
+
+
+
+
+    pub debt_term_seconds: u64,
 }
 
 impl ReserveConfig {
@@ -1226,6 +1253,45 @@ impl ReserveConfig {
 
     pub fn is_ctoken_usage_blocked(&self) -> bool {
         self.block_ctoken_usage != false as u8
+    }
+
+
+    pub fn get_debt_term_seconds(&self) -> Option<u64> {
+        if self.debt_term_seconds == 0 {
+            None
+        } else {
+            Some(self.debt_term_seconds)
+        }
+    }
+
+
+    pub fn get_debt_maturity_timestamp(&self) -> Option<u64> {
+        if self.debt_maturity_timestamp == 0 {
+            return None;
+        }
+        Some(self.debt_maturity_timestamp)
+    }
+
+
+
+
+
+
+    pub fn get_secs_since_debt_maturity_reached(&self, current_timestamp: u64) -> Option<u64> {
+        self.get_debt_maturity_timestamp()
+            .and_then(|debt_maturity_timestamp| {
+                current_timestamp.checked_sub(debt_maturity_timestamp)
+            })
+    }
+
+
+    pub fn max_borrow_rate_bps(&self) -> u32 {
+        self.borrow_rate_curve
+            .points
+            .iter()
+            .map(|point| point.borrow_rate_bps)
+            .max()
+            .expect("curve has a static >0 length")
     }
 }
 
@@ -1580,8 +1646,6 @@ pub fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fr
 
     Fraction::ONE + first_term + second_term + third_term
 }
-
-
 
 
 

@@ -162,8 +162,43 @@ pub fn process(
                 .validating(validations::check_bool)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateMatureReserveDebtLiquidationEnabled => {
+            config_items::for_named_field!(&mut market.mature_reserve_debt_liquidation_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateObligationBorrowDebtTermLiquidationEnabled => {
+            config_items::for_named_field!(
+                &mut market.obligation_borrow_debt_term_liquidation_enabled
+            )
+            .validating(validations::check_bool)
+            .set(&value)?;
+        }
         UpdateLendingMarketMode::UpdateProposerAuthority => {
             config_items::for_named_field!(&mut market.proposer_authority).set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateBorrowOrderCreationEnabled => {
+            config_items::for_named_field!(&mut market.borrow_order_creation_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateBorrowOrderExecutionEnabled => {
+            config_items::for_named_field!(&mut market.borrow_order_execution_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+
+           
+           
+            if market.is_borrow_order_execution_enabled() && market.min_borrow_order_fill_value == 0
+            {
+                msg!("Cannot enable borrow order execution before configuring min_borrow_order_fill_value");
+                return err!(LendingError::InvalidConfig);
+            }
+        }
+        UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue => {
+            config_items::for_named_field!(&mut market.min_borrow_order_fill_value)
+                .validating(validations::check_not_zero)
+                .set(&value)?;
         }
         UpdateLendingMarketMode::UpdatePriceTriggeredLiquidationDisabled => {
             config_items::for_named_field!(&mut market.price_triggered_liquidation_disabled)

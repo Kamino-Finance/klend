@@ -137,7 +137,7 @@ pub fn find_applicable_obligation_order(
     obligation: &Obligation,
     price_triggered_liquidation_disabled: bool,
 ) -> Option<ApplicableObligationOrder> {
-    for (order_index, order) in obligation.orders.iter().enumerate() {
+    for (order_index, order) in obligation.obligation_orders.iter().enumerate() {
         if let Some(condition_hit) =
             evaluate_order_condition(collateral_reserve, debt_reserve, obligation, order)
         {
@@ -165,13 +165,13 @@ pub fn find_applicable_obligation_order(
 
 pub fn check_orders_supported_after_user_operation(obligation: &mut Obligation) -> Result<()> {
     let has_unsupported_orders = obligation
-        .orders
+        .obligation_orders
         .iter()
         .any(|order| !order.is_supported_by(obligation));
     if has_unsupported_orders {
        
         let unsupported_orders = obligation
-            .orders
+            .obligation_orders
             .iter()
             .filter(|order| !order.is_supported_by(obligation))
             .collect::<Vec<_>>();
@@ -191,7 +191,7 @@ pub fn check_orders_supported_after_user_operation(obligation: &mut Obligation) 
 
 pub fn remove_all_orders(obligation: &mut Obligation) -> bool {
     let mut had_orders = false;
-    for order in obligation.orders.iter_mut() {
+    for order in obligation.obligation_orders.iter_mut() {
        
         if order != &ObligationOrder::default() {
             *order = ObligationOrder::default();
@@ -217,21 +217,21 @@ pub fn set_order_on_obligation(
     }
 
     let index = usize::from(index);
-    if index >= obligation.orders.len() {
+    if index >= obligation.obligation_orders.len() {
         msg!(
             "Obligation may have at most {} orders; got index {}",
-            obligation.orders.len(),
+            obligation.obligation_orders.len(),
             index
         );
         return err!(LendingError::OrderIndexOutOfBounds);
     }
 
-    let previous_order = &mut obligation.orders[index];
+    let previous_order = &mut obligation.obligation_orders[index];
     if !previous_order.is_active()
         && order.is_active()
         && !lending_market.is_obligation_order_creation_enabled()
     {
-        msg!("Creation of new orders is disabled by the market's configuration");
+        msg!("Creation of new obligation orders is disabled by the market's configuration");
         return err!(LendingError::OrderCreationDisabled);
     }
 
@@ -314,7 +314,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             if order.condition_threshold() != Fraction::default() {
                 msg!(
                     "An unconditional order should use zeroed condition threshold; got {}",
-                    order.condition_threshold()
+                    order.condition_threshold().to_display()
                 );
                 return err!(LendingError::InvalidOrderConfiguration);
             }
@@ -322,8 +322,8 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             if bonus_range.start() != bonus_range.end() {
                 msg!(
                     "An unconditional order should define a constant bonus; got range [{}; {}]",
-                    bonus_range.start(),
-                    bonus_range.end()
+                    bonus_range.start().to_display(),
+                    bonus_range.end().to_display(),
                 );
                 return err!(LendingError::InvalidOrderConfiguration);
             }
@@ -340,9 +340,9 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             if !VALID_DIFF_TO_LIQUIDATION_LTV_RANGE.contains(&order.condition_threshold()) {
                 msg!(
                     "Invalid difference to liquidation LTV {}; should be in range [{}; {})",
-                    order.condition_threshold(),
-                    VALID_USER_LTV_RANGE.start,
-                    VALID_USER_LTV_RANGE.end,
+                    order.condition_threshold().to_display(),
+                    VALID_USER_LTV_RANGE.start.to_display(),
+                    VALID_USER_LTV_RANGE.end.to_display(),
                 );
                 return err!(LendingError::InvalidOrderConfiguration);
             }
@@ -457,7 +457,7 @@ fn evaluate_stop_loss(
     if current_value <= condition_threshold {
         return None;
     }
-    let normalized_distance_towards_liquidation = if condition_threshold > liquidation_threshold {
+    let normalized_distance_towards_liquidation = if condition_threshold >= liquidation_threshold {
        
        
        
