@@ -36,7 +36,6 @@ use crate::{
 
 
 
-
 pub fn process_v1(ctx: Context<SocializeLoss>, liquidity_amount: u64) -> Result<()> {
     check_refresh_ixs!(ctx.accounts, ctx.accounts.reserve, ReserveFarmKind::Debt);
     process_impl(ctx.accounts, ctx.remaining_accounts, liquidity_amount)
@@ -87,14 +86,14 @@ fn process_impl(
 #[derive(Accounts)]
 pub struct SocializeLoss<'info> {
    
-    pub risk_council: Signer<'info>,
+    pub lending_market_owner: Signer<'info>,
 
     #[account(mut,
         has_one = lending_market
     )]
     pub obligation: AccountLoader<'info, Obligation>,
 
-    #[account(has_one = risk_council)]
+    #[account(has_one = lending_market_owner)]
     pub lending_market: AccountLoader<'info, LendingMarket>,
 
     #[account(mut,

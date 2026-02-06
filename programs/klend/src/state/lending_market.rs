@@ -82,7 +82,7 @@ pub struct LendingMarket {
     pub global_allowed_borrow_value: u64,
 
     #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
-    pub risk_council: Pubkey,
+    pub emergency_council: Pubkey,
 
 
     #[cfg_attr(
@@ -193,7 +193,7 @@ impl Default for LendingMarket {
             version: 0,
             bump_seed: 0,
             lending_market_owner: Pubkey::default(),
-            risk_council: Pubkey::default(),
+            emergency_council: Pubkey::default(),
             quote_currency: default_array(),
             lending_market_owner_cached: Pubkey::default(),
             emergency_mode: 0,

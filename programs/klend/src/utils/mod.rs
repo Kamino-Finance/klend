@@ -35,3 +35,7 @@ pub fn maybe_null_pk(pubkey: Pubkey) -> Option<Pubkey> {
         Some(pubkey)
     }
 }
+
+pub fn borsh_deserialize<T: borsh::BorshDeserialize>(mut data: &[u8]) -> T {
+    T::deserialize(&mut data).expect("Borsh deserialization failed")
+}

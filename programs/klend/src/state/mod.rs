@@ -220,7 +220,7 @@ pub enum UpdateLendingMarketMode {
     UpdateLiquidationMaxValue = 3,
     DeprecatedUpdateGlobalUnhealthyBorrow = 4,
     UpdateGlobalAllowedBorrow = 5,
-    UpdateRiskCouncil = 6,
+    UpdateEmergencyCouncil = 6,
     UpdateMinFullLiquidationThreshold = 7,
     UpdateInsolvencyRiskLtv = 8,
     UpdateElevationGroup = 9,

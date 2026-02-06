@@ -2341,7 +2341,7 @@ pub mod utils {
     use crate::{
         fraction::FRACTION_ONE_SCALED,
         state::ReserveConfig,
-        utils::{ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
+        utils::{borsh_deserialize, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
         ElevationGroup, ObligationCollateral, ObligationLiquidity,
     };
 
@@ -3372,6 +3372,24 @@ pub mod utils {
         }
     }
 
+    pub fn is_update_reserve_config_mode_allowed_for_emergency_council(
+        mode: UpdateConfigMode,
+        value: &[u8],
+    ) -> bool {
+        match mode {
+            UpdateConfigMode::UpdateBorrowLimit if borsh_deserialize::<u64>(value) == 0 => {
+               
+                true
+            }
+            UpdateConfigMode::UpdateBlockPriceUsage if borsh_deserialize::<u8>(value) == 1 => {
+               
+                true
+            }
+           
+            _ => false,
+        }
+    }
+
     pub fn is_allowed_signer_to_init_reserve(
         signer: Pubkey,
         lending_market: &LendingMarket,
@@ -3383,6 +3401,7 @@ pub mod utils {
     pub fn is_allowed_signer_to_update_reserve_config(
         signer: Pubkey,
         mode: UpdateConfigMode,
+        value: &[u8],
         lending_market: &LendingMarket,
         reserve: &Reserve,
         global_admin: Pubkey,
@@ -3409,6 +3428,10 @@ pub mod utils {
        
         if is_update_reserve_config_mode_global_admin_only(mode) {
             global_admin == signer
+        } else if is_update_reserve_config_mode_allowed_for_emergency_council(mode, value)
+            && lending_market.emergency_council == signer
+        {
+            true
         } else {
             lending_market.lending_market_owner == signer
         }

@@ -23,13 +23,13 @@ pub fn process(
 #[derive(Accounts)]
 pub struct MarkObligationForDeleveraging<'info> {
    
-    pub risk_council: Signer<'info>,
+    pub lending_market_owner: Signer<'info>,
 
     #[account(mut,
         has_one = lending_market
     )]
     pub obligation: AccountLoader<'info, Obligation>,
 
-    #[account(has_one = risk_council)]
+    #[account(has_one = lending_market_owner)]
     pub lending_market: AccountLoader<'info, LendingMarket>,
 }

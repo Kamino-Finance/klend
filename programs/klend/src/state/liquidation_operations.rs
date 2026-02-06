@@ -460,7 +460,6 @@ pub(crate) fn calculate_liquidation_bonus(
 }
 
 
-
 fn check_individual_autodeleverage_obligation(
     &LiquidationCheckInputs {
         lending_market,

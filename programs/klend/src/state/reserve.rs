@@ -1190,7 +1190,6 @@ pub struct ReserveConfig {
 
 
 
-
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub autodeleverage_enabled: u8,
 
