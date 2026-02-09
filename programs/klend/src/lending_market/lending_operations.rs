@@ -2019,13 +2019,13 @@ pub fn update_reserve_config(
         }
         UpdateConfigMode::UpdateFeesOriginationFee => {
             config_items::for_named_field!(&mut reserve.config.fees.origination_fee_sf)
-                .validating(validations::check_lte(Fraction::ONE.to_bits()))
+                .validating(check_proper_fraction)
                 .rendering(renderings::as_fraction)
                 .set(value)?;
         }
         UpdateConfigMode::UpdateFeesFlashLoanFee => {
             config_items::for_named_field!(&mut reserve.config.fees.flash_loan_fee_sf)
-                .validating(validations::check_lte(Fraction::ONE.to_bits()))
+                .validating(check_proper_fraction_or_max)
                 .rendering(renderings::as_fraction)
                 .set(value)?;
         }
@@ -2109,27 +2109,6 @@ pub fn update_reserve_config(
         }
         UpdateConfigMode::UpdateBorrowRateCurve => {
             config_items::for_named_field!(&mut reserve.config.borrow_rate_curve).set(value)?;
-        }
-        UpdateConfigMode::UpdateEntireReserveConfig => {
-           
-           
-            msg!(
-                r"Updating entire reserve config, fields `protocol_take_rate_pct`, 
-                `protocol_liquidation_fee_pct`, `protocol_order_execution_fee_pct` and 
-                `host_fixed_interest_rate_bps` will remain unchanged"
-            );
-            let old_protocol_take_rate_pct = reserve.config.protocol_take_rate_pct;
-            let old_protocol_liquidation_fee_pct = reserve.config.protocol_liquidation_fee_pct;
-            let old_host_fixed_interest_rate_bps = reserve.config.host_fixed_interest_rate_bps;
-            let old_protocol_order_execution_fee_pct =
-                reserve.config.protocol_order_execution_fee_pct;
-
-            config_items::for_named_field!(&mut reserve.config).set(value)?;
-
-            reserve.config.protocol_take_rate_pct = old_protocol_take_rate_pct;
-            reserve.config.protocol_liquidation_fee_pct = old_protocol_liquidation_fee_pct;
-            reserve.config.host_fixed_interest_rate_bps = old_host_fixed_interest_rate_bps;
-            reserve.config.protocol_order_execution_fee_pct = old_protocol_order_execution_fee_pct;
         }
         UpdateConfigMode::UpdateDebtWithdrawalCap => {
            
@@ -2287,6 +2266,7 @@ pub fn update_reserve_config(
         | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
         | UpdateConfigMode::DeprecatedUpdateDebtWithdrawalCapCurrentTotal
         | UpdateConfigMode::DeprecatedUpdateAssetTier
+        | UpdateConfigMode::DeprecatedUpdateEntireReserveConfig
         | UpdateConfigMode::DeprecatedUpdateDepositWithdrawalCapCurrentTotal => {
             panic!("Deprecated endpoint")
         }
@@ -2340,6 +2320,19 @@ fn check_not_set_in_the_past(subject_timestamp: u64, clock: &Clock) -> Result<()
     Ok(())
 }
 
+
+fn check_proper_fraction(sf: &u64) -> Result<()> {
+    validations::check_lte(Fraction::ONE.to_bits())(sf)
+}
+
+
+fn check_proper_fraction_or_max(sf: &u64) -> Result<()> {
+    if *sf == u64::MAX {
+        return Ok(());
+    }
+    check_proper_fraction(sf)
+}
+
 pub mod utils {
     use anchor_lang::require_neq;
     use num_enum::TryFromPrimitive;
@@ -2348,7 +2341,7 @@ pub mod utils {
     use crate::{
         fraction::FRACTION_ONE_SCALED,
         state::ReserveConfig,
-        utils::{ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
+        utils::{borsh_deserialize, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
         ElevationGroup, ObligationCollateral, ObligationLiquidity,
     };
 
@@ -3348,7 +3341,7 @@ pub mod utils {
             | UpdateConfigMode::UpdateSwitchboardFeed
             | UpdateConfigMode::UpdateSwitchboardTwapFeed
             | UpdateConfigMode::UpdateBorrowRateCurve
-            | UpdateConfigMode::UpdateEntireReserveConfig
+            | UpdateConfigMode::DeprecatedUpdateEntireReserveConfig
             | UpdateConfigMode::UpdateDebtWithdrawalCap
             | UpdateConfigMode::UpdateDepositWithdrawalCap
             | UpdateConfigMode::DeprecatedUpdateDebtWithdrawalCapCurrentTotal
@@ -3379,6 +3372,24 @@ pub mod utils {
         }
     }
 
+    pub fn is_update_reserve_config_mode_allowed_for_emergency_council(
+        mode: UpdateConfigMode,
+        value: &[u8],
+    ) -> bool {
+        match mode {
+            UpdateConfigMode::UpdateBorrowLimit if borsh_deserialize::<u64>(value) == 0 => {
+               
+                true
+            }
+            UpdateConfigMode::UpdateBlockPriceUsage if borsh_deserialize::<u8>(value) == 1 => {
+               
+                true
+            }
+           
+            _ => false,
+        }
+    }
+
     pub fn is_allowed_signer_to_init_reserve(
         signer: Pubkey,
         lending_market: &LendingMarket,
@@ -3390,6 +3401,7 @@ pub mod utils {
     pub fn is_allowed_signer_to_update_reserve_config(
         signer: Pubkey,
         mode: UpdateConfigMode,
+        value: &[u8],
         lending_market: &LendingMarket,
         reserve: &Reserve,
         global_admin: Pubkey,
@@ -3416,6 +3428,10 @@ pub mod utils {
        
         if is_update_reserve_config_mode_global_admin_only(mode) {
             global_admin == signer
+        } else if is_update_reserve_config_mode_allowed_for_emergency_council(mode, value)
+            && lending_market.emergency_council == signer
+        {
+            true
         } else {
             lending_market.lending_market_owner == signer
         }

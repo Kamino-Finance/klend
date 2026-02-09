@@ -83,6 +83,7 @@ pub struct UpdateReserveConfig<'info> {
     #[account(constraint = lending_operations::utils::is_allowed_signer_to_update_reserve_config(
         signer.key(),
         mode,
+        &value,
         lending_market.load()?.deref(),
         reserve.load()?.deref(),
         global_config.load()?.global_admin,

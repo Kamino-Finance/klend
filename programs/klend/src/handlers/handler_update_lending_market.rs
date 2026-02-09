@@ -65,8 +65,8 @@ pub fn process(
                 .validating(validations::check_not_zero)
                 .set(&value)?;
         }
-        UpdateLendingMarketMode::UpdateRiskCouncil => {
-            config_items::for_named_field!(&mut market.risk_council).set(&value)?;
+        UpdateLendingMarketMode::UpdateEmergencyCouncil => {
+            config_items::for_named_field!(&mut market.emergency_council).set(&value)?;
         }
         UpdateLendingMarketMode::UpdateInsolvencyRiskLtv => {
             config_items::for_named_field!(&mut market.insolvency_risk_unhealthy_ltv_pct)
@@ -252,9 +252,41 @@ fn validate_new_elevation_group(elevation_group: &ElevationGroup) -> Result<()> 
 }
 
 #[derive(Accounts)]
+#[instruction(mode: u64, value: [u8; VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE])]
 pub struct UpdateLendingMarket<'info> {
-    lending_market_owner: Signer<'info>,
+    #[account(constraint = is_allowed_to_update_lending_market(
+        signer.key(),
+        &lending_market,
+        mode,
+        &value,
+    )? @ LendingError::InvalidSigner)]
+    signer: Signer<'info>,
 
-    #[account(mut, has_one = lending_market_owner)]
+    #[account(mut)]
     pub lending_market: AccountLoader<'info, LendingMarket>,
+}
+
+
+
+
+pub fn is_allowed_to_update_lending_market(
+    signer: Pubkey,
+    lending_market: &AccountLoader<LendingMarket>,
+    mode: u64,
+    value: &[u8],
+) -> Result<bool> {
+    let mode = UpdateLendingMarketMode::try_from(mode)
+        .map_err(|_| ProgramError::InvalidInstructionData)?;
+    let market = lending_market.load()?;
+    if market.lending_market_owner == signer {
+        return Ok(true);
+    }
+    if market.emergency_council == signer &&
+        mode == UpdateLendingMarketMode::UpdateEmergencyMode &&
+       
+        value[0] == true as u8
+    {
+        return Ok(true);
+    }
+    Ok(false)
 }

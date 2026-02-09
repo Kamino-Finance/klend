@@ -84,7 +84,6 @@ pub mod kamino_lending {
         handler_seed_deposit_on_init_reserve::process(ctx)
     }
 
-   
     #[deprecated(
         since = "1.8.0",
         note = "Please use `_v2` variant of the handler instead"

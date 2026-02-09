@@ -1,10 +1,11 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
 
 use crate::{
+    lending_market::lending_checks,
     state::{LendingMarket, Reserve},
     utils::{constraints, token_transfer},
-    LendingError,
+    LendingAction, LendingError,
 };
 
 pub fn process(ctx: Context<SeedDepositOnInitReserve>) -> Result<()> {
@@ -23,6 +24,10 @@ pub fn process(ctx: Context<SeedDepositOnInitReserve>) -> Result<()> {
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
 
+    let initial_reserve_token_balance = token_interface::accessor::amount(
+        &ctx.accounts.reserve_liquidity_supply.to_account_info(),
+    )?;
+
     reserve.liquidity.available_amount = market.min_initial_deposit_amount;
     reserve.collateral.mint_total_supply = market.min_initial_deposit_amount;
 
@@ -35,6 +40,15 @@ pub fn process(ctx: Context<SeedDepositOnInitReserve>) -> Result<()> {
         ctx.accounts.liquidity_token_program.to_account_info(),
         market.min_initial_deposit_amount,
         ctx.accounts.reserve_liquidity_mint.decimals,
+    )?;
+
+    lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
+        token_interface::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())
+            .unwrap(),
+        reserve.liquidity.available_amount,
+        initial_reserve_token_balance,
+        0,
+        LendingAction::Additive(market.min_initial_deposit_amount),
     )?;
 
     Ok(())

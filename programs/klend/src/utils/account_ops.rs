@@ -37,23 +37,23 @@ pub fn initialize_pda_token_account<'info>(
    
    
    
-    let space = anchor_spl::token_2022::get_account_data_size(
-        CpiContext::new(
-            token_program.to_account_info(),
-            anchor_spl::token_2022::GetAccountDataSize {
-                mint: token_mint.to_account_info(),
-            },
-        ),
-       
-       
-       
-       
-        if is_token_2022 {
-            &[ExtensionType::ImmutableOwner]
-        } else {
-            &[]
-        },
-    )?;
+    let space = if is_token_2022 {
+        anchor_spl::token_2022::get_account_data_size(
+            CpiContext::new(
+                token_program.to_account_info(),
+                anchor_spl::token_2022::GetAccountDataSize {
+                    mint: token_mint.to_account_info(),
+                },
+            ),
+           
+           
+           
+           
+            &[ExtensionType::ImmutableOwner],
+        )?
+    } else {
+        anchor_spl::token::TokenAccount::LEN as u64
+    };
 
     let lamports = Rent::get()?.minimum_balance(space.try_into().unwrap());
 
