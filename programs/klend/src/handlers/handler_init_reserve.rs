@@ -56,7 +56,7 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
         &[fee_receiver_signer_seeds],
     )?;
 
-    constraints::token_2022::validate_liquidity_token_extensions(
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;

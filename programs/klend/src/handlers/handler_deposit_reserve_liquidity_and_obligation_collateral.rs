@@ -87,7 +87,7 @@ pub(super) fn process_impl(
 
     let initial_reserve_token_balance =
         token_interface::accessor::amount(&accounts.reserve_liquidity_supply.to_account_info())?;
-    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
+    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
     let DepositLiquidityResult {
         liquidity_amount,
         collateral_amount,
@@ -132,7 +132,7 @@ pub(super) fn process_impl(
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
         token_interface::accessor::amount(&accounts.reserve_liquidity_supply.to_account_info())
             .unwrap(),
-        reserve.liquidity.available_amount,
+        reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
         LendingAction::Additive(liquidity_amount),

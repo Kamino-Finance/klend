@@ -229,10 +229,10 @@ fn process_impl(
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
             token::accessor::amount(&accounts.withdraw_reserve_liquidity_supply.to_account_info())
                 .unwrap(),
-            withdraw_reserve.liquidity.available_amount,
+            withdraw_reserve.total_available_liquidity_amount(),
             initial_withdraw_reserve_token_balance,
             initial_withdraw_reserve_available_amount,
-            LendingAction::SubstractiveSigned(net_withdrawal_amount),
+            LendingAction::subtractive_signed(net_withdrawal_amount),
         )?;
     }
     let repay_reserve = &accounts.repay_reserve.load()?;
@@ -250,7 +250,7 @@ fn process_impl(
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
             token::accessor::amount(&accounts.repay_reserve_liquidity_supply.to_account_info())
                 .unwrap(),
-            repay_reserve.liquidity.available_amount,
+            repay_reserve.total_available_liquidity_amount(),
             initial_repay_reserve_token_balance,
             initial_repay_reserve_available_amount,
             LendingAction::Additive(repay_amount),

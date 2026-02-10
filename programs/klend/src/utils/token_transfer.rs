@@ -1,10 +1,11 @@
 use anchor_lang::{
     prelude::{AccountInfo, CpiContext},
-    Result,
+    system_program, Lamports, Result,
 };
 use anchor_spl::token_interface;
+use solana_program::{rent::Rent, sysvar::Sysvar};
 
-use super::spltoken;
+use crate::utils::{spltoken, MAX_TOKEN_ACCOUNT_DATA_LEN};
 
 pub fn deposit_obligation_collateral_transfer<'a>(
     from: AccountInfo<'a>,
@@ -239,6 +240,34 @@ pub fn withdraw_and_redeem_reserve_collateral_transfer<'a>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn recover_withdraw_queue_collateral_transfer<'a>(
+    collateral_token_program: AccountInfo<'a>,
+    reserve_collateral_mint: AccountInfo<'a>,
+    owner_queued_collateral_vault: AccountInfo<'a>,
+    user_source_collateral: AccountInfo<'a>,
+    lending_market_authority: AccountInfo<'a>,
+    authority_signer_seeds: &[&[u8]],
+    collateral_amount: u64,
+    collateral_decimals: u8,
+) -> Result<()> {
+    token_interface::transfer_checked(
+        CpiContext::new_with_signer(
+            collateral_token_program,
+            token_interface::TransferChecked {
+                from: owner_queued_collateral_vault,
+                to: user_source_collateral,
+                authority: lending_market_authority,
+                mint: reserve_collateral_mint,
+            },
+            &[authority_signer_seeds],
+        ),
+        collateral_amount,
+        collateral_decimals,
+    )?;
+    Ok(())
+}
+
 pub fn repay_obligation_liquidity_transfer<'a>(
     token_program: AccountInfo<'a>,
     liquidity_mint: AccountInfo<'a>,
@@ -375,5 +404,57 @@ pub fn withdraw_fees_from_reserve<'a>(
         mint_decimals,
     )?;
 
+    Ok(())
+}
+
+pub fn enqueue_collateral_transfer<'a>(
+    user_source_collateral: AccountInfo<'a>,
+    owner_queued_collateral_vault: AccountInfo<'a>,
+    user_authority: AccountInfo<'a>,
+    collateral_mint: AccountInfo<'a>,
+    collateral_token_program: AccountInfo<'a>,
+    collateral_amount: u64,
+    collateral_decimals: u8,
+) -> Result<()> {
+    token_interface::transfer_checked(
+        CpiContext::new(
+            collateral_token_program.clone(),
+            token_interface::TransferChecked {
+                from: user_source_collateral,
+                to: owner_queued_collateral_vault,
+                authority: user_authority,
+                mint: collateral_mint,
+            },
+        ),
+        collateral_amount,
+        collateral_decimals,
+    )
+}
+
+pub fn destination_ata_rent_prepayment_transfer<'a>(
+    owner: AccountInfo<'a>,
+    withdraw_ticket: AccountInfo<'a>,
+    system_program: AccountInfo<'a>,
+) -> Result<()> {
+    system_program::transfer(
+        CpiContext::new(
+            system_program,
+            system_program::Transfer {
+                from: owner,
+                to: withdraw_ticket,
+            },
+        ),
+        Rent::get()?.minimum_balance(MAX_TOKEN_ACCOUNT_DATA_LEN),
+    )
+}
+
+pub fn destination_ata_rent_refund_transfer<'a>(
+    withdraw_ticket: AccountInfo<'a>,
+    owner: AccountInfo<'a>,
+    ata_data_len: usize,
+) -> Result<()> {
+    let rent_amount = Rent::get()?.minimum_balance(ata_data_len);
+    withdraw_ticket.sub_lamports(rent_amount)?;
+    owner.add_lamports(rent_amount)?;
     Ok(())
 }

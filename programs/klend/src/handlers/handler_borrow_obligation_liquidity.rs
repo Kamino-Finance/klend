@@ -101,7 +101,7 @@ pub fn borrow_obligation_liquidity_process_impl<'info>(
 
     let initial_reserve_token_balance =
         token_interface::accessor::amount(&accounts.reserve_source_liquidity.to_account_info())?;
-    let initial_reserve_available_liquidity = borrow_reserve.liquidity.available_amount;
+    let initial_reserve_available_liquidity = borrow_reserve.total_available_liquidity_amount();
 
     let CalculateBorrowResult {
         receive_amount,
@@ -151,7 +151,7 @@ pub fn borrow_obligation_liquidity_process_impl<'info>(
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
         token_interface::accessor::amount(&accounts.reserve_source_liquidity.to_account_info())
             .unwrap(),
-        borrow_reserve.liquidity.available_amount,
+        borrow_reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
         LendingAction::Subtractive(origination_fee + receive_amount),

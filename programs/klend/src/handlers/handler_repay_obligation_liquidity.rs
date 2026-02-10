@@ -65,7 +65,7 @@ where
     let initial_reserve_token_balance = token_interface::accessor::amount(
         &accounts.reserve_destination_liquidity.to_account_info(),
     )?;
-    let initial_reserve_available_liquidity = repay_reserve.liquidity.available_amount;
+    let initial_reserve_available_liquidity = repay_reserve.total_available_liquidity_amount();
 
     let repay_amount = lending_operations::repay_obligation_liquidity(
         repay_reserve,
@@ -100,7 +100,7 @@ where
             &accounts.reserve_destination_liquidity.to_account_info(),
         )
         .unwrap(),
-        repay_reserve.liquidity.available_amount,
+        repay_reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
         LendingAction::Additive(repay_amount),

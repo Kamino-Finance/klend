@@ -8,34 +8,39 @@ use std::{
 use anchor_lang::{err, prelude::*, require, solana_program::clock::Slot, Result};
 use solana_program::clock::{self, Clock};
 
-use self::utils::{
-    calculate_obligation_collateral_market_value, calculate_obligation_liquidity_market_value,
-    check_elevation_group_borrowing_enabled, check_non_elevation_group_borrowing_enabled,
-    check_obligation_collateral_deposit_reserve, check_obligation_fully_refreshed_and_not_null,
-    check_obligation_liquidity_borrow_reserve, check_same_elevation_group, get_elevation_group,
-    get_max_ltv_and_liquidation_threshold, post_borrow_obligation_invariants,
-    post_deposit_obligation_invariants, post_repay_obligation_invariants,
-    post_withdraw_obligation_invariants, update_elevation_group_debt_trackers_on_repay,
-};
-use super::{
-    config_items, validate_referrer_token_state,
-    withdrawal_cap_operations::utils::{add_to_withdrawal_accum, sub_from_withdrawal_accum},
-};
 use crate::{
     approximate_compounded_interest,
     fraction::FractionExtra,
-    lending_market::config_items::{renderings, validations},
+    lending_market::{
+        config_items::{self, renderings, validations},
+        lending_checks::validate_referrer_token_state,
+        utils::{
+            calculate_market_value_from_liquidity_amount,
+            calculate_obligation_collateral_market_value,
+            calculate_obligation_liquidity_market_value, check_elevation_group_borrowing_enabled,
+            check_non_elevation_group_borrowing_enabled,
+            check_obligation_collateral_deposit_reserve,
+            check_obligation_fully_refreshed_and_not_null,
+            check_obligation_liquidity_borrow_reserve, check_same_elevation_group,
+            get_elevation_group, get_max_ltv_and_liquidation_threshold,
+            post_borrow_obligation_invariants, post_deposit_obligation_invariants,
+            post_repay_obligation_invariants, post_withdraw_obligation_invariants,
+            update_elevation_group_debt_trackers_on_repay,
+        },
+        withdrawal_cap_operations::utils::{add_to_withdrawal_accum, sub_from_withdrawal_accum},
+    },
     liquidation_operations, obligation_order_operations,
     state::{CalculateBorrowResult, CalculateLiquidationResult, CalculateRepayResult, Reserve},
     utils::{
         consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction, Fraction, GetPriceResult,
         IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
+    withdraw_ticket::WithdrawTicket,
     xmsg, BorrowSize, DepositLiquidityResult, ElevationGroup, LendingError, LendingMarket,
     LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
-    MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags, ReferrerTokenState,
-    RefreshObligationBorrowsResult, RefreshObligationDepositsResult, ReserveStatus,
-    UpdateConfigMode, WithdrawResult,
+    MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags, RedeemCollateralOptions,
+    ReferrerTokenState, RefreshObligationBorrowsResult, RefreshObligationDepositsResult,
+    ReserveStatus, TicketedWithdrawResult, UpdateConfigMode, WithdrawResult,
 };
 
 pub fn refresh_reserve(
@@ -283,7 +288,7 @@ where
         return err!(LendingError::BorrowTooSmall);
     }
 
-    borrow_reserve.liquidity.borrow(borrow_amount_f)?;
+    borrow_reserve.borrow(borrow_amount_f, false)?;
     borrow_reserve.last_update.mark_stale();
 
     let cumulative_borrow_rate_bf =
@@ -324,7 +329,7 @@ where
                 Fraction::from_num(referrer_fee),
             )?;
 
-            borrow_reserve.liquidity.available_amount += referrer_fee;
+            borrow_reserve.liquidity.total_available_amount += referrer_fee;
         }
     }
 
@@ -634,7 +639,10 @@ pub fn redeem_reserve_collateral(
     reserve: &mut Reserve,
     collateral_amount: u64,
     clock: &Clock,
-    add_amount_to_withdrawal_caps: bool,
+    RedeemCollateralOptions {
+        add_amount_to_withdrawal_caps,
+        use_withdraw_queue,
+    }: RedeemCollateralOptions,
 ) -> Result<u64> {
    
     if collateral_amount == 0 {
@@ -651,7 +659,7 @@ pub fn redeem_reserve_collateral(
     }
    
 
-    let liquidity_amount = reserve.redeem_collateral(collateral_amount)?;
+    let liquidity_amount = reserve.redeem_collateral(collateral_amount, use_withdraw_queue)?;
    
     let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
     refresh_reserve_limit_timestamps(reserve, timestamp);
@@ -666,6 +674,54 @@ pub fn redeem_reserve_collateral(
     }
 
     Ok(liquidity_amount)
+}
+
+pub fn enqueue_to_withdraw(reserve: &mut Reserve, collateral_amount: u64) -> Result<u64> {
+    if collateral_amount == 0 {
+        msg!("Cannot enqueue to withdraw a zero amount");
+        return err!(LendingError::InvalidAmount);
+    }
+    Ok(reserve.withdraw_queue.enqueue(collateral_amount))
+}
+
+pub fn withdraw_queued_liquidity(
+    lending_market: &LendingMarket,
+    reserve: &mut Reserve,
+    withdraw_ticket: &mut WithdrawTicket,
+    clock: &Clock,
+) -> Result<TicketedWithdrawResult> {
+    let max_redeemable_collateral_amount = reserve.total_redeemable_collateral_amount();
+    if max_redeemable_collateral_amount == 0 {
+        return err!(LendingError::InsufficientLiquidity);
+    }
+
+    let collateral_amount_to_burn = min(
+        withdraw_ticket.queued_collateral_amount,
+        max_redeemable_collateral_amount,
+    );
+    withdraw_ticket.queued_collateral_amount -= collateral_amount_to_burn;
+    let ticket_emptied = withdraw_ticket.queued_collateral_amount == 0;
+
+    let liquidity_amount_to_withdraw = redeem_reserve_collateral(
+        reserve,
+        collateral_amount_to_burn,
+        clock,
+        RedeemCollateralOptions::FOR_WITHDRAW_QUEUED_LIQUIDITY,
+    )?;
+    check_min_withdrawn_queued_liquidity_value(
+        lending_market,
+        reserve,
+        liquidity_amount_to_withdraw,
+        ticket_emptied,
+    )?;
+    reserve
+        .withdraw_queue
+        .dequeue(collateral_amount_to_burn, ticket_emptied);
+
+    Ok(TicketedWithdrawResult {
+        collateral_amount_to_burn,
+        liquidity_amount_to_withdraw,
+    })
 }
 
 pub fn redeem_fees(reserve: &mut Reserve, slot: Slot) -> Result<u64> {
@@ -683,7 +739,7 @@ pub fn redeem_fees(reserve: &mut Reserve, slot: Slot) -> Result<u64> {
         return err!(LendingError::InsufficientProtocolFeesToRedeem);
     }
 
-    reserve.liquidity.redeem_fees(withdraw_amount)?;
+    reserve.redeem_fees(withdraw_amount)?;
     reserve.last_update.mark_stale();
 
     Ok(withdraw_amount)
@@ -909,6 +965,31 @@ where
         borrow_reserves_iter,
     )?;
 
+    Ok(())
+}
+
+fn check_min_withdrawn_queued_liquidity_value(
+    lending_market: &LendingMarket,
+    reserve: &Reserve,
+    liquidity_amount_to_withdraw: u64,
+    ticket_emptied: bool,
+) -> Result<()> {
+    if ticket_emptied {
+        return Ok(());
+    }
+    let liquidity_value_to_withdraw = calculate_market_value_from_liquidity_amount(
+        reserve,
+        Fraction::from_num(liquidity_amount_to_withdraw),
+    );
+    if liquidity_value_to_withdraw < lending_market.min_withdraw_queued_liquidity_value {
+        xmsg!(
+            "Withdrawn liquidity {} would have value {}, lower than the configured minimum {}",
+            liquidity_amount_to_withdraw,
+            liquidity_value_to_withdraw.to_display(),
+            lending_market.min_withdraw_queued_liquidity_value
+        );
+        return err!(LendingError::WithdrawQueuedLiquidityValueTooSmall);
+    }
     Ok(())
 }
 
@@ -1561,9 +1642,12 @@ where
             None,
             lending_market.referral_fee_bps,
         )?;
-        let collateral_exchange_rate = withdraw_reserve_ref_mut.collateral_exchange_rate();
-        let max_redeemable_collateral = collateral_exchange_rate
-            .liquidity_to_collateral(withdraw_reserve_ref_mut.liquidity.available_amount);
+        let redeem_collateral_options = RedeemCollateralOptions::resolve(liquidation_reason);
+        let max_redeemable_collateral = if redeem_collateral_options.use_withdraw_queue {
+            withdraw_reserve_ref_mut.total_redeemable_collateral_amount()
+        } else {
+            withdraw_reserve_ref_mut.freely_redeemable_collateral_amount()
+        };
         min(withdraw_amount, max_redeemable_collateral)
     };
     if is_full_withdrawal {
@@ -1597,8 +1681,12 @@ pub(crate) fn post_liquidate_redeem(
 ) -> Result<Option<(u64, u64)>> {
    
     if withdraw_collateral_amount != 0 {
-        let withdraw_liquidity_amount =
-            redeem_reserve_collateral(withdraw_reserve, withdraw_collateral_amount, clock, false)?;
+        let withdraw_liquidity_amount = redeem_reserve_collateral(
+            withdraw_reserve,
+            withdraw_collateral_amount,
+            clock,
+            RedeemCollateralOptions::resolve(liquidation_reason),
+        )?;
         let protocol_liquidation_fee_pct = match liquidation_reason {
             LiquidationReason::LtvExceeded
             | LiquidationReason::IndividualDeleveraging
@@ -1668,7 +1756,7 @@ pub fn flash_borrow_reserve_liquidity(reserve: &mut Reserve, liquidity_amount: u
    
    
 
-    reserve.liquidity.borrow(liquidity_amount_f)?;
+    reserve.borrow(liquidity_amount_f, true)?;
     reserve.last_update.mark_stale();
 
     Ok(())
@@ -1710,7 +1798,7 @@ where
                 Fraction::from_num(referrer_fee),
             )?;
 
-            reserve.liquidity.available_amount += referrer_fee;
+            reserve.liquidity.total_available_amount += referrer_fee;
         }
     }
 
@@ -1971,9 +2059,7 @@ pub fn withdraw_referrer_fees(
         return err!(LendingError::InsufficientReferralFeesToRedeem);
     }
 
-    reserve
-        .liquidity
-        .withdraw_referrer_fees(withdraw_amount, referrer_token_state)?;
+    reserve.withdraw_referrer_fees(withdraw_amount, referrer_token_state)?;
     reserve.last_update.mark_stale();
 
     Ok(withdraw_amount)
@@ -2341,7 +2427,10 @@ pub mod utils {
     use crate::{
         fraction::FRACTION_ONE_SCALED,
         state::ReserveConfig,
-        utils::{borsh_deserialize, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS},
+        utils::{
+            accounts::has_ata_address, borsh_deserialize, ELEVATION_GROUP_NONE, FULL_BPS,
+            MAX_NUM_ELEVATION_GROUPS,
+        },
         ElevationGroup, ObligationCollateral, ObligationLiquidity,
     };
 
@@ -2429,8 +2518,7 @@ pub mod utils {
             .is_stale(slot, PriceStatusFlags::NONE)?
         {
             msg!(
-                "Deposit reserve {} provided for collateral {} is stale
-                and must be refreshed in the current slot. Last Update {:?}",
+                "Deposit reserve {} provided for collateral {} is stale and must be refreshed in the current slot. Last Update {:?}",
                 deposit.deposit_reserve,
                 index,
                 deposit_reserve.last_update,
@@ -3447,6 +3535,20 @@ pub mod utils {
         } else {
             lending_market_owner
         }
+    }
+
+    pub fn is_allowed_signer_to_use_destination_token_account(
+        signer: Pubkey,
+        destination_ta: Pubkey,
+        ticket_owner: Pubkey,
+        token_mint: Pubkey,
+        token_program: Pubkey,
+    ) -> bool {
+        if signer == ticket_owner {
+            return true;
+        }
+       
+        has_ata_address(&destination_ta, &ticket_owner, &token_mint, &token_program)
     }
 
     pub fn validate_reserve_config_integrity(

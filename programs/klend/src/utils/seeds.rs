@@ -8,13 +8,14 @@ pub const BASE_SEED_USER_METADATA: &[u8] = b"user_meta";
 pub const BASE_SEED_REFERRER_STATE: &[u8] = b"ref_state";
 pub const BASE_SEED_SHORT_URL: &[u8] = b"short_url";
 pub const GLOBAL_CONFIG_STATE: &[u8] = b"global_config";
+pub const WITHDRAW_TICKET: &[u8] = b"withdraw_ticket";
+pub const OWNER_QUEUED_COLLATERAL_VAULT: &[u8] = b"owner_queued_collateral_vault";
 pub const EVENT_AUTHORITY: &[u8] = b"__event_authority";
 
 pub mod pda {
     use anchor_lang::prelude::Pubkey;
 
     use super::*;
-    use crate::ID;
 
     pub fn program_data() -> Pubkey {
         program_data_program_id(&crate::ID)
@@ -29,7 +30,7 @@ pub mod pda {
     }
 
     pub fn lending_market_auth(lending_market: &Pubkey) -> Pubkey {
-        lending_market_auth_program_id(&ID, lending_market)
+        lending_market_auth_program_id(&crate::ID, lending_market)
     }
 
     pub fn lending_market_auth_program_id(program_id: &Pubkey, lending_market: &Pubkey) -> Pubkey {
@@ -56,7 +57,7 @@ pub mod pda {
     }
 
     pub fn init_reserve_pdas(reserve: &Pubkey) -> InitReservePdas {
-        init_reserve_pdas_program_id(&ID, reserve)
+        init_reserve_pdas_program_id(&crate::ID, reserve)
     }
 
     pub fn init_reserve_pdas_program_id(program_id: &Pubkey, reserve: &Pubkey) -> InitReservePdas {
@@ -92,6 +93,30 @@ pub mod pda {
         let (event_authority, _) = Pubkey::find_program_address(&[EVENT_AUTHORITY], &crate::ID);
 
         event_authority
+    }
+
+    pub fn withdraw_ticket(reserve: Pubkey, sequence_number: u64) -> Pubkey {
+        Pubkey::find_program_address(
+            &[
+                WITHDRAW_TICKET,
+                reserve.as_ref(),
+                &sequence_number.to_le_bytes(),
+            ],
+            &crate::ID,
+        )
+        .0
+    }
+
+    pub fn owner_queued_collateral_vault(reserve: Pubkey, owner: Pubkey) -> Pubkey {
+        Pubkey::find_program_address(
+            &[
+                OWNER_QUEUED_COLLATERAL_VAULT,
+                reserve.as_ref(),
+                owner.as_ref(),
+            ],
+            &crate::ID,
+        )
+        .0
     }
 }
 

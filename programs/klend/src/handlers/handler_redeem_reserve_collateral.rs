@@ -13,7 +13,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, RedeemReserveCollateralAccounts, Reserve},
     utils::{seeds, token_transfer},
-    LendingAction,
+    LendingAction, RedeemCollateralOptions,
 };
 
 pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) -> Result<()> {
@@ -42,11 +42,15 @@ pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) ->
     let initial_reserve_token_balance = token_interface::accessor::amount(
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
-    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
+    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
 
     lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
-    let withdraw_liquidity_amount =
-        lending_operations::redeem_reserve_collateral(reserve, collateral_amount, &clock, true)?;
+    let withdraw_liquidity_amount = lending_operations::redeem_reserve_collateral(
+        reserve,
+        collateral_amount,
+        &clock,
+        RedeemCollateralOptions::REGULAR,
+    )?;
 
     msg!(
         "pnl: Redeeming reserve collateral {}",
@@ -72,7 +76,7 @@ pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) ->
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
         token_interface::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())
             .unwrap(),
-        reserve.liquidity.available_amount,
+        reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
         LendingAction::Subtractive(withdraw_liquidity_amount),

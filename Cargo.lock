@@ -218,7 +218,7 @@ dependencies = [
  "mpl-token-metadata",
  "serum_dex",
  "solana-program",
- "spl-associated-token-account",
+ "spl-associated-token-account 2.3.0",
  "spl-token 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-token-2022 0.9.0",
 ]
@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "kamino_lending"
-version = "1.13.0"
+version = "1.14.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -1404,6 +1404,7 @@ dependencies = [
  "serde",
  "solana-program",
  "solana-security-txt",
+ "spl-associated-token-account 1.1.3",
  "static_assertions",
  "strum",
  "tracing",
@@ -2638,6 +2639,22 @@ dependencies = [
 
 [[package]]
 name = "spl-associated-token-account"
+version = "1.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978dba3bcbe88d0c2c58366c254d9ea41c5f73357e72fc0bdee4d6b5fc99c8f4"
+dependencies = [
+ "assert_matches",
+ "borsh 0.9.3",
+ "num-derive 0.3.3",
+ "num-traits",
+ "solana-program",
+ "spl-token 3.5.0",
+ "spl-token-2022 0.6.1",
+ "thiserror",
+]
+
+[[package]]
+name = "spl-associated-token-account"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "992d9c64c2564cc8f63a4b508bf3ebcdf2254b0429b13cd1d31adb6162432a5f"
@@ -2717,6 +2734,15 @@ dependencies = [
  "sha2 0.10.8",
  "syn 2.0.66",
  "thiserror",
+]
+
+[[package]]
+name = "spl-memo"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd0dc6f70db6bacea7ff25870b016a65ba1d1b6013536f08e4fd79a8f9005325"
+dependencies = [
+ "solana-program",
 ]
 
 [[package]]
@@ -2877,6 +2903,24 @@ dependencies = [
  "num-traits",
  "num_enum 0.7.1",
  "solana-program",
+ "thiserror",
+]
+
+[[package]]
+name = "spl-token-2022"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0043b590232c400bad5ee9eb983ced003d15163c4c5d56b090ac6d9a57457b47"
+dependencies = [
+ "arrayref",
+ "bytemuck",
+ "num-derive 0.3.3",
+ "num-traits",
+ "num_enum 0.5.11",
+ "solana-program",
+ "solana-zk-token-sdk",
+ "spl-memo 3.0.1",
+ "spl-token 3.5.0",
  "thiserror",
 ]
 

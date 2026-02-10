@@ -51,6 +51,9 @@ pub const LIQUIDATION_CLOSE_VALUE: u64 = 2;
 pub const MAX_LIQUIDATABLE_VALUE_AT_ONCE: u64 = 500_000;
 
 
+pub const MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE: u64 = 2;
+
+
 pub const MIN_BORROW_ORDER_FILL_VALUE: u64 = 2;
 
 
@@ -86,6 +89,16 @@ pub const REFERRER_STATE_SIZE: usize = 64;
 pub const SHORT_URL_SIZE: usize = 68;
 pub const TOKEN_INFO_SIZE: usize = 384;
 pub const GLOBAL_CONFIG_SIZE: usize = 1024;
+pub const WITHDRAW_TICKET_SIZE: usize = 512;
+
+
+
+
+
+
+
+
+pub const MAX_TOKEN_ACCOUNT_DATA_LEN: usize = 1000;
 
 
 pub const GLOBAL_ALLOWED_BORROW_VALUE: u64 = 45_000_000;

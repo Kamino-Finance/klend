@@ -435,6 +435,28 @@ pub mod kamino_lending {
         handler_fill_borrow_order::process(ctx)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn enqueue_to_withdraw(
+        ctx: Context<EnqueueToWithdraw>,
+        collateral_amount: u64,
+    ) -> Result<()> {
+        handler_enqueue_to_withdraw::process(ctx, collateral_amount)
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn withdraw_queued_liquidity(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
+        handler_withdraw_queued_liquidity::process(ctx)
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    #[allow(unused_variables)]
+    pub fn recover_invalid_ticket_collateral(
+        ctx: Context<RecoverInvalidTicketCollateral>,
+        ticket_sequence_number: u64,
+    ) -> Result<()> {
+        handler_recover_invalid_ticket_collateral::process(ctx)
+    }
+
     pub fn init_global_config(ctx: Context<InitGlobalConfig>) -> Result<()> {
         handler_init_global_config::process(ctx)
     }
@@ -758,6 +780,28 @@ pub enum LendingError {
     ExpectationNotMet,
     #[msg("Available liquidity could not satisfy the minimum required borrow order fill value")]
     BorrowOrderFillValueTooSmall,
+    #[msg("Issuing new withdraw tickets is disabled by the market")]
+    WithdrawTicketIssuanceDisabled,
+    #[msg("Redeeming withdraw tickets is disabled by the market")]
+    WithdrawTicketRedemptionDisabled,
+    #[msg(
+        "Recovering collateral is only available after the withdraw ticket has been marked invalid"
+    )]
+    WithdrawTicketStillValid,
+    #[msg(
+        "The withdraw ticket's current state requires that it is fully redeemed (e.g. due to owner ATA creation), but there is not enough liquidity"
+    )]
+    WithdrawTicketRequiresFullRedemption,
+    #[msg("The user's token account has changed its balance in an unexpected way")]
+    UserTokenBalanceMismatch,
+    #[msg("Available liquidity could not satisfy the minimum required ticketed withdrawal value")]
+    WithdrawQueuedLiquidityValueTooSmall,
+    #[msg(
+        "Token account is in a state preventing the handler's operation (e.g. frozen or delegate)"
+    )]
+    InvalidTokenAccountState,
+    #[msg("Cannot use ticket that was already marked invalid")]
+    WithdrawTicketInvalid,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

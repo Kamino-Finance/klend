@@ -188,19 +188,80 @@ pub struct RefreshObligationBorrowsResult {
     pub num_of_obsolete_reserves: u8,
 }
 
+pub struct RedeemCollateralOptions {
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WithdrawAndRedeemResult {
+    pub add_amount_to_withdrawal_caps: bool,
 
-    pub close_obligation: bool,
 
-    pub withdraw_liquidity_amount: u64,
+
+    pub use_withdraw_queue: bool,
+}
+
+impl RedeemCollateralOptions {
+
+
+
+
+    pub const REGULAR: Self = Self {
+        add_amount_to_withdrawal_caps: true,
+        use_withdraw_queue: false,
+    };
+
+
+    pub const FOR_WITHDRAW_QUEUED_LIQUIDITY: Self = Self {
+        add_amount_to_withdrawal_caps: true,
+        use_withdraw_queue: true,
+    };
+
+
+
+    pub const FOR_PROTOCOL_ENFORCED_LIQUIDATION: Self = Self {
+        add_amount_to_withdrawal_caps: false,
+        use_withdraw_queue: true,
+    };
+
+
+
+    pub const FOR_USER_REQUESTED_LIQUIDATION: Self = Self {
+        add_amount_to_withdrawal_caps: true,
+        use_withdraw_queue: false,
+    };
+
+    pub fn resolve(liquidation_reason: LiquidationReason) -> Self {
+        match liquidation_reason {
+            LiquidationReason::LtvExceeded
+            | LiquidationReason::IndividualDeleveraging
+            | LiquidationReason::MarketWideDeleveraging
+            | LiquidationReason::ReserveDebtMaturityReached
+            | LiquidationReason::ObligationBorrowDebtTermReached => {
+                Self::FOR_PROTOCOL_ENFORCED_LIQUIDATION
+            }
+            LiquidationReason::ObligationOrder(_) => Self::FOR_USER_REQUESTED_LIQUIDATION,
+        }
+    }
+}
+
+pub struct TicketedWithdrawResult {
+
+    pub collateral_amount_to_burn: u64,
+
+
+    pub liquidity_amount_to_withdraw: u64,
 }
 
 pub enum LendingAction {
     Additive(u64),
     Subtractive(u64),
-    SubstractiveSigned(i64),
+}
+
+impl LendingAction {
+    pub fn subtractive_signed(net_subtracted: i64) -> Self {
+        if net_subtracted >= 0 {
+            Self::Subtractive(net_subtracted as u64)
+        } else {
+            Self::Additive(net_subtracted.unsigned_abs())
+        }
+    }
 }
 
 #[derive(PartialEq)]

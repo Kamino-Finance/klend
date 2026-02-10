@@ -1,5 +1,10 @@
 use anchor_lang::{prelude::error, require, require_eq, Key, Result, ToAccountInfo};
-use solana_program::{account_info::AccountInfo, program, pubkey::Pubkey, system_instruction};
+use anchor_spl::associated_token::get_associated_token_address_with_program_id;
+use solana_program::{
+    account_info::AccountInfo, instruction::AccountMeta, program, pubkey::Pubkey,
+    system_instruction,
+};
+use spl_associated_token_account::instruction::create_associated_token_account;
 
 use crate::LendingError;
 
@@ -37,6 +42,55 @@ pub fn filled_array<T: Copy, const N: usize>(fill: T) -> [T; N] {
 pub fn is_default_array<T: Default + PartialEq>(array: &[T]) -> bool {
     let default_value = T::default();
     array.iter().all(|element| *element == default_value)
+}
+
+
+pub fn has_ata_address(
+    account: &impl Key,
+    owner: &Pubkey,
+    mint: &Pubkey,
+    token_program: &Pubkey,
+) -> bool {
+    account.key() == get_associated_token_address_with_program_id(owner, mint, token_program)
+}
+
+
+#[allow(clippy::too_many_arguments)]
+pub fn create_ata<'a>(
+    account: AccountInfo<'a>,
+    owner: AccountInfo<'a>,
+    mint: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+    associated_token_program: AccountInfo<'a>,
+    system_program: AccountInfo<'a>,
+    payer: AccountInfo<'a>,
+    remaining_accounts: &[AccountInfo<'a>],
+) -> Result<()> {
+   
+   
+   
+   
+   
+   
+   
+    let mut ix = create_associated_token_account(payer.key, owner.key, mint.key, token_program.key);
+    ix.accounts.extend(
+        remaining_accounts
+            .iter()
+            .map(|account| AccountMeta::new_readonly(account.key(), false)),
+    );
+    let mut account_infos = vec![
+        payer,
+        account,
+        associated_token_program,
+        owner,
+        mint,
+        system_program,
+        token_program,
+    ];
+    account_infos.extend_from_slice(remaining_accounts);
+    solana_program::program::invoke(&ix, &account_infos)?;
+    Ok(())
 }
 
 pub fn create_pda_account<'info>(

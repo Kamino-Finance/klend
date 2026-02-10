@@ -1,6 +1,6 @@
 [package]
 name = "kamino_lending"
-version = "1.13.0"
+version = "1.14.0"
 description = "Kamino lending Solana program"
 edition = "2021"
 license = "BUSL-1.1"
@@ -28,6 +28,7 @@ anchor-lang = { workspace = true, features = ["event-cpi"] }
 anchor-spl.workspace = true
 solana-program.workspace = true
 solana-security-txt = "1.1.1"
+spl-associated-token-account.workspace = true
 
 # Override anchor to use borsh with the const-generics feature
 # Allows to borsh serialize arrays of any length
