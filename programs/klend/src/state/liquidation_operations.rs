@@ -767,7 +767,7 @@ fn get_autodeleverage_liquidation_params(
 
 
 
-fn get_secs_since_autodeleverage_obligation_collateral_deposit_limit_crossed(
+pub fn get_secs_since_autodeleverage_obligation_collateral_deposit_limit_crossed(
     collateral_reserve: &Reserve,
     timestamp: u64,
 ) -> Option<u64> {
@@ -794,7 +794,7 @@ fn get_secs_since_autodeleverage_obligation_collateral_deposit_limit_crossed(
 
 
 
-fn get_secs_since_autodeleverage_obligation_debt_borrow_limit_crossed(
+pub fn get_secs_since_autodeleverage_obligation_debt_borrow_limit_crossed(
     debt_reserve: &Reserve,
     timestamp: u64,
 ) -> Option<u64> {

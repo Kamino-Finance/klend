@@ -115,6 +115,12 @@ impl LastUpdate {
     pub fn get_price_status(&self) -> PriceStatusFlags {
         PriceStatusFlags::from_bits_truncate(self.price_status)
     }
+
+    #[cfg(feature = "no-entrypoint")]
+
+    pub fn get_slot(&self) -> Slot {
+        self.slot
+    }
 }
 
 impl PartialEq for LastUpdate {
