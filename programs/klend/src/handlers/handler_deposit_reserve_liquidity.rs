@@ -46,7 +46,7 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
     let initial_reserve_token_balance = token_interface::accessor::amount(
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
-    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
+    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
     let DepositLiquidityResult {
         liquidity_amount,
         collateral_amount,
@@ -77,7 +77,7 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
         token_interface::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())
             .unwrap(),
-        reserve.liquidity.available_amount,
+        reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
         LendingAction::Additive(liquidity_amount),

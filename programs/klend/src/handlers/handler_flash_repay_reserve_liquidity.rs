@@ -22,7 +22,7 @@ pub fn process(
     let initial_reserve_token_balance = token_interface::accessor::amount(
         &ctx.accounts.reserve_destination_liquidity.to_account_info(),
     )?;
-    let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
+    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
 
     flash_ixs::flash_repay_checks(&ctx, borrow_instruction_index, liquidity_amount)?;
 
@@ -91,7 +91,7 @@ pub fn process(
             &ctx.accounts.reserve_destination_liquidity.to_account_info(),
         )
         .unwrap(),
-        reserve.liquidity.available_amount,
+        reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
         LendingAction::Additive(flash_loan_amount_with_referrer_fee),

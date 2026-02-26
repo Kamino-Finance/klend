@@ -19,7 +19,7 @@ pub fn process(ctx: Context<SeedDepositOnInitReserve>) -> Result<()> {
         LendingError::InitialAdminDepositExecuted
     );
 
-    constraints::token_2022::validate_liquidity_token_extensions(
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
@@ -28,7 +28,7 @@ pub fn process(ctx: Context<SeedDepositOnInitReserve>) -> Result<()> {
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
 
-    reserve.liquidity.available_amount = market.min_initial_deposit_amount;
+    reserve.liquidity.total_available_amount = market.min_initial_deposit_amount;
     reserve.collateral.mint_total_supply = market.min_initial_deposit_amount;
 
    
@@ -45,7 +45,7 @@ pub fn process(ctx: Context<SeedDepositOnInitReserve>) -> Result<()> {
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
         token_interface::accessor::amount(&ctx.accounts.reserve_liquidity_supply.to_account_info())
             .unwrap(),
-        reserve.liquidity.available_amount,
+        reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         0,
         LendingAction::Additive(market.min_initial_deposit_amount),

@@ -11,6 +11,7 @@ pub mod referral;
 pub mod reserve;
 pub mod token_info;
 pub mod types;
+pub mod withdraw_ticket;
 
 use anchor_lang::prelude::*;
 pub use events::*;
@@ -246,6 +247,9 @@ pub enum UpdateLendingMarketMode {
     UpdateBorrowOrderCreationEnabled = 29,
     UpdateBorrowOrderExecutionEnabled = 30,
     UpdateMinBorrowOrderFillValue = 31,
+    UpdateWithdrawTicketIssuanceEnabled = 32,
+    UpdateWithdrawTicketRedemptionEnabled = 33,
+    UpdateMinWithdrawQueuedLiquidityValue = 34,
 }
 
 #[cfg(feature = "serde")]
@@ -257,6 +261,7 @@ pub mod serde_iter {
 
 
     const PRIORITIZED_UPDATE_MODES: &[UpdateLendingMarketMode] = &[
+        UpdateLendingMarketMode::UpdateMinWithdrawQueuedLiquidityValue,
         UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue,
     ];
 

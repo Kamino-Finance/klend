@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub fn process(ctx: Context<WithdrawReferrerFees>) -> Result<()> {
-    constraints::token_2022::validate_liquidity_token_extensions(
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
         &ctx.accounts.referrer_token_account.to_account_info(),
     )?;

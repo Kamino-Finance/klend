@@ -95,9 +95,9 @@ pub fn fill_borrow_order(
         reserve.config.get_debt_term_seconds(),
     ) {
         msg!(
-            "Cannot use reserve with debt term of {} seconds on an order requesting min {} seconds",
-            reserve.config.debt_term_seconds,
-            borrow_order.min_debt_term_seconds
+            "Cannot use reserve with debt term of {:?} seconds on an order requesting min {:?} seconds",
+            reserve.config.get_debt_term_seconds(),
+            borrow_order.get_min_debt_term_seconds()
         );
         return err!(LendingError::BorrowOrderMinDebtTermInsufficient);
     }
@@ -120,10 +120,10 @@ pub fn fill_borrow_order(
         seconds_until_reserve_debt_maturity,
     ) {
         msg!(
-            "Cannot use reserve with debt maturity timestamp {} (i.e. in {:?} seconds) on an order requesting min {} seconds",
-            reserve.config.debt_maturity_timestamp,
+            "Cannot use reserve with debt maturity timestamp {:?} (i.e. in {:?} seconds) on an order requesting min {:?} seconds",
+            reserve.config.get_debt_maturity_timestamp(),
             seconds_until_reserve_debt_maturity,
-            borrow_order.min_debt_term_seconds,
+            borrow_order.get_min_debt_term_seconds(),
         );
         return err!(LendingError::BorrowOrderMinDebtTermInsufficient);
     }
@@ -337,16 +337,12 @@ fn check_not_updated<T: PartialEq + Debug>(name: &str, current: &T, new: T) -> R
 
 
 
-fn is_term_satisfied(
-    order_requested_seconds: Option<u64>,
-    reserve_offered_seconds: Option<u64>,
-) -> bool {
-    let Some(reserve_offered_seconds) = reserve_offered_seconds else {
-        return true;
-    };
-    let Some(order_requested_seconds) = order_requested_seconds else {
-        return false;
-    };
-    order_requested_seconds <= reserve_offered_seconds
+fn is_term_satisfied(min_requested_seconds: Option<u64>, max_offered_seconds: Option<u64>) -> bool {
+    match (min_requested_seconds, max_offered_seconds) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(_), None) => true,
+        (Some(min_requested), Some(max_offered)) => min_requested <= max_offered,
+    }
 }
 

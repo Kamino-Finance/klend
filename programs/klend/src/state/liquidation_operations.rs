@@ -230,11 +230,14 @@ pub fn get_liquidation_params(
         && !is_debt_reserve_highest_borrow_factor
     {
         xmsg!("Debt reserve must be the highest borrow factor reserve");
-        return err!(LendingError::LiquidationBorrowFactorPriority,);
+        return err!(LendingError::LiquidationBorrowFactorPriority);
     }
     if matches!(
         params.liquidation_reason,
-        LiquidationReason::LtvExceeded | LiquidationReason::ObligationOrder(..)
+        LiquidationReason::LtvExceeded
+            | LiquidationReason::ObligationOrder(..)
+            | LiquidationReason::ReserveDebtMaturityReached
+            | LiquidationReason::ObligationBorrowDebtTermReached
     ) && !is_collateral_reserve_lowest_liquidation_ltv
     {
         xmsg!("Collateral reserve must be the lowest liquidation LTV reserve");
@@ -764,7 +767,7 @@ fn get_autodeleverage_liquidation_params(
 
 
 
-fn get_secs_since_autodeleverage_obligation_collateral_deposit_limit_crossed(
+pub fn get_secs_since_autodeleverage_obligation_collateral_deposit_limit_crossed(
     collateral_reserve: &Reserve,
     timestamp: u64,
 ) -> Option<u64> {
@@ -791,7 +794,7 @@ fn get_secs_since_autodeleverage_obligation_collateral_deposit_limit_crossed(
 
 
 
-fn get_secs_since_autodeleverage_obligation_debt_borrow_limit_crossed(
+pub fn get_secs_since_autodeleverage_obligation_debt_borrow_limit_crossed(
     debt_reserve: &Reserve,
     timestamp: u64,
 ) -> Option<u64> {

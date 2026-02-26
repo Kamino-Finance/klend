@@ -95,8 +95,11 @@ pub struct Reserve {
 
     pub borrowed_amounts_against_this_reserve_in_elevation_groups: [u64; 32],
 
+
+    pub withdraw_queue: WithdrawQueue,
+
     #[derivative(Debug = "ignore")]
-    pub padding: [u64; 207],
+    pub padding: [u64; 204],
 }
 
 impl Default for Reserve {
@@ -115,6 +118,7 @@ impl Default for Reserve {
             config_padding: default_array(),
             borrowed_amount_outside_elevation_group: 0,
             borrowed_amounts_against_this_reserve_in_elevation_groups: [0; 32],
+            withdraw_queue: WithdrawQueue::default(),
             padding: default_array(),
         }
     }
@@ -183,6 +187,114 @@ impl Reserve {
         self.config.token_info.symbol()
     }
 
+
+
+
+
+
+
+
+
+
+
+    pub fn total_available_liquidity_amount(&self) -> u64 {
+        self.liquidity.total_available_amount
+    }
+
+
+
+    pub fn freely_available_liquidity_amount(&self) -> u64 {
+       
+        let liquidity_for_queued_collateral = self
+            .collateral_exchange_rate()
+            .collateral_to_liquidity(self.withdraw_queue.queued_collateral_amount);
+        self.liquidity
+            .total_available_amount
+            .saturating_sub(liquidity_for_queued_collateral)
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    pub fn total_withdrawable_liquidity_amount(&self) -> u64 {
+        let available_liquidity = self.total_available_liquidity_amount();
+        let exchange_rate = self.collateral_exchange_rate();
+        let ceiled_collateral_for_liquidity =
+            exchange_rate.liquidity_to_collateral_ceil(available_liquidity);
+        let liquidity_for_ceiled_collateral =
+            exchange_rate.collateral_to_liquidity(ceiled_collateral_for_liquidity);
+        if liquidity_for_ceiled_collateral <= available_liquidity {
+            liquidity_for_ceiled_collateral
+        } else {
+            let floored_collateral_for_liquidity =
+                exchange_rate.liquidity_to_collateral(available_liquidity);
+            exchange_rate.collateral_to_liquidity(floored_collateral_for_liquidity)
+           
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    pub fn total_redeemable_collateral_amount(&self) -> u64 {
+        let available_liquidity = self.total_available_liquidity_amount();
+        let exchange_rate = self.collateral_exchange_rate();
+        let ceiled_collateral = exchange_rate.liquidity_to_collateral_ceil(available_liquidity);
+        if exchange_rate.collateral_to_liquidity(ceiled_collateral) <= available_liquidity {
+            ceiled_collateral
+        } else {
+            exchange_rate.liquidity_to_collateral(available_liquidity)
+        }
+    }
+
+
+
+    pub fn freely_redeemable_collateral_amount(&self) -> u64 {
+        self.total_redeemable_collateral_amount()
+            .saturating_sub(self.withdraw_queue.queued_collateral_amount)
+    }
+
     pub fn add_farm(&mut self, farm_state: &Pubkey, mode: ReserveFarmKind) {
         match mode {
             ReserveFarmKind::Collateral => self.farm_collateral = *farm_state,
@@ -229,15 +341,108 @@ impl Reserve {
     }
 
 
-    pub fn redeem_collateral(&mut self, collateral_amount: u64) -> Result<u64> {
+    pub fn redeem_collateral(
+        &mut self,
+        collateral_amount: u64,
+        use_withdraw_queue: bool,
+    ) -> Result<u64> {
         let collateral_exchange_rate = self.collateral_exchange_rate();
 
         let liquidity_amount = collateral_exchange_rate.collateral_to_liquidity(collateral_amount);
 
+        if use_withdraw_queue {
+            self.withdraw_including_queued(liquidity_amount)?;
+        } else {
+            self.withdraw_freely_available(liquidity_amount)?;
+        }
+       
+       
+       
         self.collateral.burn(collateral_amount)?;
-        self.liquidity.withdraw(liquidity_amount)?;
 
         Ok(liquidity_amount)
+    }
+
+
+    pub fn borrow(&mut self, borrow_f: Fraction, use_withdraw_queue: bool) -> Result<()> {
+        if use_withdraw_queue {
+            self.withdraw_including_queued(borrow_f.to_floor())?;
+        } else {
+            self.withdraw_freely_available(borrow_f.to_floor())?;
+        }
+
+        let borrowed_amount_f = self.liquidity.total_borrow();
+        self.liquidity.borrowed_amount_sf = (borrowed_amount_f + borrow_f).to_bits();
+
+        Ok(())
+    }
+
+
+
+    pub fn redeem_fees(&mut self, withdraw_amount: u64) -> Result<()> {
+        self.withdraw_freely_available(withdraw_amount)?;
+
+        let accumulated_protocol_fees_f =
+            Fraction::from_bits(self.liquidity.accumulated_protocol_fees_sf);
+        let withdraw_amount_f = Fraction::from_num(withdraw_amount);
+        self.liquidity.accumulated_protocol_fees_sf = accumulated_protocol_fees_f
+            .checked_sub(withdraw_amount_f)
+            .ok_or_else(|| {
+                msg!(
+                    "Accumulated protocol fees {} cannot be less than withdraw amount {}",
+                    accumulated_protocol_fees_f.to_display(),
+                    withdraw_amount_f.to_display()
+                );
+                error!(LendingError::MathOverflow)
+            })?
+            .to_bits();
+
+        Ok(())
+    }
+
+
+    pub fn withdraw_referrer_fees(
+        &mut self,
+        withdraw_amount: u64,
+        referrer_token_state: &mut ReferrerTokenState,
+    ) -> Result<()> {
+        self.withdraw_freely_available(withdraw_amount)?;
+
+        let accumulated_referrer_fees_f =
+            Fraction::from_bits(self.liquidity.accumulated_referrer_fees_sf);
+
+        let withdraw_amount_f = Fraction::from_num(withdraw_amount);
+
+        let new_accumulated_referrer_fees_f = accumulated_referrer_fees_f
+            .checked_sub(withdraw_amount_f)
+            .ok_or_else(|| {
+                msg!(
+                    "Accumulated referrer fees {} cannot be less than withdraw amount {}",
+                    accumulated_referrer_fees_f.to_display(),
+                    withdraw_amount_f.to_display()
+                );
+                error!(LendingError::MathOverflow)
+            })?;
+
+        self.liquidity.accumulated_referrer_fees_sf = new_accumulated_referrer_fees_f.to_bits();
+
+        let referrer_amount_unclaimed_f =
+            Fraction::from_bits(referrer_token_state.amount_unclaimed_sf);
+
+        let new_referrer_amount_unclaimed_f = referrer_amount_unclaimed_f
+            .checked_sub(withdraw_amount_f)
+            .ok_or_else(|| {
+                msg!(
+                    "Unclaimed referrer fees {} cannot be less than withdraw amount {}",
+                    referrer_amount_unclaimed_f.to_display(),
+                    withdraw_amount_f.to_display()
+                );
+                error!(LendingError::MathOverflow)
+            })?;
+
+        referrer_token_state.amount_unclaimed_sf = new_referrer_amount_unclaimed_f.to_bits();
+
+        Ok(())
     }
 
 
@@ -377,7 +582,7 @@ impl Reserve {
             / market_price_f
             / borrow_factor_f)
             .min(remaining_reserve_borrow)
-            .min(self.liquidity.available_amount.into());
+            .min(self.freely_available_liquidity_amount().into());
         let (origination_fee, referrer_fee) = self.config.fees.calculate_borrow_fees(
             borrow_amount_f,
             FeeCalculation::Inclusive,
@@ -430,17 +635,18 @@ impl Reserve {
         }
         if borrow_amount_f > remaining_reserve_borrow {
             msg!(
-                "Borrowing {} (after fees: {}) would exceed the reserve's remaining limit {}",
+                "Borrowing {} (including fees: {}) would exceed the reserve's remaining limit {}",
                 receive_amount,
                 borrow_amount_f.to_display(),
                 remaining_reserve_borrow.to_display(),
             );
             return err!(LendingError::BorrowLimitExceeded);
         }
-        let reserve_available_liquidity_f = Fraction::from(self.liquidity.available_amount);
+        let reserve_available_liquidity_f =
+            Fraction::from(self.freely_available_liquidity_amount());
         if borrow_amount_f > reserve_available_liquidity_f {
             msg!(
-                "Borrowing {} (after fees: {}) would exceed the reserve's remaining liquidity {}",
+                "Borrowing {} (including fees: {}) would exceed the reserve's remaining liquidity {}",
                 receive_amount,
                 borrow_amount_f.to_display(),
                 reserve_available_liquidity_f.to_display(),
@@ -477,7 +683,7 @@ impl Reserve {
 
     pub fn calculate_redeem_fees(&self) -> u64 {
         min(
-            self.liquidity.available_amount,
+            self.freely_available_liquidity_amount(),
             Fraction::from_bits(self.liquidity.accumulated_protocol_fees_sf).to_floor(),
         )
     }
@@ -499,7 +705,40 @@ impl Reserve {
             self.liquidity.accumulated_referrer_fees_sf,
         );
         let available_unclaimed: u64 = Fraction::from_bits(available_unclaimed_sf).to_floor();
-        min(available_unclaimed, self.liquidity.available_amount)
+        min(
+            available_unclaimed,
+            self.freely_available_liquidity_amount(),
+        )
+    }
+
+
+
+    fn withdraw_including_queued(&mut self, liquidity_amount: u64) -> Result<()> {
+        if liquidity_amount > self.liquidity.total_available_amount {
+            msg!(
+                "Withdraw amount {} cannot exceed the total available amount {}",
+                liquidity_amount,
+                self.liquidity.total_available_amount
+            );
+            return err!(LendingError::InsufficientLiquidity);
+        }
+        self.liquidity.total_available_amount -= liquidity_amount;
+        Ok(())
+    }
+
+
+    fn withdraw_freely_available(&mut self, liquidity_amount: u64) -> Result<()> {
+        let freely_available_amount = self.freely_available_liquidity_amount();
+        if liquidity_amount > freely_available_amount {
+            msg!(
+                "Withdraw liquidity amount {} cannot exceed the freely available amount {}",
+                liquidity_amount,
+                freely_available_amount
+            );
+            return err!(LendingError::InsufficientLiquidity);
+        }
+        self.liquidity.total_available_amount -= liquidity_amount;
+        Ok(())
     }
 
 
@@ -507,7 +746,7 @@ impl Reserve {
 
 
     pub fn is_used(&self, min_initial_deposit_amount: u64) -> bool {
-        self.liquidity.available_amount > min_initial_deposit_amount
+        self.total_available_liquidity_amount() > min_initial_deposit_amount
             || self.liquidity.total_borrow() > Fraction::ZERO
             || self.collateral.mint_total_supply > min_initial_deposit_amount
     }
@@ -518,7 +757,7 @@ impl Reserve {
     }
 
     pub fn has_initial_deposit(&self) -> bool {
-        self.liquidity.available_amount > 0 || self.collateral.mint_total_supply > 0
+        self.total_available_liquidity_amount() > 0 || self.collateral.mint_total_supply > 0
     }
 }
 
@@ -548,7 +787,13 @@ pub struct ReserveLiquidity {
 
     pub fee_vault: Pubkey,
 
-    pub available_amount: u64,
+
+
+
+
+
+    pub total_available_amount: u64,
+
 
     pub borrowed_amount_sf: u128,
 
@@ -582,13 +827,54 @@ pub struct ReserveLiquidity {
     pub padding3: [u128; 32],
 }
 
+
+#[derive(Debug, PartialEq, Eq, Default)]
+#[zero_copy]
+#[repr(C)]
+pub struct WithdrawQueue {
+
+    pub queued_collateral_amount: u64,
+
+
+
+    pub next_issued_ticket_sequence_number: u64,
+
+
+
+
+    pub next_withdrawable_ticket_sequence_number: u64,
+}
+
+impl WithdrawQueue {
+
+
+
+
+    pub fn enqueue(&mut self, collateral_amount: u64) -> u64 {
+        self.queued_collateral_amount += collateral_amount;
+        let issued_sequence_number = self.next_issued_ticket_sequence_number;
+        self.next_issued_ticket_sequence_number = issued_sequence_number + 1;
+        issued_sequence_number
+    }
+
+
+
+
+    pub fn dequeue(&mut self, collateral_amount: u64, ticket_emptied: bool) {
+        self.queued_collateral_amount -= collateral_amount;
+        if ticket_emptied {
+            self.next_withdrawable_ticket_sequence_number += 1;
+        }
+    }
+}
+
 impl Default for ReserveLiquidity {
     fn default() -> Self {
         Self {
             mint_pubkey: Pubkey::default(),
             supply_vault: Pubkey::default(),
             fee_vault: Pubkey::default(),
-            available_amount: 0,
+            total_available_amount: 0,
             borrowed_amount_sf: 0,
             cumulative_borrow_rate_bsf: BigFractionBytes::from(BigFraction::from(Fraction::ONE)),
             accumulated_protocol_fees_sf: 0,
@@ -601,8 +887,8 @@ impl Default for ReserveLiquidity {
             absolute_referral_rate_sf: 0,
             market_price_last_updated_ts: 0,
             token_program: Pubkey::default(),
-            padding2: [0; 51],
-            padding3: [0; 32],
+            padding2: default_array(),
+            padding3: default_array(),
         }
     }
 }
@@ -625,7 +911,7 @@ impl ReserveLiquidity {
             mint_decimals: mint_decimals.into(),
             supply_vault,
             fee_vault,
-            available_amount: initial_amount_deposited_in_reserve,
+            total_available_amount: initial_amount_deposited_in_reserve,
             borrowed_amount_sf: 0,
             cumulative_borrow_rate_bsf: BigFractionBytes::from(BigFraction::from(Fraction::ONE)),
             accumulated_protocol_fees_sf: 0,
@@ -637,14 +923,14 @@ impl ReserveLiquidity {
             absolute_referral_rate_sf: 0,
             market_price_last_updated_ts: 0,
             token_program: mint_token_program,
-            padding2: [0; 51],
-            padding3: [0; 32],
+            padding2: default_array(),
+            padding3: default_array(),
         }
     }
 
 
     pub fn total_supply(&self) -> Fraction {
-        Fraction::from(self.available_amount) + Fraction::from_bits(self.borrowed_amount_sf)
+        Fraction::from(self.total_available_amount) + Fraction::from_bits(self.borrowed_amount_sf)
             - Fraction::from_bits(self.accumulated_protocol_fees_sf)
             - Fraction::from_bits(self.accumulated_referrer_fees_sf)
             - Fraction::from_bits(self.pending_referrer_fees_sf)
@@ -657,47 +943,17 @@ impl ReserveLiquidity {
 
 
     pub fn deposit(&mut self, liquidity_amount: u64) -> Result<()> {
-        self.available_amount = self
-            .available_amount
+        self.total_available_amount = self
+            .total_available_amount
             .checked_add(liquidity_amount)
             .ok_or(LendingError::MathOverflow)?;
         Ok(())
     }
 
 
-    pub fn withdraw(&mut self, liquidity_amount: u64) -> Result<()> {
-        if liquidity_amount > self.available_amount {
-            msg!("Withdraw amount cannot exceed available amount");
-            return err!(LendingError::InsufficientLiquidity);
-        }
-        self.available_amount = self
-            .available_amount
-            .checked_sub(liquidity_amount)
-            .ok_or(LendingError::MathOverflow)?;
-        Ok(())
-    }
-
-
-    pub fn borrow(&mut self, borrow_f: Fraction) -> Result<()> {
-        let borrow_amount: u64 = borrow_f.to_floor();
-
-        if borrow_amount > self.available_amount {
-            msg!("Borrow amount cannot exceed available amount borrow_amount={}, available_amount={}", borrow_amount, self.available_amount);
-            return err!(LendingError::InsufficientLiquidity);
-        }
-
-        let borrowed_amount_f = Fraction::from_bits(self.borrowed_amount_sf);
-
-        self.available_amount -= borrow_amount;
-        self.borrowed_amount_sf = (borrowed_amount_f + borrow_f).to_bits();
-
-        Ok(())
-    }
-
-
     pub fn repay(&mut self, repay_amount: u64, settle_amount: Fraction) -> LendingResult<()> {
-        self.available_amount = self
-            .available_amount
+        self.total_available_amount = self
+            .total_available_amount
             .checked_add(repay_amount)
             .ok_or(LendingError::MathOverflow)?;
         let borrowed_amount_f = Fraction::from_bits(self.borrowed_amount_sf);
@@ -711,35 +967,6 @@ impl ReserveLiquidity {
                     safe_settle_amount.to_display()
                 );
                 LendingError::MathOverflow
-            })?
-            .to_bits();
-
-        Ok(())
-    }
-
-
-    pub fn redeem_fees(&mut self, withdraw_amount: u64) -> Result<()> {
-        self.available_amount = self
-            .available_amount
-            .checked_sub(withdraw_amount)
-            .ok_or_else(|| {
-                msg!(
-                    "Available amount {} cannot be less than withdraw amount {withdraw_amount}",
-                    self.available_amount
-                );
-                LendingError::MathOverflow
-            })?;
-        let accumulated_protocol_fees_f = Fraction::from_bits(self.accumulated_protocol_fees_sf);
-        let withdraw_amount_f = Fraction::from_num(withdraw_amount);
-        self.accumulated_protocol_fees_sf = accumulated_protocol_fees_f
-            .checked_sub(withdraw_amount_f)
-            .ok_or_else(|| {
-                msg!(
-                    "Accumulated protocol fees {} cannot be less than withdraw amount {}",
-                    accumulated_protocol_fees_f.to_display(),
-                    withdraw_amount_f.to_display()
-                );
-                error!(LendingError::MathOverflow)
             })?
             .to_bits();
 
@@ -833,56 +1060,6 @@ impl ReserveLiquidity {
         let amt = Fraction::from_bits(self.borrowed_amount_sf);
         let new_amt = amt - liquidity_amount;
         self.borrowed_amount_sf = new_amt.to_bits();
-    }
-
-
-    pub fn withdraw_referrer_fees(
-        &mut self,
-        withdraw_amount: u64,
-        referrer_token_state: &mut ReferrerTokenState,
-    ) -> Result<()> {
-        self.available_amount = self
-            .available_amount
-            .checked_sub(withdraw_amount)
-            .ok_or_else(|| {
-                msg!("Available amount {} cannot be less than withdraw amount on referrer fees {withdraw_amount}", self.available_amount);
-                LendingError::MathOverflow
-            })?;
-
-        let accumulated_referrer_fees_f = Fraction::from_bits(self.accumulated_referrer_fees_sf);
-
-        let withdraw_amount_f = Fraction::from_num(withdraw_amount);
-
-        let new_accumulated_referrer_fees_f = accumulated_referrer_fees_f
-            .checked_sub(withdraw_amount_f)
-            .ok_or_else(|| {
-                msg!(
-                    "Accumulated referrer fees {} cannot be less than withdraw amount {}",
-                    accumulated_referrer_fees_f.to_display(),
-                    withdraw_amount_f.to_display()
-                );
-                error!(LendingError::MathOverflow)
-            })?;
-
-        self.accumulated_referrer_fees_sf = new_accumulated_referrer_fees_f.to_bits();
-
-        let referrer_amount_unclaimed_f =
-            Fraction::from_bits(referrer_token_state.amount_unclaimed_sf);
-
-        let new_referrer_amount_unclaimed_f = referrer_amount_unclaimed_f
-            .checked_sub(withdraw_amount_f)
-            .ok_or_else(|| {
-                msg!(
-                    "Unclaimed referrer fees {} cannot be less than withdraw amount {}",
-                    referrer_amount_unclaimed_f.to_display(),
-                    withdraw_amount_f.to_display()
-                );
-                error!(LendingError::MathOverflow)
-            })?;
-
-        referrer_token_state.amount_unclaimed_sf = new_referrer_amount_unclaimed_f.to_bits();
-
-        Ok(())
     }
 
     pub fn get_market_price(&self) -> Fraction {
@@ -1033,6 +1210,8 @@ impl CollateralExchangeRate {
     }
 
 
+
+
     pub fn fraction_collateral_to_liquidity(&self, collateral_amount: Fraction) -> Fraction {
         (BigFraction::from(collateral_amount) * BigFraction::from(self.liquidity)
             / self.collateral_supply)
@@ -1041,6 +1220,8 @@ impl CollateralExchangeRate {
            
             .expect("fraction_collateral_to_liquidity: liquidity_amount overflow")
     }
+
+
 
 
     pub fn fraction_liquidity_to_collateral(&self, liquidity_amount: Fraction) -> Fraction {
@@ -1052,10 +1233,22 @@ impl CollateralExchangeRate {
     }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
     pub fn fraction_liquidity_to_collateral_ceil(&self, liquidity_amount: Fraction) -> Fraction {
-        (((BigFraction::from(liquidity_amount) * self.collateral_supply)
-            + BigFraction::from(self.liquidity - Fraction::DELTA))
-            / self.liquidity)
+        (BigFraction::from(liquidity_amount) * self.collateral_supply)
+            .div_ceil(self.liquidity)
             .try_into()
            
            
@@ -1093,7 +1286,7 @@ impl CollateralExchangeRate {
 
 
     pub fn liquidity_to_collateral_ceil(&self, liquidity_amount: u64) -> u64 {
-        self.liquidity_to_collateral_fraction(liquidity_amount)
+        self.fraction_liquidity_to_collateral_ceil(Fraction::from_num(liquidity_amount))
             .to_ceil()
     }
 }
@@ -1645,6 +1838,11 @@ pub fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fr
 
     Fraction::ONE + first_term + second_term + third_term
 }
+
+
+
+
+
 
 
 

@@ -15,7 +15,7 @@ use crate::{
     refresh_farms,
     state::{obligation::Obligation, LendingMarket, Reserve},
     utils::{close_account_loader, seeds, token_transfer},
-    LendingAction, LtvMaxWithdrawalCheck, ReserveFarmKind,
+    LendingAction, LtvMaxWithdrawalCheck, RedeemCollateralOptions, ReserveFarmKind,
     WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
 };
 
@@ -96,7 +96,7 @@ pub(super) fn process_impl(
         let initial_reserve_token_balance = token_interface::accessor::amount(
             &accounts.reserve_liquidity_supply.to_account_info(),
         )?;
-        let initial_reserve_available_liquidity = reserve.liquidity.available_amount;
+        let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
         let withdraw_obligation_amount = lending_operations::withdraw_obligation_collateral(
             lending_market,
             reserve,
@@ -110,7 +110,7 @@ pub(super) fn process_impl(
             reserve,
             withdraw_obligation_amount,
             clock,
-            true,
+            RedeemCollateralOptions::REGULAR,
         )?;
         msg!(
             "pnl: Withdraw obligation collateral {} and redeem reserve collateral {}",
@@ -136,7 +136,7 @@ pub(super) fn process_impl(
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
             token_interface::accessor::amount(&accounts.reserve_liquidity_supply.to_account_info())
                 .unwrap(),
-            reserve.liquidity.available_amount,
+            reserve.total_available_liquidity_amount(),
             initial_reserve_token_balance,
             initial_reserve_available_liquidity,
             LendingAction::Subtractive(withdraw_liquidity_amount),

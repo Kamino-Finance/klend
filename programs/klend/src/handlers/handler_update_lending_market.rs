@@ -205,6 +205,30 @@ pub fn process(
                 .validating(validations::check_bool)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateWithdrawTicketIssuanceEnabled => {
+            config_items::for_named_field!(&mut market.withdraw_ticket_issuance_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateWithdrawTicketRedemptionEnabled => {
+            config_items::for_named_field!(&mut market.withdraw_ticket_redemption_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+
+           
+           
+            if market.is_withdraw_ticket_redemption_enabled()
+                && market.min_withdraw_queued_liquidity_value == 0
+            {
+                msg!("Cannot enable withdraw ticket redemption before configuring min_withdraw_queued_liquidity_value");
+                return err!(LendingError::InvalidConfig);
+            }
+        }
+        UpdateLendingMarketMode::UpdateMinWithdrawQueuedLiquidityValue => {
+            config_items::for_named_field!(&mut market.min_withdraw_queued_liquidity_value)
+                .validating(validations::check_not_zero)
+                .set(&value)?;
+        }
     }
 
     Ok(())

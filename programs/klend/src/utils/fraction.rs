@@ -272,8 +272,16 @@ impl BigFraction {
         T: Into<U256>,
     {
         let value: U256 = num.into();
-        let sf = value << Fraction::FRAC_NBITS;
+        let sf = panicking_shl(value, Fraction::FRAC_NBITS);
         Self(sf)
+    }
+
+
+    pub fn div_ceil(self, rhs: impl Into<BigFraction>) -> Self {
+        let extra_scaled = panicking_shl(self.0, Fraction::FRAC_NBITS);
+        let rhs_scaled = rhs.into().0;
+        let res = (extra_scaled + rhs_scaled - 1) / rhs_scaled;
+        Self(res)
     }
 }
 
@@ -332,7 +340,7 @@ impl Div for BigFraction {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self::Output {
-        let extra_scaled = self.0 << Fraction::FRAC_NBITS;
+        let extra_scaled = panicking_shl(self.0, Fraction::FRAC_NBITS);
         let res = extra_scaled / rhs.0;
         Self(res)
     }
@@ -342,7 +350,7 @@ impl Div<Fraction> for BigFraction {
     type Output = Self;
 
     fn div(self, rhs: Fraction) -> Self::Output {
-        let extra_scaled = self.0 << Fraction::FRAC_NBITS;
+        let extra_scaled = panicking_shl(self.0, Fraction::FRAC_NBITS);
         let res = extra_scaled / rhs.to_bits();
         Self(res)
     }
@@ -444,6 +452,19 @@ impl std::fmt::Debug for FractionDisplay<'_> {
     fn fmt(&self, formater: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(formater, "{}", self)
     }
+}
+
+
+
+
+
+fn panicking_shl(number: U256, bit_count: u32) -> U256 {
+    let result = number << bit_count;
+    let recovered_number = result >> bit_count;
+    if recovered_number != number {
+        panic!("Cannot shift {} left by {} bits", number, bit_count);
+    }
+    result
 }
 
 
