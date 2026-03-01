@@ -23,9 +23,29 @@ pub fn process(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
     let market = ctx.accounts.lending_market.load()?;
     let lending_market_key = ctx.accounts.lending_market.key();
 
-    let amount = amount.min(ctx.accounts.fee_vault.amount);
+        let amount = amount.min(ctx.accounts.fee_vault.amount);
 
-    let authority_signer_seeds = gen_signer_seeds!(lending_market_key, market.bump_seed as u8);
+    
+
+        // SOVEREIGN SECURITY: Emergency Mode Check and Sanity Log
+
+        require!(constraints::emergency_mode_disabled(&market), crate::PoolError::EmergencyModeEnabled);
+
+        if amount == 0 {
+
+            msg!("Sovereign Alert: Attempted to withdraw zero fees.");
+
+            return Ok(());
+
+        }
+
+    
+
+        let authority_signer_seeds = gen_signer_seeds!(lending_market_key, ma
+
+    rket.bump_seed as u8);
+
+    
 
     msg!("Withdrawing fees: {}", amount);
 
