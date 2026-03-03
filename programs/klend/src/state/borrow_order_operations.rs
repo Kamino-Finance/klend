@@ -18,6 +18,7 @@ use crate::{
 
 pub fn set_borrow_order(
     lending_market: &LendingMarket,
+    reserve: &Reserve,
     borrow_order: &mut BorrowOrder,
     order_config: Option<BorrowOrderConfig>,
     clock: &Clock,
@@ -39,7 +40,7 @@ pub fn set_borrow_order(
     let timestamp = clock.unix_timestamp.try_into().expect("negative timestamp");
 
    
-    check_order_config_valid(&order_config, timestamp)?;
+    check_order_config_valid(&order_config, lending_market, reserve, timestamp)?;
 
    
     borrow_order.clear_if_past_fillable_timestamp(timestamp);
@@ -139,7 +140,8 @@ pub fn fill_borrow_order(
     }
 
    
-    if amount < borrow_order.remaining_debt_amount {
+    let new_remaining_debt_amount = borrow_order.remaining_debt_amount - amount;
+    if new_remaining_debt_amount > 0 {
        
         let fill_value =
             calculate_market_value_from_liquidity_amount(reserve, Fraction::from_num(amount));
@@ -152,12 +154,15 @@ pub fn fill_borrow_order(
             );
             return err!(LendingError::BorrowOrderFillValueTooSmall);
         }
+
+       
+        check_order_remaining_debt_value(new_remaining_debt_amount, lending_market, reserve)?;
     }
 
     let borrow_order_initial_state = *borrow_order;
 
    
-    borrow_order.remaining_debt_amount -= amount;
+    borrow_order.remaining_debt_amount = new_remaining_debt_amount;
 
     if borrow_order.remaining_debt_amount == 0 {
         event_emitter.emit(BorrowOrderFullFillEvent {
@@ -192,7 +197,12 @@ fn check_borrow_order_execution_enabled(lending_market: &LendingMarket) -> Resul
     Ok(())
 }
 
-fn check_order_config_valid(order_config: &BorrowOrderConfig, timestamp: u64) -> Result<()> {
+fn check_order_config_valid(
+    order_config: &BorrowOrderConfig,
+    lending_market: &LendingMarket,
+    reserve: &Reserve,
+    timestamp: u64,
+) -> Result<()> {
     let BorrowOrderConfig {
         debt_liquidity_mint: _,
         remaining_debt_amount,
@@ -224,6 +234,30 @@ fn check_order_config_valid(order_config: &BorrowOrderConfig, timestamp: u64) ->
         return err!(LendingError::InvalidOrderConfiguration);
     }
 
+   
+    check_order_remaining_debt_value(*remaining_debt_amount, lending_market, reserve)?;
+
+    Ok(())
+}
+
+fn check_order_remaining_debt_value(
+    remaining_debt_amount: u64,
+    lending_market: &LendingMarket,
+    reserve: &Reserve,
+) -> Result<()> {
+    let order_value = calculate_market_value_from_liquidity_amount(
+        reserve,
+        Fraction::from_num(remaining_debt_amount),
+    );
+    if order_value < lending_market.min_borrow_order_fill_value {
+        msg!(
+            "Borrow order's remaining debt {} would have value {}, below the configured minimum {}",
+            remaining_debt_amount,
+            order_value.to_display(),
+            lending_market.min_borrow_order_fill_value
+        );
+        return err!(LendingError::BorrowOrderValueTooSmall);
+    }
     Ok(())
 }
 

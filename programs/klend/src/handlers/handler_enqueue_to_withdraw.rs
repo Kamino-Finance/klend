@@ -28,11 +28,16 @@ pub fn process(ctx: Context<EnqueueToWithdraw>, collateral_amount: u64) -> Resul
         LendingError::WithdrawTicketIssuanceDisabled,
     );
 
+   
+   
+    lending_operations::refresh_reserve(reserve, clock, None, lending_market.referral_fee_bps)?;
+
     let initial_owner_queued_collateral_vault_balance =
         ctx.accounts.owner_queued_collateral_vault.amount;
     let initial_queued_collateral_amount = reserve.withdraw_queue.queued_collateral_amount;
 
-    let sequence_number = lending_operations::enqueue_to_withdraw(reserve, collateral_amount)?;
+    let sequence_number =
+        lending_operations::enqueue_to_withdraw(lending_market, reserve, collateral_amount)?;
 
     *withdraw_ticket = WithdrawTicket {
         sequence_number,

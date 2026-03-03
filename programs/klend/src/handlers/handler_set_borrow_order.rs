@@ -4,7 +4,7 @@ use solana_program::sysvar::{instructions::Instructions as SysInstructions, Sysv
 
 use crate::{
     borrow_order_operations, utils::ctx_event_emitter, BorrowOrderConfig, LendingError,
-    LendingMarket, Obligation,
+    LendingMarket, Obligation, Reserve,
 };
 
 pub fn process(
@@ -12,13 +12,18 @@ pub fn process(
     order_config: BorrowOrderConfigArgs,
     min_expected_current_remaining_debt_amount: u64,
 ) -> Result<()> {
-   
-   
-   
     let order_config = order_config.with_accounts(ctx.accounts);
     let lending_market = &ctx.accounts.lending_market.load()?;
+    let reserve = &ctx.accounts.reserve.load()?;
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let clock = Clock::get()?;
+
+   
+   
+   
+   
+   
+   
 
     require_gte!(
         obligation.borrow_order.remaining_debt_amount,
@@ -28,6 +33,7 @@ pub fn process(
 
     borrow_order_operations::set_borrow_order(
         lending_market,
+        reserve,
         &mut obligation.borrow_order,
         order_config,
         &clock,
@@ -52,19 +58,33 @@ pub struct SetBorrowOrder<'info> {
 
 
 
+    #[account(has_one = lending_market)]
+    pub reserve: AccountLoader<'info, Reserve>,
+
+
+
+
    
    
    
    
    
    
-    #[account(token::mint = debt_liquidity_mint, token::authority = owner)]
+    #[account(
+        token::mint = debt_liquidity_mint,
+        token::authority = owner,
+        token::token_program = reserve.load()?.liquidity.token_program,
+    )]
     pub filled_debt_destination: Box<InterfaceAccount<'info, TokenAccount>>,
 
 
 
 
    
+    #[account(
+        address = reserve.load()?.liquidity.mint_pubkey,
+        mint::token_program = reserve.load()?.liquidity.token_program,
+    )]
     pub debt_liquidity_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// CHECK: Sysvar Instruction allowing introspection, fixed address
