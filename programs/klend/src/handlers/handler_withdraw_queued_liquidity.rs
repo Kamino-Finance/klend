@@ -87,6 +87,9 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
     let initial_queued_collateral_amount = reserve.withdraw_queue.queued_collateral_amount;
 
     let clock = Clock::get()?;
+
+   
+   
     lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
 
     let mut withdraw_ticket = ctx.accounts.withdraw_ticket.load_mut()?;

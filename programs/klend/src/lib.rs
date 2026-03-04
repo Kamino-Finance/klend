@@ -802,6 +802,10 @@ pub enum LendingError {
     InvalidTokenAccountState,
     #[msg("Cannot use ticket that was already marked invalid")]
     WithdrawTicketInvalid,
+    #[msg("Borrow order's value would be below the market-configured minimum")]
+    BorrowOrderValueTooSmall,
+    #[msg("Withdraw ticket's value would be below the market-configured minimum")]
+    WithdrawTicketValueTooSmall,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

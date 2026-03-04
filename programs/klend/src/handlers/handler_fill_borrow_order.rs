@@ -49,6 +49,10 @@ fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>)
     )?;
 
    
+   
+   
+
+   
     let borrow_reserve = accounts.borrow_reserve.load()?;
     let lending_market = accounts.lending_market.load()?;
     let mut obligation = accounts.obligation.load_mut()?;

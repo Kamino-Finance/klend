@@ -676,11 +676,16 @@ pub fn redeem_reserve_collateral(
     Ok(liquidity_amount)
 }
 
-pub fn enqueue_to_withdraw(reserve: &mut Reserve, collateral_amount: u64) -> Result<u64> {
+pub fn enqueue_to_withdraw(
+    lending_market: &LendingMarket,
+    reserve: &mut Reserve,
+    collateral_amount: u64,
+) -> Result<u64> {
     if collateral_amount == 0 {
         msg!("Cannot enqueue to withdraw a zero amount");
         return err!(LendingError::InvalidAmount);
     }
+    check_min_withdraw_ticket_value(lending_market, reserve, collateral_amount)?;
     Ok(reserve.withdraw_queue.enqueue(collateral_amount))
 }
 
@@ -699,8 +704,15 @@ pub fn withdraw_queued_liquidity(
         withdraw_ticket.queued_collateral_amount,
         max_redeemable_collateral_amount,
     );
-    withdraw_ticket.queued_collateral_amount -= collateral_amount_to_burn;
-    let ticket_emptied = withdraw_ticket.queued_collateral_amount == 0;
+    let remaining_collateral = withdraw_ticket.queued_collateral_amount - collateral_amount_to_burn;
+    let ticket_emptied = remaining_collateral == 0;
+
+   
+    if !ticket_emptied {
+        check_min_withdraw_ticket_value(lending_market, reserve, remaining_collateral)?;
+    }
+
+    withdraw_ticket.queued_collateral_amount = remaining_collateral;
 
     let liquidity_amount_to_withdraw = redeem_reserve_collateral(
         reserve,
@@ -965,6 +977,29 @@ where
         borrow_reserves_iter,
     )?;
 
+    Ok(())
+}
+
+fn check_min_withdraw_ticket_value(
+    lending_market: &LendingMarket,
+    reserve: &Reserve,
+    collateral_amount: u64,
+) -> Result<()> {
+    let liquidity_amount = reserve
+        .collateral_exchange_rate()
+        .collateral_to_liquidity(collateral_amount);
+    let ticket_value =
+        calculate_market_value_from_liquidity_amount(reserve, Fraction::from_num(liquidity_amount));
+    if ticket_value < lending_market.min_withdraw_queued_liquidity_value {
+        xmsg!(
+            "Withdraw ticket collateral {} (liquidity {}) would have value {}, lower than the configured minimum {}",
+            collateral_amount,
+            liquidity_amount,
+            ticket_value.to_display(),
+            lending_market.min_withdraw_queued_liquidity_value
+        );
+        return err!(LendingError::WithdrawTicketValueTooSmall);
+    }
     Ok(())
 }
 
