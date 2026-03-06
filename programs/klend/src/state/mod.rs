@@ -250,6 +250,9 @@ pub enum UpdateLendingMarketMode {
     UpdateWithdrawTicketIssuanceEnabled = 32,
     UpdateWithdrawTicketRedemptionEnabled = 33,
     UpdateMinWithdrawQueuedLiquidityValue = 34,
+    UpdateFixedRolloverWindowDurationSeconds = 35,
+    UpdateVariableRolloverWindowDurationSeconds = 36,
+    UpdateObligationBorrowRolloverConfigurationEnabled = 37,
 }
 
 #[cfg(feature = "serde")]

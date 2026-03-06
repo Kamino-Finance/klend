@@ -1,7 +1,6 @@
-use super::types::Price;
 use crate::{
     fraction::BigFraction,
-    utils::{Fraction, U128, U256},
+    utils::{prices::types::Price, Fraction, U128, U256},
 };
 
 

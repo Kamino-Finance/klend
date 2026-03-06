@@ -191,12 +191,23 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub withdraw_ticket_redemption_enabled: u8,
 
+
+
+
+
+
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub obligation_borrow_rollover_configuration_enabled: u8,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding2: [u8; 6],
+    pub padding2: [u8; 5],
 
 
 
@@ -205,12 +216,30 @@ pub struct LendingMarket {
    
     pub min_withdraw_queued_liquidity_value: u64,
 
+   
+
+
+
+
+
+
+    pub fixed_rollover_window_duration_seconds: u64,
+
+
+
+
+
+
+
+
+    pub variable_rollover_window_duration_seconds: u64,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 162],
+    pub padding1: [u64; 160],
 }
 
 impl Default for LendingMarket {
@@ -254,6 +283,9 @@ impl Default for LendingMarket {
             withdraw_ticket_issuance_enabled: 0,
             withdraw_ticket_redemption_enabled: 0,
             min_withdraw_queued_liquidity_value: MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE,
+            fixed_rollover_window_duration_seconds: 0,
+            variable_rollover_window_duration_seconds: 0,
+            obligation_borrow_rollover_configuration_enabled: 0,
             min_borrow_order_fill_value: MIN_BORROW_ORDER_FILL_VALUE,
             padding2: default_array(),
             padding1: default_array(),
@@ -269,6 +301,13 @@ impl LendingMarket {
         self.bump_seed = params.bump_seed as u64;
         self.lending_market_owner = params.lending_market_owner;
         self.quote_currency = params.quote_currency;
+    }
+
+
+    pub fn get_name(&self) -> &str {
+        std::str::from_utf8(&self.name)
+            .unwrap_or("<invalid utf-8>")
+            .trim_end_matches('\0')
     }
 
     pub fn get_elevation_group(&self, id: u8) -> Result<Option<&ElevationGroup>> {

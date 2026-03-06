@@ -10,6 +10,7 @@ pub mod utils;
 
 pub use lending_market::lending_operations::utils::validate_reserve_config_integrity;
 use utils::constraints::emergency_mode_disabled;
+use withdraw_ticket::ProgressCallbackType;
 
 use crate::handlers::*;
 pub use crate::{state::*, utils::fraction};
@@ -439,8 +440,9 @@ pub mod kamino_lending {
     pub fn enqueue_to_withdraw(
         ctx: Context<EnqueueToWithdraw>,
         collateral_amount: u64,
+        progress_callback_type: ProgressCallbackType,
     ) -> Result<()> {
-        handler_enqueue_to_withdraw::process(ctx, collateral_amount)
+        handler_enqueue_to_withdraw::process(ctx, collateral_amount, progress_callback_type)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
@@ -806,6 +808,12 @@ pub enum LendingError {
     BorrowOrderValueTooSmall,
     #[msg("Withdraw ticket's value would be below the market-configured minimum")]
     WithdrawTicketValueTooSmall,
+    #[msg("Invalid configuration or required custom accounts for the requested withdraw ticket callback type")]
+    InvalidWithdrawTicketProgressCallbackConfig,
+    #[msg(
+        "One or more accounts required by the ticket's configured progress callback are missing"
+    )]
+    WithdrawTicketProgressCallbackAccountsMissing,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

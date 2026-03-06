@@ -17,9 +17,9 @@ use serde;
 
 #[cfg(feature = "serde")]
 use super::serde_bool_u8;
-use super::{DepositLiquidityResult, LastUpdate, TokenInfo};
 use crate::{
     fraction::FractionExtra,
+    state::{DepositLiquidityResult, LastUpdate, TokenInfo},
     utils::{
         accounts::default_array, borrow_rate_curve::BorrowRateCurve, ten_pow, BigFraction,
         Fraction, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE,
@@ -1219,6 +1219,16 @@ impl CollateralExchangeRate {
            
            
             .expect("fraction_collateral_to_liquidity: liquidity_amount overflow")
+    }
+
+
+
+
+    pub fn fraction_collateral_to_liquidity_ceil(&self, collateral_amount: Fraction) -> Fraction {
+        self.liquidity.full_mul_int_ratio_ceil(
+            collateral_amount.to_bits(),
+            Fraction::from_num(self.collateral_supply).to_bits(),
+        )
     }
 
 

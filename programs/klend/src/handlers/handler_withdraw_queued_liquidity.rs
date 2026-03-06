@@ -11,21 +11,21 @@ use solana_program::{
 
 use crate::{
     gen_signer_seeds,
-    lending_market::{lending_checks, lending_operations},
+    lending_market::{kvault_ixs, lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{
         accounts::{create_ata, has_ata_address},
         constraints, seeds, token_transfer,
     },
-    withdraw_ticket::WithdrawTicket,
+    withdraw_ticket::{ProgressCallbackType, WithdrawTicket},
     LendingAction, LendingError, TicketedWithdrawResult,
 };
 
 pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
     lending_checks::withdraw_queued_liquidity_checks(ctx.accounts)?;
 
-    let lending_market = &ctx.accounts.lending_market.load()?;
-    let reserve = &mut ctx.accounts.reserve.load_mut()?;
+    let lending_market = ctx.accounts.lending_market.load()?;
+    let mut reserve = ctx.accounts.reserve.load_mut()?;
 
     require!(
         lending_market.is_withdraw_ticket_redemption_enabled(),
@@ -90,19 +90,33 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
 
    
    
-    lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
+    lending_operations::refresh_reserve(
+        &mut reserve,
+        &clock,
+        None,
+        lending_market.referral_fee_bps,
+    )?;
 
     let mut withdraw_ticket = ctx.accounts.withdraw_ticket.load_mut()?;
-    let TicketedWithdrawResult {
-        liquidity_amount_to_withdraw,
-        collateral_amount_to_burn,
-    } = lending_operations::withdraw_queued_liquidity(
-        lending_market,
-        reserve,
+    let ticketed_withdraw_result = lending_operations::withdraw_queued_liquidity(
+        &lending_market,
+        &mut reserve,
         &mut withdraw_ticket,
         &clock,
     )?;
 
+   
+   
+   
+    drop(withdraw_ticket);
+    drop(reserve);
+    let withdraw_ticket = ctx.accounts.withdraw_ticket.load()?;
+    let reserve = ctx.accounts.reserve.load()?;
+
+    let TicketedWithdrawResult {
+        collateral_amount_to_burn,
+        liquidity_amount_to_withdraw,
+    } = ticketed_withdraw_result;
     msg!(
         "pnl: withdrawing queued liquidity {} and burning collateral {}",
         liquidity_amount_to_withdraw,
@@ -126,6 +140,17 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
         liquidity_amount_to_withdraw,
         ctx.accounts.reserve_liquidity_mint.decimals,
     )?;
+
+    match withdraw_ticket.progress_callback_type() {
+        ProgressCallbackType::None => {}
+        ProgressCallbackType::KlendQueueAccountingHandlerOnKvault => {
+            kvault_ixs::cpi_update_klend_queue_accounting(
+                &ctx,
+                withdraw_ticket.sequence_number,
+                ticketed_withdraw_result,
+            )?;
+        }
+    }
 
     lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
         token_interface::accessor::amount(
@@ -338,6 +363,21 @@ pub struct WithdrawQueuedLiquidity<'info> {
 
 
     pub system_program: Program<'info, System>,
+
+
+    #[account(address = withdraw_ticket.load()?.progress_callback_type().program_address())]
+    pub progress_callback_program: Option<AccountInfo<'info>>,
+
+
+
+
+
+    #[account(address = withdraw_ticket.load()?.progress_callback_custom_accounts[0])]
+    pub progress_callback_custom_account_0: Option<AccountInfo<'info>>,
+
+
+    #[account(address = withdraw_ticket.load()?.progress_callback_custom_accounts[1])]
+    pub progress_callback_custom_account_1: Option<AccountInfo<'info>>,
 
     /// CHECK: Sysvar Instruction allowing introspection, fixed address
     #[account(address = SysInstructions::id())]

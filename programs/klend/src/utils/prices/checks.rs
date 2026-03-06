@@ -1,8 +1,12 @@
 use anchor_lang::{prelude::*, solana_program::clock};
 
-use super::{types::TimestampedPriceWithTwap, utils::price_to_fraction, GetPriceResult, Price};
 use crate::{
-    utils::{Fraction, FULL_BPS},
+    utils::{
+        prices::{
+            types::TimestampedPriceWithTwap, utils::price_to_fraction, GetPriceResult, Price,
+        },
+        Fraction, FULL_BPS,
+    },
     xmsg, LendingError, PriceHeuristic, PriceStatusFlags, TokenInfo,
 };
 
