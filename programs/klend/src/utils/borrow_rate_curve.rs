@@ -10,8 +10,10 @@
 use anchor_lang::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use super::{FractionExtra, FULL_BPS};
-use crate::{utils::Fraction, LendingError};
+use crate::{
+    utils::{Fraction, FractionExtra, FULL_BPS},
+    LendingError,
+};
 
 pub const MAX_UTILIZATION_RATE_BPS: u32 = FULL_BPS as u32;
 

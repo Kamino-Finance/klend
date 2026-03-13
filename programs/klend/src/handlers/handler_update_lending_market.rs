@@ -229,6 +229,21 @@ pub fn process(
                 .validating(validations::check_not_zero)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateFixedRolloverWindowDurationSeconds => {
+            config_items::for_named_field!(&mut market.fixed_rollover_window_duration_seconds)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateVariableRolloverWindowDurationSeconds => {
+            config_items::for_named_field!(&mut market.variable_rollover_window_duration_seconds)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateObligationBorrowRolloverConfigurationEnabled => {
+            config_items::for_named_field!(
+                &mut market.obligation_borrow_rollover_configuration_enabled
+            )
+            .validating(validations::check_bool)
+            .set(&value)?;
+        }
     }
 
     Ok(())

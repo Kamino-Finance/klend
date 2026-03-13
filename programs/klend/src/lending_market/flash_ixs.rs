@@ -2,7 +2,6 @@ use anchor_lang::{
     err, prelude::*, solana_program::instruction::Instruction, Discriminator, Key, Result,
 };
 
-use super::ix_utils::{self, InstructionLoader};
 use crate::{
     handlers::{
         handler_flash_borrow_reserve_liquidity::FlashBorrowReserveLiquidity,
@@ -12,6 +11,7 @@ use crate::{
         FlashBorrowReserveLiquidity as FlashBorrowReserveLiquidityArgs,
         FlashRepayReserveLiquidity as FlashRepayReserveLiquidityArgs,
     },
+    lending_market::ix_utils::{self, InstructionLoader},
     LendingError,
 };
 

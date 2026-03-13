@@ -10,12 +10,14 @@ pub const BASE_SEED_SHORT_URL: &[u8] = b"short_url";
 pub const GLOBAL_CONFIG_STATE: &[u8] = b"global_config";
 pub const WITHDRAW_TICKET: &[u8] = b"withdraw_ticket";
 pub const OWNER_QUEUED_COLLATERAL_VAULT: &[u8] = b"owner_queued_collateral_vault";
+pub const KVAULT_BASE_AUTHORITY: &[u8] = b"authority";
 pub const EVENT_AUTHORITY: &[u8] = b"__event_authority";
 
 pub mod pda {
     use anchor_lang::prelude::Pubkey;
 
     use super::*;
+    use crate::utils::CORRESPONDING_KAMINO_VAULT_PROGRAM_ID;
 
     pub fn program_data() -> Pubkey {
         program_data_program_id(&crate::ID)
@@ -117,6 +119,20 @@ pub mod pda {
             &crate::ID,
         )
         .0
+    }
+
+
+    pub mod kvault {
+        use super::*;
+
+
+        pub fn base_authority(vault: Pubkey) -> Pubkey {
+            Pubkey::find_program_address(
+                &[KVAULT_BASE_AUTHORITY, vault.as_ref()],
+                &CORRESPONDING_KAMINO_VAULT_PROGRAM_ID,
+            )
+            .0
+        }
     }
 }
 

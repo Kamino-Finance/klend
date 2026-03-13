@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 
-use super::utils::ten_pow;
-use crate::utils::{Fraction, U256};
+use crate::utils::{prices::utils::ten_pow, Fraction, U256};
 
 
 

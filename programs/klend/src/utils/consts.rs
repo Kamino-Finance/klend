@@ -179,7 +179,20 @@ pub const FLEX_LEND_ID_MAINNET_PROD: Pubkey =
 
 pub const KAMINO_VAULT_STAGING: Pubkey = pubkey!("STkvh7ostar39Fwr4uZKASs1RNNuYMFMTsE77FiRsL2");
 
-pub const KAMINO_VAULT_MAINNET: Pubkey = pubkey!("kvauTFR8qm1dhniz6pYuBZkuene3Hfrs1VQhVRgCNrr");
+pub const KAMINO_VAULT_MAINNET: Pubkey = pubkey!("KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd");
+
+#[cfg(feature = "staging")]
+pub const CORRESPONDING_KAMINO_VAULT_PROGRAM_ID: Pubkey = KAMINO_VAULT_STAGING;
+
+#[cfg(not(feature = "staging"))]
+pub const CORRESPONDING_KAMINO_VAULT_PROGRAM_ID: Pubkey = KAMINO_VAULT_MAINNET;
+
+
+pub const VAULT_STATE_DISCRIMINATOR: &[u8] = &[228, 196, 82, 165, 98, 210, 235, 152];
+
+
+pub const UPDATE_KLEND_QUEUE_ACCOUNTING_DISCRIMINATOR: [u8; 8] =
+    [45, 84, 96, 103, 171, 196, 40, 129];
 
 pub const DEFI_CARROT_ID_MAINNET: Pubkey = pubkey!("CarrotwivhMpDnm27EHmRLeQ683Z1PufuqEmBZvD282s");
 

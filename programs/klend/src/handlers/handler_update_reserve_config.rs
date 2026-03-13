@@ -17,15 +17,19 @@ pub fn process(
 ) -> Result<()> {
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let market = ctx.accounts.lending_market.load()?;
-    let name = reserve.config.token_info.symbol();
 
     let reserve_usage_was_blocked = reserve.is_usage_blocked();
 
     msg!(
         "Updating reserve {:?} {} config with mode {:?}",
         ctx.accounts.reserve.key(),
-        name,
+        reserve.config.token_info.symbol(),
         mode,
+    );
+    msg!(
+        "Market {:?} {}",
+        ctx.accounts.lending_market.key(),
+        market.get_name()
     );
 
     require!(

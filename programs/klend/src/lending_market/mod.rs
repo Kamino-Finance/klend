@@ -2,6 +2,7 @@ pub mod config_items;
 pub mod farms_ixs;
 pub mod flash_ixs;
 pub mod ix_utils;
+pub mod kvault_ixs;
 pub mod lending_checks;
 pub mod lending_operations;
 pub mod withdrawal_cap_operations;

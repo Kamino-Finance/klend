@@ -8,9 +8,9 @@ use anchor_lang::{account, err, prelude::*, solana_program::clock::Slot, Result}
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 
-use super::{LastUpdate, LtvMaxWithdrawalCheck};
 use crate::{
     obligation_order_operations::{ConditionType, OpportunityType},
+    state::{LastUpdate, LtvMaxWithdrawalCheck},
     utils::{
         accounts::default_array, BigFraction, Fraction, FractionExtra, IterExt,
         ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256,
@@ -658,7 +658,12 @@ pub struct ObligationLiquidity {
 
     pub borrowed_amount_outside_elevation_groups: u64,
 
-    pub padding2: [u64; 7],
+   
+
+
+    pub fixed_term_borrow_rollover_config: FixedTermBorrowRolloverConfig,
+
+    pub padding2: [u64; 5],
 }
 
 impl ObligationLiquidity {
@@ -676,6 +681,7 @@ impl ObligationLiquidity {
             market_value_sf: 0,
             borrow_factor_adjusted_market_value_sf: 0,
             borrowed_amount_outside_elevation_groups: 0,
+            fixed_term_borrow_rollover_config: FixedTermBorrowRolloverConfig::default(),
             padding2: default_array(),
         }
     }
@@ -759,6 +765,49 @@ impl ObligationLiquidity {
         let debt_term_end_timestamp = self.first_borrowed_at_timestamp + debt_term_seconds;
         timestamp.checked_sub(debt_term_end_timestamp)
     }
+}
+
+
+
+
+
+#[derive(Debug, Default, PartialEq, Eq)]
+#[zero_copy]
+#[repr(C)]
+pub struct FixedTermBorrowRolloverConfig {
+
+
+
+
+
+
+
+
+
+
+
+    pub auto_rollover_enabled: u8,
+
+
+
+
+
+
+
+    pub open_term_allowed: u8,
+
+
+    pub alignment_padding: [u8; 2],
+
+
+
+
+    pub max_borrow_rate_bps: u32,
+
+
+
+
+    pub min_debt_term_seconds: u64,
 }
 
 
