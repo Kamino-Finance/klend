@@ -7,6 +7,8 @@ use std::{
 use anchor_lang::{account, err, prelude::*, solana_program::clock::Slot, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use num_enum::TryFromPrimitive;
+use strum::{EnumIter, EnumString};
 
 use crate::{
     obligation_order_operations::{ConditionType, OpportunityType},
@@ -375,7 +377,6 @@ impl Obligation {
         &mut self,
         borrow_reserve: Pubkey,
         cumulative_borrow_rate: BigFraction,
-        current_timestamp: u64,
     ) -> Result<(&mut ObligationLiquidity, usize)> {
         if let Some(liquidity_index) = self.find_liquidity_index_in_borrows(borrow_reserve) {
             Ok((&mut self.borrows[liquidity_index], liquidity_index))
@@ -385,8 +386,7 @@ impl Obligation {
             .enumerate()
             .find(|c| !c.1.is_active())
         {
-            *liquidity =
-                ObligationLiquidity::new(borrow_reserve, cumulative_borrow_rate, current_timestamp);
+            *liquidity = ObligationLiquidity::new(borrow_reserve, cumulative_borrow_rate);
 
             Ok((liquidity, index))
         } else {
@@ -395,7 +395,7 @@ impl Obligation {
         }
     }
 
-    fn find_liquidity_index_in_borrows(&self, borrow_reserve: Pubkey) -> Option<usize> {
+    pub fn find_liquidity_index_in_borrows(&self, borrow_reserve: Pubkey) -> Option<usize> {
         self.borrows
             .iter()
             .position(|liquidity| liquidity.borrow_reserve == borrow_reserve)
@@ -435,6 +435,19 @@ impl Obligation {
 
     pub fn active_borrows_mut(&mut self) -> impl Iterator<Item = &mut ObligationLiquidity> {
         self.borrows.iter_mut().filter(|c| c.is_active())
+    }
+
+
+    pub fn get_active_borrow_mut(&mut self, index: usize) -> Result<&mut ObligationLiquidity> {
+        let Some(borrow) = self.borrows.get_mut(index) else {
+            xmsg!("Invalid obligation borrow index: {}", index);
+            return err!(LendingError::InvalidObligationLiquidity);
+        };
+        if !borrow.is_active() {
+            xmsg!("Obligation borrow slot {} not active", index);
+            return err!(LendingError::InvalidObligationLiquidity);
+        }
+        Ok(borrow)
     }
 
 
@@ -646,7 +659,8 @@ pub struct ObligationLiquidity {
 
 
 
-    pub first_borrowed_at_timestamp: u64,
+
+    pub last_borrowed_at_timestamp: u64,
 
 
     pub borrowed_amount_sf: u128,
@@ -658,30 +672,38 @@ pub struct ObligationLiquidity {
 
     pub borrowed_amount_outside_elevation_groups: u64,
 
-   
 
 
     pub fixed_term_borrow_rollover_config: FixedTermBorrowRolloverConfig,
 
-    pub padding2: [u64; 5],
+
+
+
+
+
+
+
+
+
+
+    pub borrowed_amount_at_expiration: u64,
+
+    pub padding2: [u64; 4],
 }
 
 impl ObligationLiquidity {
 
-    pub fn new(
-        borrow_reserve: Pubkey,
-        cumulative_borrow_rate_bf: BigFraction,
-        first_borrowed_at_timestamp: u64,
-    ) -> Self {
+    pub fn new(borrow_reserve: Pubkey, cumulative_borrow_rate_bf: BigFraction) -> Self {
         Self {
             borrow_reserve,
             cumulative_borrow_rate_bsf: cumulative_borrow_rate_bf.into(),
-            first_borrowed_at_timestamp,
+            last_borrowed_at_timestamp: 0,
             borrowed_amount_sf: 0,
             market_value_sf: 0,
             borrow_factor_adjusted_market_value_sf: 0,
             borrowed_amount_outside_elevation_groups: 0,
             fixed_term_borrow_rollover_config: FixedTermBorrowRolloverConfig::default(),
+            borrowed_amount_at_expiration: 0,
             padding2: default_array(),
         }
     }
@@ -692,8 +714,9 @@ impl ObligationLiquidity {
     }
 
 
-    pub fn borrow(&mut self, borrow_amount: Fraction) {
+    pub fn borrow(&mut self, borrow_amount: Fraction, current_timestamp: u64) {
         self.borrowed_amount_sf = (self.borrowed_amount() + borrow_amount).to_bits();
+        self.last_borrowed_at_timestamp = current_timestamp;
     }
 
 
@@ -731,6 +754,33 @@ impl ObligationLiquidity {
 
 
 
+
+
+
+
+
+
+
+
+    pub fn capture_borrowed_amount_at_expiration(
+        &mut self,
+        reserve_config: &ReserveConfig,
+        timestamp: u64,
+    ) {
+        if self.borrowed_amount_at_expiration != 0 {
+            return;
+        }
+        if self
+            .get_secs_since_reserve_debt_term_end(reserve_config, timestamp)
+            .is_none()
+        {
+            return;
+        }
+        self.borrowed_amount_at_expiration = self.borrowed_amount().to_ceil();
+    }
+
+
+
     pub fn is_active(&self) -> bool {
         self.borrow_reserve != Pubkey::default()
     }
@@ -746,26 +796,39 @@ impl ObligationLiquidity {
     }
 
 
+    pub fn borrowed_amount_at_expiration(&self) -> Fraction {
+        Fraction::from_num(self.borrowed_amount_at_expiration)
+    }
+
+
 
     pub fn get_secs_since_reserve_debt_term_end(
         &self,
         reserve_config: &ReserveConfig,
         timestamp: u64,
     ) -> Option<u64> {
+        timestamp.checked_sub(self.get_debt_term_end_timestamp(reserve_config)?)
+    }
+
+
+    pub fn get_debt_term_end_timestamp(&self, reserve_config: &ReserveConfig) -> Option<u64> {
         let Some(debt_term_seconds) = reserve_config.get_debt_term_seconds() else {
             return None;
         };
-        if self.first_borrowed_at_timestamp == 0 {
+        if self.last_borrowed_at_timestamp == 0 {
             xmsg!(
-                "Debt reserve has a debt term of {} seconds, but an Obligation did not track its first borrow timestamp; ignoring it",
+                "Debt reserve has a debt term of {} seconds, but an Obligation did not track its borrow timestamp; ignoring it",
                 debt_term_seconds,
             );
             return None;
         }
-        let debt_term_end_timestamp = self.first_borrowed_at_timestamp + debt_term_seconds;
-        timestamp.checked_sub(debt_term_end_timestamp)
+        Some(self.last_borrowed_at_timestamp + debt_term_seconds)
     }
 }
+
+
+
+
 
 
 
@@ -786,7 +849,9 @@ pub struct FixedTermBorrowRolloverConfig {
 
 
 
+
     pub auto_rollover_enabled: u8,
+
 
 
 
@@ -797,7 +862,19 @@ pub struct FixedTermBorrowRolloverConfig {
     pub open_term_allowed: u8,
 
 
-    pub alignment_padding: [u8; 2],
+
+
+
+
+
+
+
+
+    pub migration_to_fixed_enabled: u8,
+
+
+    pub alignment_padding: [u8; 1],
+
 
 
 
@@ -807,7 +884,242 @@ pub struct FixedTermBorrowRolloverConfig {
 
 
 
+
+
+
+
+
+
     pub min_debt_term_seconds: u64,
+}
+
+impl FixedTermBorrowRolloverConfig {
+    pub fn is_auto_rollover_enabled(&self) -> bool {
+        self.auto_rollover_enabled != false as u8
+    }
+
+    pub fn is_migration_to_fixed_enabled(&self) -> bool {
+        self.migration_to_fixed_enabled != false as u8
+    }
+
+
+
+    pub fn resolve_rollover_mode(
+        &self,
+        source_reserve_config: &ReserveConfig,
+        target_reserve_config: &ReserveConfig,
+    ) -> Result<RolloverMode> {
+        if source_reserve_config.get_debt_term_seconds().is_some() {
+           
+            self.resolve_rollover_from_fixed_term_mode(target_reserve_config)
+        } else {
+           
+            self.check_migration_to_fixed_term_possible(target_reserve_config)?;
+            Ok(RolloverMode::FromOpenToFixedTerm)
+        }
+    }
+
+
+    fn resolve_rollover_from_fixed_term_mode(
+        &self,
+        target_reserve_config: &ReserveConfig,
+    ) -> Result<RolloverMode> {
+       
+        if !self.is_auto_rollover_enabled() {
+            return err!(LendingError::ObligationBorrowRolloverNotEnabledByOwner);
+        }
+
+       
+        let Some(target_debt_term_seconds) = target_reserve_config.get_debt_term_seconds() else {
+            return if self.open_term_allowed == false as u8 {
+               
+                xmsg!("Owner did not allow rollover into open-term reserve");
+                err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch)
+            } else {
+               
+                Ok(RolloverMode::FromFixedToOpenTerm)
+               
+               
+               
+               
+               
+            };
+        };
+
+       
+       
+        let target_borrow_rate_bps = target_reserve_config.max_borrow_rate_bps();
+        if target_borrow_rate_bps > self.max_borrow_rate_bps {
+            xmsg!(
+                "Target reserve borrow rate ({} bps) is higher than the maximum allowed {} bps",
+                target_borrow_rate_bps,
+                self.max_borrow_rate_bps
+            );
+            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+        }
+
+       
+        if self.min_debt_term_seconds == 0 {
+            xmsg!("Owner's min_debt_term_seconds is 0 (open-term only), but target is fixed-term");
+            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+        }
+
+       
+        if target_debt_term_seconds < self.min_debt_term_seconds {
+            xmsg!(
+                "Target reserve debt term ({} seconds) is lower than the minimum allowed {} seconds",
+                target_debt_term_seconds,
+                self.min_debt_term_seconds
+            );
+            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+        }
+
+        Ok(RolloverMode::FromFixedToFixedTerm)
+    }
+
+
+    fn check_migration_to_fixed_term_possible(
+        &self,
+        target_reserve_config: &ReserveConfig,
+    ) -> Result<()> {
+       
+        if !self.is_migration_to_fixed_enabled() {
+            xmsg!("Migration to fixed-term is not enabled by owner");
+            return err!(LendingError::ObligationBorrowRolloverNotEnabledByOwner);
+        }
+
+       
+        let Some(target_debt_term_seconds) = target_reserve_config.get_debt_term_seconds() else {
+            xmsg!("Migration target must be a fixed-term reserve");
+            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+        };
+
+       
+        let target_borrow_rate_bps = target_reserve_config.max_borrow_rate_bps();
+        if target_borrow_rate_bps > self.max_borrow_rate_bps {
+            xmsg!(
+                "Target reserve borrow rate ({} bps) is higher than the maximum allowed {} bps",
+                target_borrow_rate_bps,
+                self.max_borrow_rate_bps
+            );
+            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+        }
+
+       
+       
+       
+        if self.min_debt_term_seconds == 0 {
+            xmsg!("Owner's min_debt_term_seconds is 0 (open-term only), but migration target is fixed-term");
+            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+        }
+
+       
+        if target_debt_term_seconds < self.min_debt_term_seconds {
+            xmsg!(
+                "Target reserve debt term ({} seconds) is lower than the minimum allowed {} seconds",
+                target_debt_term_seconds,
+                self.min_debt_term_seconds
+            );
+            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+        }
+
+        Ok(())
+    }
+}
+
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug, EnumString)]
+pub enum RolloverMode {
+    FromFixedToFixedTerm,
+    FromFixedToOpenTerm,
+    FromOpenToFixedTerm,
+}
+
+
+
+
+
+
+
+
+
+#[derive(
+    AnchorSerialize,
+    AnchorDeserialize,
+    TryFromPrimitive,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Debug,
+    EnumString,
+)]
+// ..
+#[repr(u8)]
+pub enum UpdateObligationConfigMode {
+
+
+    FixedTermRolloverEnabled = 0,
+
+
+
+    FixedTermRolloverMaxBorrowRateBps = 1,
+
+
+
+    FixedTermRolloverMinDebtTermSeconds = 2,
+
+
+
+    FixedTermRolloverOpenTermAllowed = 3,
+
+
+
+    MigrationToFixedEnabled = 4,
+}
+
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum ObligationConfigUpdateSubject {
+
+    Obligation,
+
+
+    Deposit(Pubkey),
+
+
+    Borrow(Pubkey),
+}
+
+impl ObligationConfigUpdateSubject {
+
+    pub fn resolve(
+        specific_deposit_reserve_address: Option<Pubkey>,
+        specific_borrow_reserve_address: Option<Pubkey>,
+    ) -> Result<Self> {
+        Ok(
+            match (
+                specific_deposit_reserve_address,
+                specific_borrow_reserve_address,
+            ) {
+                (Some(_), Some(_)) => {
+                    xmsg!("Cannot choose both a deposit and a borrow");
+                    return err!(LendingError::InvalidObligationConfigUpdateSubject);
+                }
+                (None, None) => Self::Obligation,
+                (Some(deposit), None) => Self::Deposit(deposit),
+                (None, Some(borrow)) => Self::Borrow(borrow),
+            },
+        )
+    }
+
+
+    pub fn borrow_reserve_address(&self) -> Result<Pubkey> {
+        let Self::Borrow(reserve_address) = self else {
+            return err!(LendingError::InvalidObligationConfigUpdateSubject);
+        };
+        Ok(*reserve_address)
+    }
 }
 
 
@@ -1065,7 +1377,26 @@ pub struct BorrowOrder {
     pub active: u8,
 
 
-    pub padding1: [u8; 3],
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    pub enable_auto_rollover_on_filled_borrows: u8,
+
+
+    pub padding1: [u8; 2],
 
 
     pub end_padding: [u64; 5],
@@ -1090,6 +1421,27 @@ impl BorrowOrder {
             *self = Default::default();
         }
     }
+
+
+
+
+
+
+
+
+    pub fn get_rollover_config_for_filled_borrow(&self) -> Option<FixedTermBorrowRolloverConfig> {
+        if self.enable_auto_rollover_on_filled_borrows == false as u8 {
+            return None;
+        }
+        Some(FixedTermBorrowRolloverConfig {
+            auto_rollover_enabled: true as u8,
+            open_term_allowed: true as u8,
+            migration_to_fixed_enabled: (self.min_debt_term_seconds != 0) as u8,
+            max_borrow_rate_bps: self.max_borrow_rate_bps,
+            min_debt_term_seconds: self.min_debt_term_seconds,
+            alignment_padding: default_array(),
+        })
+    }
 }
 
 
@@ -1102,5 +1454,6 @@ pub struct BorrowOrderConfig {
     pub max_borrow_rate_bps: u32,
     pub min_debt_term_seconds: u64,
     pub fillable_until_timestamp: u64,
+    pub enable_auto_rollover_on_filled_borrows: u8,
 }
 

@@ -1,14 +1,14 @@
 use std::fmt::Debug;
 
 use anchor_lang::{err, Result};
-use solana_program::{clock::Clock, msg};
+use solana_program::{clock::Clock, msg, pubkey::Pubkey};
 
 use crate::{
     lending_market::utils::calculate_market_value_from_liquidity_amount,
     utils::{accounts::default_array, EventEmitter, Fraction, FractionExtra},
     BorrowOrder, BorrowOrderCancelEvent, BorrowOrderConfig, BorrowOrderFullFillEvent,
-    BorrowOrderPartialFillEvent, BorrowOrderPlaceEvent, BorrowOrderUpdateEvent, LendingError,
-    LendingMarket, Reserve,
+    BorrowOrderPartialFillEvent, BorrowOrderPlaceEvent, BorrowOrderUpdateEvent,
+    FixedTermBorrowRolloverConfig, LendingError, LendingMarket, Obligation, Reserve,
 };
 
 
@@ -181,6 +181,48 @@ pub fn fill_borrow_order(
 
 
 
+
+
+
+
+
+
+pub fn propagate_rollover_config_to_borrow(
+    lending_market: &LendingMarket,
+    obligation: &mut Obligation,
+    reserve_address: Pubkey,
+    rollover_config: FixedTermBorrowRolloverConfig,
+    already_borrowed_from_same_reserve: bool,
+) -> Result<()> {
+    if !lending_market.is_obligation_borrow_rollover_configuration_enabled() {
+        msg!("Borrow order is supposed to enable auto-rollover on its borrows, but the feature is disabled on market level");
+        return err!(LendingError::BorrowRolloverConfigurationDisabled);
+    }
+    let (borrow, index) = obligation.find_liquidity_in_borrows_mut(reserve_address)?;
+
+    if already_borrowed_from_same_reserve {
+        msg!(
+            "Filled pre-existing borrow's[{}] previous rollover config: {:?}",
+            index,
+            borrow.fixed_term_borrow_rollover_config
+        );
+        if borrow.fixed_term_borrow_rollover_config != rollover_config {
+            msg!("Borrow order's rollover config does not match the pre-existing borrow slot's config");
+            return err!(LendingError::ObligationBorrowRolloverConfigMismatch);
+        }
+        return Ok(());
+    }
+
+    borrow.fixed_term_borrow_rollover_config = rollover_config;
+    msg!(
+        "Borrow order propagated new rollover config: {:?}",
+        borrow.fixed_term_borrow_rollover_config
+    );
+    Ok(())
+}
+
+
+
 fn check_borrow_order_creation_enabled(lending_market: &LendingMarket) -> Result<()> {
     if !lending_market.is_borrow_order_creation_enabled() {
         msg!("Creation of new borrow orders is disabled by the market's configuration");
@@ -210,6 +252,7 @@ fn check_order_config_valid(
         max_borrow_rate_bps,
         min_debt_term_seconds: _,
         fillable_until_timestamp,
+        enable_auto_rollover_on_filled_borrows: _,
     } = order_config;
 
    
@@ -274,6 +317,7 @@ fn initialize_borrow_order(
         max_borrow_rate_bps,
         min_debt_term_seconds,
         fillable_until_timestamp,
+        enable_auto_rollover_on_filled_borrows,
     } = initial_order_config;
 
    
@@ -285,6 +329,7 @@ fn initialize_borrow_order(
         min_debt_term_seconds,
         fillable_until_timestamp,
         max_borrow_rate_bps,
+        enable_auto_rollover_on_filled_borrows,
         placed_at_timestamp: timestamp,
         last_updated_at_timestamp: timestamp,
         requested_debt_amount: remaining_debt_amount,
@@ -311,6 +356,7 @@ fn update_borrow_order_config(
         max_borrow_rate_bps: current_max_borrow_rate_bps,
         min_debt_term_seconds: current_min_debt_term_seconds,
         fillable_until_timestamp: current_fillable_until_timestamp,
+        enable_auto_rollover_on_filled_borrows: current_enable_auto_rollover_on_filled_borrows,
         placed_at_timestamp: _,
         last_updated_at_timestamp,
         requested_debt_amount, 
@@ -326,6 +372,7 @@ fn update_borrow_order_config(
         max_borrow_rate_bps: new_max_borrow_rate_bps,
         min_debt_term_seconds: new_min_debt_term_seconds,
         fillable_until_timestamp: new_fillable_until_timestamp,
+        enable_auto_rollover_on_filled_borrows: new_enable_auto_rollover_on_filled_borrows,
     } = new_order_config;
 
    
@@ -339,6 +386,7 @@ fn update_borrow_order_config(
     *current_max_borrow_rate_bps = new_max_borrow_rate_bps;
     *current_min_debt_term_seconds = new_min_debt_term_seconds;
     *current_fillable_until_timestamp = new_fillable_until_timestamp;
+    *current_enable_auto_rollover_on_filled_borrows = new_enable_auto_rollover_on_filled_borrows;
 
    
    

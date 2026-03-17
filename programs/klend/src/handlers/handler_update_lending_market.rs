@@ -229,13 +229,31 @@ pub fn process(
                 .validating(validations::check_not_zero)
                 .set(&value)?;
         }
-        UpdateLendingMarketMode::UpdateFixedRolloverWindowDurationSeconds => {
-            config_items::for_named_field!(&mut market.fixed_rollover_window_duration_seconds)
+        UpdateLendingMarketMode::UpdateFixedTermRolloverWindowDurationSeconds => {
+            config_items::for_named_field!(&mut market.fixed_term_rollover_window_duration_seconds)
                 .set(&value)?;
+
+           
+           
+            if market.fixed_term_rollover_window_duration_seconds > 0
+                && market.min_partial_rollover_value == 0
+            {
+                msg!("Cannot enable rollover into fixed-term window before configuring min_partial_rollover_value");
+                return err!(LendingError::InvalidConfig);
+            }
         }
-        UpdateLendingMarketMode::UpdateVariableRolloverWindowDurationSeconds => {
-            config_items::for_named_field!(&mut market.variable_rollover_window_duration_seconds)
+        UpdateLendingMarketMode::UpdateOpenTermRolloverWindowDurationSeconds => {
+            config_items::for_named_field!(&mut market.open_term_rollover_window_duration_seconds)
                 .set(&value)?;
+
+           
+           
+            if market.open_term_rollover_window_duration_seconds > 0
+                && market.min_partial_rollover_value == 0
+            {
+                msg!("Cannot enable rollover into open-term window before configuring min_partial_rollover_value");
+                return err!(LendingError::InvalidConfig);
+            }
         }
         UpdateLendingMarketMode::UpdateObligationBorrowRolloverConfigurationEnabled => {
             config_items::for_named_field!(
@@ -243,6 +261,31 @@ pub fn process(
             )
             .validating(validations::check_bool)
             .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateTermBasedFullLiquidationDurationSecs => {
+            config_items::for_named_field!(&mut market.term_based_full_liquidation_duration_secs)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateObligationBorrowMigrationToFixedExecutionEnabled => {
+            config_items::for_named_field!(
+                &mut market.obligation_borrow_migration_to_fixed_execution_enabled
+            )
+            .validating(validations::check_bool)
+            .set(&value)?;
+
+           
+           
+            if market.obligation_borrow_migration_to_fixed_execution_enabled == true as u8
+                && market.min_partial_rollover_value == 0
+            {
+                msg!("Cannot enable migration into fixed-term before configuring min_partial_rollover_value");
+                return err!(LendingError::InvalidConfig);
+            }
+        }
+        UpdateLendingMarketMode::UpdateMinPartialRolloverValue => {
+            config_items::for_named_field!(&mut market.min_partial_rollover_value)
+                .validating(validations::check_not_zero)
+                .set(&value)?;
         }
     }
 

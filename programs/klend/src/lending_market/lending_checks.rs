@@ -2,10 +2,11 @@ use anchor_lang::{
     accounts::account_loader::AccountLoader,
     err, error,
     prelude::{msg, Context, Pubkey},
-    require, require_eq, require_gte, Key, Result, ToAccountInfo,
+    require, require_eq, require_gt, require_gte, Key, Result, ToAccountInfo,
 };
 
 use crate::{
+    fraction::Fraction,
     handlers::*,
     state::{
         DepositObligationCollateralAccounts, RedeemReserveCollateralAccounts,
@@ -15,8 +16,23 @@ use crate::{
     utils::{
         constraints, seeds::BASE_SEED_REFERRER_TOKEN_STATE, FatAccountLoader, PROGRAM_VERSION,
     },
-    LendingAction, LendingError, Obligation, ReferrerTokenState, Reserve, ReserveStatus,
+    FixedTermRolloverResult, LendingAction, LendingError, Obligation, ReferrerTokenState, Reserve,
+    ReserveStatus,
 };
+
+pub fn check_reserve_status_and_version(reserve: &Reserve) -> Result<()> {
+    if reserve.config.status() == ReserveStatus::Obsolete {
+        msg!("Reserve is not active");
+        return err!(LendingError::ReserveObsolete);
+    }
+
+    if reserve.version != PROGRAM_VERSION as u64 {
+        msg!("Reserve version does not match the program version");
+        return err!(LendingError::ReserveDeprecated);
+    }
+
+    Ok(())
+}
 
 pub fn borrow_obligation_liquidity_checks(accounts: &BorrowObligationLiquidity) -> Result<()> {
     let borrow_reserve = &accounts.borrow_reserve.load()?;
@@ -28,20 +44,31 @@ pub fn borrow_obligation_liquidity_checks(accounts: &BorrowObligationLiquidity) 
         return err!(LendingError::InvalidAccountInput);
     }
 
-    if borrow_reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is not active");
-        return err!(LendingError::ReserveObsolete);
-    }
-
-    if borrow_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_status_and_version(borrow_reserve)?;
 
     constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &accounts.borrow_reserve_liquidity_mint.to_account_info(),
         &accounts.user_destination_liquidity.to_account_info(),
     )?;
+
+    Ok(())
+}
+
+pub fn rollover_fixed_term_borrow_checks(accounts: &RolloverAccounts) -> Result<()> {
+    let source_borrow_reserve = &accounts.source_borrow_reserve.load()?;
+    check_reserve_status_and_version(source_borrow_reserve)?;
+
+    let target_borrow_reserve = &accounts.target_borrow_reserve.load()?;
+    check_reserve_status_and_version(target_borrow_reserve)?;
+
+   
+    if accounts.source_borrow_reserve.key() != accounts.target_borrow_reserve.key() {
+       
+        constraints::token_2022::check_only_supported_extensions_on_liquidity_mint(
+            &accounts.liquidity_mint.to_account_info(),
+        )?;
+       
+    }
 
     Ok(())
 }
@@ -56,15 +83,7 @@ pub fn enqueue_to_withdraw_checks(accounts: &EnqueueToWithdraw) -> Result<()> {
         return err!(LendingError::InvalidAccountInput);
     }
 
-    if withdraw_reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is not active");
-        return err!(LendingError::ReserveObsolete);
-    }
-
-    if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_status_and_version(withdraw_reserve)?;
 
     constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
@@ -105,7 +124,6 @@ pub fn recover_invalid_ticket_collateral_checks(
     }
 
    
-
     Ok(())
 }
 
@@ -119,15 +137,7 @@ pub fn deposit_obligation_collateral_checks(
         return err!(LendingError::InvalidAccountInput);
     }
 
-    if deposit_reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is not active");
-        return err!(LendingError::ReserveObsolete);
-    }
-
-    if deposit_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_status_and_version(deposit_reserve)?;
 
     Ok(())
 }
@@ -135,7 +145,7 @@ pub fn deposit_obligation_collateral_checks(
 pub fn deposit_reserve_liquidity_checks(
     accounts: &crate::state::nested_accounts::DepositReserveLiquidityAccounts,
 ) -> Result<()> {
-    let reserve = accounts.reserve.load()?;
+    let reserve = &accounts.reserve.load()?;
 
     if reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
         msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
@@ -146,15 +156,7 @@ pub fn deposit_reserve_liquidity_checks(
         return err!(LendingError::InvalidAccountInput);
     }
 
-    if reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is not active");
-        return err!(LendingError::ReserveObsolete);
-    }
-
-    if reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_status_and_version(reserve)?;
 
     require!(
         !reserve.config.is_ctoken_usage_blocked(),
@@ -172,22 +174,14 @@ pub fn deposit_reserve_liquidity_checks(
 pub fn deposit_reserve_liquidity_and_obligation_collateral_checks(
     accounts: &crate::state::nested_accounts::DepositReserveLiquidityAndObligationCollateralAccounts,
 ) -> Result<()> {
-    let reserve = accounts.reserve.load()?;
+    let reserve = &accounts.reserve.load()?;
 
     if reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
         msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
-    if reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is not active");
-        return err!(LendingError::ReserveObsolete);
-    }
-
-    if reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_status_and_version(reserve)?;
 
     constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
@@ -402,17 +396,8 @@ pub fn refresh_obligation_farms_for_reserve_checks(
         }
     }
 
-    let reserve = accounts.reserve.load()?;
-
-    if reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is not active");
-        return err!(LendingError::ReserveObsolete);
-    }
-
-    if reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    let reserve = &accounts.reserve.load()?;
+    check_reserve_status_and_version(reserve)?;
 
     Ok(())
 }
@@ -572,6 +557,139 @@ pub fn post_ticket_collateral_recovery_owner_queued_collateral_vault_balance_che
         LendingError::UserTokenBalanceMismatch,
     );
 
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ReserveAccountingAndBalance {
+    pub total_available_liquidity_amount: u64,
+    pub borrowed_amount: Fraction,
+    pub vault_balance: u64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ObligationRolloverAccounting {
+    pub source_reserve_borrowed_amount: Fraction,
+    pub target_reserve_borrowed_amount: Fraction,
+}
+
+pub fn rollover_fixed_term_borrow_into_same_reserve_post_checks(
+    reserve_before: ReserveAccountingAndBalance,
+    obligation_before: ObligationRolloverAccounting,
+    reserve_after: ReserveAccountingAndBalance,
+    obligation_after: ObligationRolloverAccounting,
+) -> Result<()> {
+   
+    require_eq!(
+        reserve_before.total_available_liquidity_amount,
+        reserve_after.total_available_liquidity_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+    require_eq!(
+        reserve_before.borrowed_amount,
+        reserve_after.borrowed_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+
+   
+    require_eq!(
+        reserve_before.vault_balance,
+        reserve_after.vault_balance,
+        LendingError::ReserveVaultBalanceMismatch,
+    );
+
+   
+    require_eq!(
+        obligation_before.source_reserve_borrowed_amount,
+        obligation_after.source_reserve_borrowed_amount,
+        LendingError::ObligationAccountingMismatch,
+    );
+    require_eq!(
+        obligation_before.target_reserve_borrowed_amount,
+        obligation_after.target_reserve_borrowed_amount,
+        LendingError::ObligationAccountingMismatch,
+    );
+
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct RolloverAccountingAndBalances {
+    pub source_reserve: ReserveAccountingAndBalance,
+    pub target_reserve: ReserveAccountingAndBalance,
+    pub obligation: ObligationRolloverAccounting,
+}
+
+pub fn rollover_fixed_term_borrow_into_different_reserve_post_checks(
+    before: RolloverAccountingAndBalances,
+    after: RolloverAccountingAndBalances,
+    rollover_result: FixedTermRolloverResult,
+) -> Result<()> {
+    let FixedTermRolloverResult {
+        repaid_amount,
+        borrowed_amount,
+        tokens_to_transfer_over,
+    } = rollover_result;
+
+   
+    require_gte!(
+        borrowed_amount,
+        repaid_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+    require_gt!(
+        Fraction::ONE,
+        borrowed_amount - repaid_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+
+   
+    require_eq!(
+        before.source_reserve.borrowed_amount - repaid_amount,
+        after.source_reserve.borrowed_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+    require_eq!(
+        before.source_reserve.total_available_liquidity_amount + tokens_to_transfer_over,
+        after.source_reserve.total_available_liquidity_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+   
+    require_eq!(
+        before.source_reserve.vault_balance + tokens_to_transfer_over,
+        after.source_reserve.vault_balance,
+        LendingError::ReserveVaultBalanceMismatch,
+    );
+
+   
+    require_eq!(
+        before.target_reserve.borrowed_amount + borrowed_amount,
+        after.target_reserve.borrowed_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+    require_eq!(
+        before.target_reserve.total_available_liquidity_amount - tokens_to_transfer_over,
+        after.target_reserve.total_available_liquidity_amount,
+        LendingError::ReserveAccountingMismatch
+    );
+   
+    require_eq!(
+        before.target_reserve.vault_balance - tokens_to_transfer_over,
+        after.target_reserve.vault_balance,
+        LendingError::ReserveVaultBalanceMismatch,
+    );
+
+   
+    require_eq!(
+        before.obligation.source_reserve_borrowed_amount - repaid_amount,
+        after.obligation.source_reserve_borrowed_amount,
+        LendingError::ObligationAccountingMismatch,
+    );
+    require_eq!(
+        before.obligation.target_reserve_borrowed_amount + borrowed_amount,
+        after.obligation.target_reserve_borrowed_amount,
+        LendingError::ObligationAccountingMismatch,
+    );
     Ok(())
 }
 
