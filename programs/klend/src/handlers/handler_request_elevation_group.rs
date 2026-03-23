@@ -8,7 +8,7 @@ use crate::{
 pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> Result<()> {
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let lending_market = ctx.accounts.lending_market.load()?;
-    let slot = Clock::get()?.slot;
+    let clock = Clock::get()?;
     let deposit_count = obligation.active_deposits_count();
     let borrow_count = obligation.active_borrows_count();
     let reserves_count = borrow_count + deposit_count;
@@ -48,7 +48,7 @@ pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> 
         &crate::ID,
         obligation,
         &lending_market,
-        slot,
+        &clock,
         new_elevation_group,
         deposit_reserves_iter,
         borrow_reserves_iter,

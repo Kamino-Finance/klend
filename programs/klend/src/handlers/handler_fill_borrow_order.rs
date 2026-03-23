@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use anchor_lang::{prelude::*, Accounts};
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
@@ -35,11 +35,15 @@ fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>)
     let remaining_accounts = ctx.remaining_accounts;
 
    
-    let order_remaining_amount = accounts
-        .obligation
-        .load()?
-        .borrow_order
-        .remaining_debt_amount;
+    let obligation = accounts.obligation.load()?;
+    let order_remaining_amount = obligation.borrow_order.remaining_debt_amount;
+
+   
+    let already_borrowed_from_same_reserve = obligation
+        .find_liquidity_index_in_borrows(accounts.borrow_reserve.key())
+        .is_some();
+
+    drop(obligation);
 
    
     let fill_amount = borrow_obligation_liquidity_process_impl(
@@ -59,6 +63,8 @@ fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>)
     let clock = &Clock::get()?;
 
    
+    let borrow_order = &mut obligation.borrow_order;
+    let borrow_order_rollover_config = borrow_order.get_rollover_config_for_filled_borrow();
     borrow_order_operations::fill_borrow_order(
         lending_market.deref(),
         &borrow_reserve,
@@ -66,7 +72,20 @@ fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>)
         clock,
         fill_amount,
         ctx_event_emitter!(ctx),
-    )
+    )?;
+
+   
+    if let Some(borrow_order_rollover_config) = borrow_order_rollover_config {
+        borrow_order_operations::propagate_rollover_config_to_borrow(
+            lending_market.deref(),
+            obligation.deref_mut(),
+            accounts.borrow_reserve.key(),
+            borrow_order_rollover_config,
+            already_borrowed_from_same_reserve,
+        )?;
+    }
+
+    Ok(())
 }
 
 impl<'info> From<FillBorrowOrderAccounts<'info>> for BorrowObligationLiquidity<'info> {

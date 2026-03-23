@@ -250,9 +250,12 @@ pub enum UpdateLendingMarketMode {
     UpdateWithdrawTicketIssuanceEnabled = 32,
     UpdateWithdrawTicketRedemptionEnabled = 33,
     UpdateMinWithdrawQueuedLiquidityValue = 34,
-    UpdateFixedRolloverWindowDurationSeconds = 35,
-    UpdateVariableRolloverWindowDurationSeconds = 36,
+    UpdateFixedTermRolloverWindowDurationSeconds = 35,
+    UpdateOpenTermRolloverWindowDurationSeconds = 36,
     UpdateObligationBorrowRolloverConfigurationEnabled = 37,
+    UpdateTermBasedFullLiquidationDurationSecs = 38,
+    UpdateObligationBorrowMigrationToFixedExecutionEnabled = 39,
+    UpdateMinPartialRolloverValue = 40,
 }
 
 #[cfg(feature = "serde")]
@@ -266,6 +269,7 @@ pub mod serde_iter {
     const PRIORITIZED_UPDATE_MODES: &[UpdateLendingMarketMode] = &[
         UpdateLendingMarketMode::UpdateMinWithdrawQueuedLiquidityValue,
         UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue,
+        UpdateLendingMarketMode::UpdateMinPartialRolloverValue,
     ];
 
     impl UpdateLendingMarketMode {

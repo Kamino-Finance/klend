@@ -429,6 +429,22 @@ pub mod kamino_lending {
         )
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn update_obligation_config(
+        ctx: Context<UpdateObligationConfig>,
+        mode: UpdateObligationConfigMode,
+        value: Vec<u8>,
+    ) -> Result<()> {
+        handler_update_obligation_config::process(ctx, mode, &value)
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.rollover_accounts.lending_market))]
+    pub fn rollover_fixed_term_borrow<'info>(
+        ctx: Context<'_, '_, '_, 'info, RolloverFixedTermBorrow<'info>>,
+    ) -> Result<()> {
+        handler_rollover_fixed_term_borrow::process(ctx)
+    }
+
     #[access_control(emergency_mode_disabled(&ctx.accounts.borrow_accounts.lending_market))]
     pub fn fill_borrow_order<'info>(
         ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>,
@@ -814,6 +830,34 @@ pub enum LendingError {
         "One or more accounts required by the ticket's configured progress callback are missing"
     )]
     WithdrawTicketProgressCallbackAccountsMissing,
+    #[msg("Configuring auto-rollover on loans is disabled by market owner")]
+    BorrowRolloverConfigurationDisabled,
+    #[msg("Invalid specification of the Obligation's part to be configured")]
+    InvalidObligationConfigUpdateSubject,
+    #[msg("Auto-rollover must use a target reserve of the same token")]
+    BorrowRolloverLiquidityMintMismatch,
+    #[msg("The given borrow is not fixed-term and does not require rolling over")]
+    ObligationBorrowRolloverNotApplicable,
+    #[msg("The given borrow is outside the corresponding market-configured rollover window")]
+    ObligationBorrowOutsideRolloverWindow,
+    #[msg("Obligation's owner did not opt-in for auto-rollover of the given borrow")]
+    ObligationBorrowRolloverNotEnabledByOwner,
+    #[msg("Obligation's owner did not allow to roll over into terms offered by the given reserve")]
+    ObligationBorrowRolloverTargetReserveMismatch,
+    #[msg("Executing auto-rollover is disabled by market owner")]
+    BorrowRolloverExecutionDisabled,
+    #[msg("Obligation internal state accounting has been unexpectedly modified")]
+    ObligationAccountingMismatch,
+    #[msg("Partial rollover amount is below the market-configured minimum value")]
+    PartialRolloverValueTooSmall,
+    #[msg(
+        "Pre-existing rollover configuration of the loan cannot be overwritten by the operation"
+    )]
+    ObligationBorrowRolloverConfigMismatch,
+    #[msg("Rollover into existing borrow must prolong the remaining debt term")]
+    ObligationBorrowRolloverMustProlongDebtTerm,
+    #[msg("Rollover is not supported for obligations in an elevation group")]
+    RolloverNotSupportedInElevationGroup,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

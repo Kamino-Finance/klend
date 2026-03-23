@@ -19,11 +19,12 @@ use serde;
 use super::serde_bool_u8;
 use crate::{
     fraction::FractionExtra,
+    lending_market::withdrawal_cap_operations::utils::remaining_withdrawal_caps_amount,
     state::{DepositLiquidityResult, LastUpdate, TokenInfo},
     utils::{
         accounts::default_array, borrow_rate_curve::BorrowRateCurve, ten_pow, BigFraction,
-        Fraction, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE,
-        SLOTS_PER_YEAR, U256,
+        Fraction, FRACTION_ONE_SCALED, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION,
+        RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
     },
     BorrowSize, CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult,
     ReferrerTokenState,
@@ -205,12 +206,22 @@ impl Reserve {
 
     pub fn freely_available_liquidity_amount(&self) -> u64 {
        
-        let liquidity_for_queued_collateral = self
-            .collateral_exchange_rate()
-            .collateral_to_liquidity(self.withdraw_queue.queued_collateral_amount);
         self.liquidity
             .total_available_amount
-            .saturating_sub(liquidity_for_queued_collateral)
+            .saturating_sub(self.queued_liquidity_amount())
+    }
+
+
+
+
+
+
+
+
+
+    pub fn queued_liquidity_amount(&self) -> u64 {
+        self.collateral_exchange_rate()
+            .collateral_to_liquidity(self.withdraw_queue.queued_collateral_amount)
     }
 
 
@@ -293,6 +304,80 @@ impl Reserve {
     pub fn freely_redeemable_collateral_amount(&self) -> u64 {
         self.total_redeemable_collateral_amount()
             .saturating_sub(self.withdraw_queue.queued_collateral_amount)
+    }
+
+
+
+
+
+
+    pub fn borrowable_liquidity_amount(&self, timestamp: u64) -> Result<u64> {
+       
+        let sufficient_liquidity_limit = self.freely_available_liquidity_amount();
+        if sufficient_liquidity_limit == 0 {
+            return err!(LendingError::InsufficientLiquidity);
+        }
+
+       
+        let borrow_capacity_limit = self.remaining_borrow_capacity().to_floor();
+        if borrow_capacity_limit == 0 {
+            return err!(LendingError::BorrowLimitExceeded);
+        }
+
+       
+        let remaining_elevation_group_borrow_limit = self
+            .config
+            .borrow_limit_outside_elevation_group
+            .saturating_sub(self.borrowed_amount_outside_elevation_group);
+        if remaining_elevation_group_borrow_limit == 0 {
+            return err!(LendingError::ElevationGroupBorrowLimitExceeded);
+        }
+
+       
+        let utilization_rate_limit = if let Some(max_borrowing_utilization_rate) =
+            self.config.max_borrowing_utilization_rate()
+        {
+            let utilization_limit_borrow_amount =
+                self.liquidity.total_supply() * max_borrowing_utilization_rate;
+           
+           
+           
+           
+            utilization_limit_borrow_amount
+                .saturating_sub(self.liquidity.total_borrow())
+                .saturating_sub(Fraction::DELTA)
+                .to_floor::<u64>()
+        } else {
+            self.liquidity.total_supply().to_floor()
+        };
+
+        if utilization_rate_limit == 0 {
+            return err!(LendingError::BorrowingAboveUtilizationRateDisabled);
+        }
+
+       
+        let withdrawal_caps_limit =
+            remaining_withdrawal_caps_amount(&self.config.debt_withdrawal_cap, timestamp);
+        if withdrawal_caps_limit == 0 {
+            return err!(LendingError::WithdrawalCapReached);
+        }
+
+       
+        Ok([
+            sufficient_liquidity_limit,
+            borrow_capacity_limit,
+            remaining_elevation_group_borrow_limit,
+            utilization_rate_limit,
+            withdrawal_caps_limit,
+        ]
+        .into_iter()
+        .min()
+        .expect("statically non-empty array"))
+    }
+
+
+    pub fn remaining_borrow_capacity(&self) -> Fraction {
+        Fraction::from(self.config.borrow_limit).saturating_sub(self.liquidity.total_borrow())
     }
 
     pub fn add_farm(&mut self, farm_state: &Pubkey, mode: ReserveFarmKind) {
@@ -502,44 +587,32 @@ impl Reserve {
         &self,
         borrow_size: BorrowSize,
         max_borrow_factor_adjusted_debt_value: Fraction,
-        remaining_reserve_borrow: Fraction,
         referral_fee_bps: u16,
         is_in_elevation_group: bool,
         has_referrer: bool,
     ) -> Result<CalculateBorrowResult> {
-        let decimals = self.liquidity.mint_factor();
-        let market_price_f = self.liquidity.get_market_price();
         let borrow_factor_f = self.borrow_factor_f(is_in_elevation_group);
 
         match borrow_size {
             BorrowSize::AllAvailable => self.calculate_borrow_all_available(
                 max_borrow_factor_adjusted_debt_value,
-                remaining_reserve_borrow,
                 referral_fee_bps,
                 has_referrer,
-                decimals,
-                market_price_f,
                 borrow_factor_f,
             ),
             BorrowSize::Exact(receive_amount) => self.calculate_borrow_exact(
                 receive_amount,
                 max_borrow_factor_adjusted_debt_value,
-                remaining_reserve_borrow,
                 referral_fee_bps,
                 has_referrer,
-                decimals,
-                market_price_f,
                 borrow_factor_f,
             ),
             BorrowSize::AtMost(requested_receive_amount) => {
                 let borrow_exact_result = self.calculate_borrow_exact(
                     requested_receive_amount,
                     max_borrow_factor_adjusted_debt_value,
-                    remaining_reserve_borrow,
                     referral_fee_bps,
                     has_referrer,
-                    decimals,
-                    market_price_f,
                     borrow_factor_f,
                 );
                
@@ -553,11 +626,8 @@ impl Reserve {
                 {
                     self.calculate_borrow_all_available(
                         max_borrow_factor_adjusted_debt_value,
-                        remaining_reserve_borrow,
                         referral_fee_bps,
                         has_referrer,
-                        decimals,
-                        market_price_f,
                         borrow_factor_f,
                     )
                 } else {
@@ -567,22 +637,22 @@ impl Reserve {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn calculate_borrow_all_available(
         &self,
         max_borrow_factor_adjusted_debt_value: Fraction,
-        remaining_reserve_borrow: Fraction,
         referral_fee_bps: u16,
         has_referrer: bool,
-        decimals: u64,
-        market_price_f: Fraction,
         borrow_factor_f: Fraction,
     ) -> Result<CalculateBorrowResult> {
-        let borrow_amount_f = (max_borrow_factor_adjusted_debt_value * u128::from(decimals)
-            / market_price_f
-            / borrow_factor_f)
-            .min(remaining_reserve_borrow)
-            .min(self.freely_available_liquidity_amount().into());
+        let max_obligation_borrow_amount = self
+            .liquidity
+            .market_value_to_liquidity_amount(max_borrow_factor_adjusted_debt_value)
+            / borrow_factor_f;
+        let max_reserve_borrow_amount = min(
+            self.remaining_borrow_capacity(),
+            self.freely_available_liquidity_amount().into(),
+        );
+        let borrow_amount_f = min(max_obligation_borrow_amount, max_reserve_borrow_amount);
         let (origination_fee, referrer_fee) = self.config.fees.calculate_borrow_fees(
             borrow_amount_f,
             FeeCalculation::Inclusive,
@@ -600,16 +670,12 @@ impl Reserve {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn calculate_borrow_exact(
         &self,
         receive_amount: u64,
         max_borrow_factor_adjusted_debt_value: Fraction,
-        remaining_reserve_borrow: Fraction,
         referral_fee_bps: u16,
         has_referrer: bool,
-        decimals: u64,
-        market_price_f: Fraction,
         borrow_factor_f: Fraction,
     ) -> Result<CalculateBorrowResult> {
         let receive_amount_f = Fraction::from(receive_amount);
@@ -620,10 +686,10 @@ impl Reserve {
             has_referrer,
         )?;
         let borrow_amount_f = receive_amount_f + Fraction::from_num(origination_fee + referrer_fee);
-        let borrow_factor_adjusted_debt_value = borrow_amount_f
-            .mul(market_price_f)
-            .div(u128::from(decimals))
-            .mul(borrow_factor_f);
+        let debt_value = self
+            .liquidity
+            .liquidity_amount_to_market_value(borrow_amount_f);
+        let borrow_factor_adjusted_debt_value = debt_value * borrow_factor_f;
 
         if borrow_factor_adjusted_debt_value > max_borrow_factor_adjusted_debt_value {
             msg!(
@@ -633,12 +699,13 @@ impl Reserve {
             );
             return err!(LendingError::BorrowTooLarge);
         }
-        if borrow_amount_f > remaining_reserve_borrow {
+        let remaining_borrow_capacity_f = self.remaining_borrow_capacity();
+        if borrow_amount_f > remaining_borrow_capacity_f {
             msg!(
                 "Borrowing {} (including fees: {}) would exceed the reserve's remaining limit {}",
                 receive_amount,
                 borrow_amount_f.to_display(),
-                remaining_reserve_borrow.to_display(),
+                remaining_borrow_capacity_f.to_display(),
             );
             return err!(LendingError::BorrowLimitExceeded);
         }
@@ -986,6 +1053,23 @@ impl ReserveLiquidity {
 
     pub fn mint_factor(&self) -> u64 {
         ten_pow(usize::try_from(self.mint_decimals).expect("mint decimals is expected to be <20"))
+    }
+
+
+
+
+   
+    pub fn liquidity_amount_to_market_value(&self, liquidity_amount: Fraction) -> Fraction {
+        let mint_factor_sf = u128::from(self.mint_factor()) * FRACTION_ONE_SCALED;
+        liquidity_amount.full_mul_int_ratio(self.market_price_sf, mint_factor_sf)
+    }
+
+
+
+
+    pub fn market_value_to_liquidity_amount(&self, market_value: Fraction) -> Fraction {
+        let mint_factor_sf = u128::from(self.mint_factor()) * FRACTION_ONE_SCALED;
+        market_value.full_mul_int_ratio(mint_factor_sf, self.market_price_sf)
     }
 
 
@@ -1494,6 +1578,16 @@ impl ReserveConfig {
             .map(|point| point.borrow_rate_bps)
             .max()
             .expect("curve has a static >0 length")
+    }
+
+
+    pub fn max_borrowing_utilization_rate(&self) -> Option<Fraction> {
+        if self.utilization_limit_block_borrowing_above_pct == 0 {
+            return None;
+        }
+        Some(Fraction::from_percent(
+            self.utilization_limit_block_borrowing_above_pct,
+        ))
     }
 }
 

@@ -9,13 +9,13 @@ use serde_values::*;
 use super::{serde_bool_u8, serde_string, serde_utf_string};
 use crate::{
     utils::{
-        accounts::default_array, CLOSE_TO_INSOLVENCY_RISKY_LTV, DEFAULT_MIN_DEPOSIT_AMOUNT,
-        ELEVATION_GROUP_NONE, GLOBAL_ALLOWED_BORROW_VALUE, LENDING_MARKET_SIZE,
-        LIQUIDATION_CLOSE_FACTOR, LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE,
-        MIN_BORROW_ORDER_FILL_VALUE, MIN_NET_VALUE_IN_OBLIGATION,
+        accounts::default_array, Fraction, FractionExtra, CLOSE_TO_INSOLVENCY_RISKY_LTV,
+        DEFAULT_MIN_DEPOSIT_AMOUNT, ELEVATION_GROUP_NONE, GLOBAL_ALLOWED_BORROW_VALUE,
+        LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR, LIQUIDATION_CLOSE_VALUE,
+        MAX_LIQUIDATABLE_VALUE_AT_ONCE, MIN_BORROW_ORDER_FILL_VALUE, MIN_NET_VALUE_IN_OBLIGATION,
         MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE, PROGRAM_VERSION,
     },
-    LendingError,
+    LendingError, RolloverMode,
 };
 
 static_assertions::const_assert_eq!(LENDING_MARKET_SIZE, std::mem::size_of::<LendingMarket>());
@@ -199,15 +199,22 @@ pub struct LendingMarket {
 
 
 
+
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub obligation_borrow_rollover_configuration_enabled: u8,
+
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub obligation_borrow_migration_to_fixed_execution_enabled: u8,
 
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding2: [u8; 5],
+    pub padding2: [u8; 4],
 
 
 
@@ -216,14 +223,6 @@ pub struct LendingMarket {
    
     pub min_withdraw_queued_liquidity_value: u64,
 
-   
-
-
-
-
-
-
-    pub fixed_rollover_window_duration_seconds: u64,
 
 
 
@@ -231,15 +230,52 @@ pub struct LendingMarket {
 
 
 
+    pub fixed_term_rollover_window_duration_seconds: u64,
 
-    pub variable_rollover_window_duration_seconds: u64,
+
+
+
+
+
+
+
+
+    pub open_term_rollover_window_duration_seconds: u64,
+
+
+
+
+
+
+    pub min_partial_rollover_value: u64,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    pub term_based_full_liquidation_duration_secs: u64,
 
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 160],
+    pub padding1: [u64; 158],
 }
 
 impl Default for LendingMarket {
@@ -283,10 +319,13 @@ impl Default for LendingMarket {
             withdraw_ticket_issuance_enabled: 0,
             withdraw_ticket_redemption_enabled: 0,
             min_withdraw_queued_liquidity_value: MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE,
-            fixed_rollover_window_duration_seconds: 0,
-            variable_rollover_window_duration_seconds: 0,
+            fixed_term_rollover_window_duration_seconds: 0,
+            open_term_rollover_window_duration_seconds: 0,
             obligation_borrow_rollover_configuration_enabled: 0,
             min_borrow_order_fill_value: MIN_BORROW_ORDER_FILL_VALUE,
+            term_based_full_liquidation_duration_secs: 0,
+            obligation_borrow_migration_to_fixed_execution_enabled: 0,
+            min_partial_rollover_value: 0,
             padding2: default_array(),
             padding1: default_array(),
         }
@@ -377,9 +416,71 @@ impl LendingMarket {
         self.withdraw_ticket_redemption_enabled != false as u8
     }
 
+    pub fn is_obligation_borrow_rollover_configuration_enabled(&self) -> bool {
+        self.obligation_borrow_rollover_configuration_enabled != false as u8
+    }
+
+
+
+    pub fn resolve_allowed_rollover_time(&self, mode: RolloverMode) -> Result<AllowedRolloverTime> {
+        Ok(match mode {
+            RolloverMode::FromFixedToFixedTerm => {
+                if self.fixed_term_rollover_window_duration_seconds == 0 {
+                    return err!(LendingError::BorrowRolloverExecutionDisabled);
+                }
+                AllowedRolloverTime::BeforeDebtExpiration(
+                    self.fixed_term_rollover_window_duration_seconds,
+                )
+            }
+            RolloverMode::FromFixedToOpenTerm => {
+                if self.open_term_rollover_window_duration_seconds == 0 {
+                    return err!(LendingError::BorrowRolloverExecutionDisabled);
+                }
+                AllowedRolloverTime::BeforeDebtExpiration(
+                    self.open_term_rollover_window_duration_seconds,
+                )
+            }
+            RolloverMode::FromOpenToFixedTerm => {
+                if self.obligation_borrow_migration_to_fixed_execution_enabled == false as u8 {
+                    return err!(LendingError::BorrowRolloverExecutionDisabled);
+                }
+                AllowedRolloverTime::Always
+            }
+        })
+    }
+
     pub fn is_immutable(&self) -> bool {
         self.immutable != false as u8
     }
+
+    pub fn get_insolvency_risk_unhealthy_ltv(&self) -> Fraction {
+        Fraction::from_percent(self.insolvency_risk_unhealthy_ltv_pct)
+    }
+
+    pub fn get_liquidation_max_debt_close_factor(&self) -> Fraction {
+        Fraction::from_percent(self.liquidation_max_debt_close_factor_pct)
+    }
+
+    pub fn get_max_liquidatable_debt_market_value_at_once(&self) -> Fraction {
+        Fraction::from_num(self.max_liquidatable_debt_market_value_at_once)
+    }
+
+    pub fn get_term_based_full_liquidation_duration_secs(&self) -> Option<u64> {
+        if self.term_based_full_liquidation_duration_secs == 0 {
+            return None;
+        }
+        Some(self.term_based_full_liquidation_duration_secs)
+    }
+}
+
+
+pub enum AllowedRolloverTime {
+
+    Always,
+
+
+
+    BeforeDebtExpiration(u64),
 }
 
 

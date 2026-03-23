@@ -57,7 +57,6 @@ pub struct SetBorrowOrder<'info> {
 
 
 
-
     #[account(has_one = lending_market)]
     pub reserve: AccountLoader<'info, Reserve>,
 
@@ -99,6 +98,7 @@ pub struct BorrowOrderConfigArgs {
     pub max_borrow_rate_bps: u32,
     pub min_debt_term_seconds: u64,
     pub fillable_until_timestamp: u64,
+    pub enable_auto_rollover_on_filled_borrows: bool,
 }
 
 impl BorrowOrderConfigArgs {
@@ -113,6 +113,7 @@ impl BorrowOrderConfigArgs {
             max_borrow_rate_bps,
             min_debt_term_seconds,
             fillable_until_timestamp,
+            enable_auto_rollover_on_filled_borrows,
         } = self;
         Some(BorrowOrderConfig {
             debt_liquidity_mint: accounts.debt_liquidity_mint.key(),
@@ -121,6 +122,9 @@ impl BorrowOrderConfigArgs {
             max_borrow_rate_bps,
             min_debt_term_seconds,
             fillable_until_timestamp,
+            enable_auto_rollover_on_filled_borrows: u8::from(
+                enable_auto_rollover_on_filled_borrows,
+            ),
         })
     }
 }

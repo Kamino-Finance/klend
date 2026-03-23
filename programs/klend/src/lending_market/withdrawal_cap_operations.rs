@@ -103,28 +103,6 @@ pub mod utils {
         }
     }
 
-    fn check_capacity_allows_withdrawals(
-        caps: &mut WithdrawalCaps,
-        requested_amount: u64,
-    ) -> Result<(), LendingError> {
-        if caps.config_capacity < 0 {
-            return Err(LendingError::WithdrawalCapReached);
-        }
-        if caps
-            .current_total
-            .checked_add(
-                requested_amount
-                    .try_into()
-                    .map_err(|_| dbg_msg!(LendingError::MathOverflow))?,
-            )
-            .ok_or_else(|| dbg_msg!(LendingError::MathOverflow))?
-            > caps.config_capacity
-        {
-            return Err(LendingError::WithdrawalCapReached);
-        }
-        Ok(())
-    }
-
     fn check_last_interval_elapsed(
         caps: &mut WithdrawalCaps,
         curr_timestamp: u64,
@@ -168,6 +146,34 @@ pub mod utils {
     }
 
 
+
+
+
+    pub fn remaining_withdrawal_caps_amount(caps: &WithdrawalCaps, timestamp: u64) -> u64 {
+        if caps.config_interval_length_seconds == 0 {
+            return u64::MAX;
+        }
+        if caps.config_capacity < 0 {
+            return 0;
+        }
+        let time_spent_within_current_interval_seconds =
+            timestamp.saturating_sub(caps.last_interval_start_timestamp);
+        let interval_elapsed =
+            time_spent_within_current_interval_seconds >= caps.config_interval_length_seconds;
+        let current_total = if interval_elapsed {
+            0
+        } else {
+            caps.current_total
+        };
+        if current_total <= caps.config_capacity {
+            let remaining_amount = i128::from(caps.config_capacity) - i128::from(current_total);
+            u64::try_from(remaining_amount).expect("difference between i64s always fits in u64")
+        } else {
+            0
+        }
+    }
+
+
     fn check_and_update_withdrawal_caps(
         caps: &mut WithdrawalCaps,
         requested_amount: u64,
@@ -179,8 +185,10 @@ pub mod utils {
             if check_last_interval_elapsed(caps, curr_timestamp)? {
                 reset_current_interval_and_counter(caps, curr_timestamp);
             }
-            if action == WithdrawalCapAction::Add {
-                check_capacity_allows_withdrawals(caps, requested_amount)?;
+            if action == WithdrawalCapAction::Add
+                && requested_amount > remaining_withdrawal_caps_amount(caps, curr_timestamp)
+            {
+                return Err(LendingError::WithdrawalCapReached);
             }
             update_counter(
                 caps,

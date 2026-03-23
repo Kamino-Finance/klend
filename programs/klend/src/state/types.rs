@@ -70,6 +70,31 @@ pub struct CalculateRepayResult {
 }
 
 
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FixedTermRolloverResult {
+
+
+
+    pub repaid_amount: Fraction,
+
+
+
+
+
+
+
+
+
+    pub borrowed_amount: Fraction,
+
+
+    pub tokens_to_transfer_over: u64,
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CalculateLiquidationResult {
 
@@ -112,7 +137,8 @@ pub enum LiquidationReason {
     ReserveDebtMaturityReached,
 
 
-    ObligationBorrowDebtTermReached,
+
+    ObligationBorrowDebtTermReached(u64),
 }
 
 
@@ -160,7 +186,6 @@ pub struct LiquidationCheckInputs<'l> {
 
 // ..
 pub struct LiquidationParams {
-    pub user_ltv: Fraction,
     pub liquidation_bonus_rate: Fraction,
     pub liquidation_reason: LiquidationReason,
 }
@@ -233,7 +258,7 @@ impl RedeemCollateralOptions {
             | LiquidationReason::IndividualDeleveraging
             | LiquidationReason::MarketWideDeleveraging
             | LiquidationReason::ReserveDebtMaturityReached
-            | LiquidationReason::ObligationBorrowDebtTermReached => {
+            | LiquidationReason::ObligationBorrowDebtTermReached(_) => {
                 Self::FOR_PROTOCOL_ENFORCED_LIQUIDATION
             }
             LiquidationReason::ObligationOrder(_) => Self::FOR_USER_REQUESTED_LIQUIDATION,

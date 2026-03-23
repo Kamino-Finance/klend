@@ -1,9 +1,4 @@
-use std::{
-    cell::RefMut,
-    cmp::min,
-    mem::size_of,
-    ops::{Add, Div, Mul},
-};
+use std::{cell::RefMut, cmp::min, mem::size_of, ops::Add};
 
 use anchor_lang::{err, prelude::*, require, solana_program::clock::Slot, Result};
 use solana_program::clock::{self, Clock};
@@ -17,12 +12,11 @@ use crate::{
         utils::{
             calculate_market_value_from_liquidity_amount,
             calculate_obligation_collateral_market_value,
-            calculate_obligation_liquidity_market_value, check_elevation_group_borrowing_enabled,
-            check_non_elevation_group_borrowing_enabled,
-            check_obligation_collateral_deposit_reserve,
+            calculate_obligation_liquidity_market_value, check_borrow_possible,
+            check_elevation_group_borrowing_enabled, check_obligation_collateral_deposit_reserve,
             check_obligation_fully_refreshed_and_not_null,
-            check_obligation_liquidity_borrow_reserve, check_same_elevation_group,
-            get_elevation_group, get_max_ltv_and_liquidation_threshold,
+            check_obligation_liquidity_borrow_reserve, check_repay_possible,
+            check_same_elevation_group, get_elevation_group, get_max_ltv_and_liquidation_threshold,
             post_borrow_obligation_invariants, post_deposit_obligation_invariants,
             post_repay_obligation_invariants, post_withdraw_obligation_invariants,
             update_elevation_group_debt_trackers_on_repay,
@@ -36,11 +30,13 @@ use crate::{
         IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
     withdraw_ticket::WithdrawTicket,
-    xmsg, BorrowSize, DepositLiquidityResult, ElevationGroup, LendingError, LendingMarket,
+    xmsg, AllowedRolloverTime, BorrowSize, DepositLiquidityResult, ElevationGroup,
+    FixedTermBorrowRolloverConfig, FixedTermRolloverResult, LendingError, LendingMarket,
     LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
-    MaxReservesAsCollateralCheck, Obligation, PriceStatusFlags, RedeemCollateralOptions,
-    ReferrerTokenState, RefreshObligationBorrowsResult, RefreshObligationDepositsResult,
-    ReserveStatus, TicketedWithdrawResult, UpdateConfigMode, WithdrawResult,
+    MaxReservesAsCollateralCheck, Obligation, ObligationConfigUpdateSubject, ObligationLiquidity,
+    PriceStatusFlags, RedeemCollateralOptions, ReferrerTokenState, RefreshObligationBorrowsResult,
+    RefreshObligationDepositsResult, ReserveStatus, TicketedWithdrawResult, UpdateConfigMode,
+    UpdateObligationConfigMode, WithdrawResult,
 };
 
 pub fn refresh_reserve(
@@ -189,53 +185,7 @@ where
         return err!(LendingError::InvalidAmount);
     }
 
-    if borrow_reserve
-        .last_update
-        .is_stale(clock.slot, PriceStatusFlags::ALL_CHECKS)?
-    {
-        msg!(
-            "Borrow reserve is stale and must be refreshed in the current slot, price_status: {:08b}",
-            borrow_reserve.last_update.get_price_status().0
-        );
-        return err!(LendingError::ReserveStale);
-    }
-
-    if lending_market.is_borrowing_disabled() {
-        msg!("Borrowing is disabled");
-        return err!(LendingError::BorrowingDisabled);
-    }
-
-   
-   
-   
-    obligation.check_not_marked_for_deleveraging()?;
-
-    if obligation.has_obsolete_reserves() {
-        return err!(LendingError::ObligationInObsoleteReserve);
-    }
-
-    let current_timestamp = u64::try_from(clock.unix_timestamp).unwrap();
-
-   
-   
-   
-    if let Some(secs_since_debt_maturity_reached) = borrow_reserve
-        .config
-        .get_secs_since_debt_maturity_reached(current_timestamp)
-    {
-        msg!(
-            "Cannot borrow from a reserve that reached its debt maturity {} seconds ago",
-            secs_since_debt_maturity_reached
-        );
-        return err!(LendingError::ReserveDebtMaturityReached);
-    }
-
-    let current_utilization = borrow_reserve.liquidity.utilization_rate();
-    let reserve_liquidity_borrowed_f = borrow_reserve.liquidity.total_borrow();
-    let borrow_limit_f = Fraction::from(borrow_reserve.config.borrow_limit);
-    let remaining_reserve_capacity = borrow_limit_f.saturating_sub(reserve_liquidity_borrowed_f);
-
-    check_obligation_fully_refreshed_and_not_null(obligation, clock.slot)?;
+    check_borrow_possible(lending_market, borrow_reserve, obligation, clock)?;
 
     let remaining_borrow_value = obligation.remaining_borrow_value();
     if remaining_borrow_value == Fraction::ZERO {
@@ -243,13 +193,8 @@ where
         return err!(LendingError::BorrowTooLarge);
     }
 
-    check_same_elevation_group(obligation, borrow_reserve)?;
-
-    check_elevation_group_borrowing_enabled(lending_market, obligation)?;
-    check_non_elevation_group_borrowing_enabled(obligation)?;
-
    
-    if remaining_reserve_capacity == Fraction::ZERO {
+    if borrow_reserve.remaining_borrow_capacity() == Fraction::ZERO {
         msg!("Borrow reserve is at full capacity");
         return err!(LendingError::BorrowLimitExceeded);
     }
@@ -262,7 +207,6 @@ where
     } = borrow_reserve.calculate_borrow(
         borrow_size,
         remaining_borrow_value,
-        remaining_reserve_capacity,
         lending_market.referral_fee_bps,
         obligation.elevation_group != ELEVATION_GROUP_NONE,
         referrer_token_state.is_some(),
@@ -288,6 +232,8 @@ where
         return err!(LendingError::BorrowTooSmall);
     }
 
+    check_below_reserve_utilization_limit(borrow_reserve, borrow_amount_f)?;
+
     borrow_reserve.borrow(borrow_amount_f, false)?;
     borrow_reserve.last_update.mark_stale();
 
@@ -298,11 +244,8 @@ where
 
     let borrow_index = {
        
-        let (obligation_liquidity, borrow_index) = obligation.find_or_add_liquidity_to_borrows(
-            borrow_reserve_pk,
-            cumulative_borrow_rate_bf,
-            current_timestamp,
-        )?;
+        let (obligation_liquidity, borrow_index) = obligation
+            .find_or_add_liquidity_to_borrows(borrow_reserve_pk, cumulative_borrow_rate_bf)?;
 
        
        
@@ -316,7 +259,7 @@ where
             return err!(LendingError::DebtReachedReserveDebtTerm);
         }
 
-        obligation_liquidity.borrow(borrow_amount_f);
+        obligation_liquidity.borrow(borrow_amount_f, current_timestamp);
 
         borrow_index
     };
@@ -337,21 +280,6 @@ where
 
     obligation.has_debt = 1;
     obligation.last_update.mark_stale();
-
-   
-    let new_utilization_rate = borrow_reserve.liquidity.utilization_rate();
-    let utilization_limit = borrow_reserve
-        .config
-        .utilization_limit_block_borrowing_above_pct;
-    if new_utilization_rate >= Fraction::from_percent(utilization_limit) && utilization_limit != 0 {
-        msg!(
-            "Borrowing above utilization rate is disabled, current {}, new {}, limit {}",
-            current_utilization.to_display(),
-            new_utilization_rate.to_display(),
-            utilization_limit
-        );
-        return err!(LendingError::BorrowingAboveUtilizationRateDisabled);
-    }
 
     let elevation_group = lending_market.get_elevation_group(obligation.elevation_group)?;
     utils::update_elevation_group_debt_trackers_on_borrow(
@@ -775,34 +703,15 @@ where
         return err!(LendingError::InvalidAmount);
     }
 
-    if repay_reserve
-        .last_update
-        .is_stale(clock.slot, PriceStatusFlags::NONE)?
-    {
-        msg!("Repay reserve is stale and must be refreshed in the current slot");
-        return err!(LendingError::ReserveStale);
-    }
-    if obligation
-        .last_update
-        .is_stale(clock.slot, PriceStatusFlags::NONE)?
-    {
-        msg!("Obligation is stale and must be refreshed in the current slot");
-        return err!(LendingError::ObligationStale);
-    }
-
-    let (liquidity, liquidity_index) =
-        obligation.find_liquidity_in_borrows_mut(repay_reserve_pk)?;
+    let (liquidity, liquidity_index) = obligation.find_liquidity_in_borrows(repay_reserve_pk)?;
     if liquidity.borrowed_amount_sf == 0 {
         msg!("Liquidity borrowed amount is zero");
         return err!(LendingError::ObligationLiquidityEmpty);
     }
 
-   
+    check_repay_possible(repay_reserve, obligation, clock)?;
 
    
-    let cumulative_borrow_rate =
-        BigFraction::from(repay_reserve.liquidity.cumulative_borrow_rate_bsf);
-    liquidity.accrue_interest(cumulative_borrow_rate)?;
 
     let CalculateRepayResult {
         settle_amount,
@@ -857,7 +766,7 @@ pub fn request_elevation_group<'info, T, U>(
     program_id: &Pubkey,
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
-    slot: Slot,
+    clock: &Clock,
     new_elevation_group: u8,
     deposit_reserves_iter: impl Iterator<Item = T> + Clone,
     borrow_reserves_iter: impl Iterator<Item = T> + Clone,
@@ -869,7 +778,7 @@ where
 {
    
    
-    check_obligation_fully_refreshed_and_not_null(obligation, slot)?;
+    check_obligation_fully_refreshed_and_not_null(obligation, clock.slot)?;
 
    
     require!(
@@ -922,7 +831,7 @@ where
         program_id,
         obligation,
         lending_market,
-        slot,
+        clock,
         elevation_group,
         borrow_reserves_iter.clone(),
         &mut referrer_token_states_iter,
@@ -936,7 +845,7 @@ where
     } = refresh_obligation_deposits(
         obligation,
         lending_market,
-        slot,
+        clock.slot,
         elevation_group,
         deposit_reserves_iter.clone(),
         borrowed_amount_in_elevation_group,
@@ -1003,6 +912,398 @@ fn check_min_withdraw_ticket_value(
     Ok(())
 }
 
+
+
+
+
+
+
+pub fn rollover_borrow_into_same_reserve(
+    market: &LendingMarket,
+    reserve_address: Pubkey,
+    reserve: &Reserve,
+    obligation: &mut Obligation,
+    clock: &Clock,
+) -> Result<()> {
+   
+    let (borrow, borrow_index) = obligation.find_liquidity_in_borrows(reserve_address)?;
+    check_rollover_possible(
+        market,
+        reserve_address,
+        reserve,
+        reserve_address,
+        reserve,
+        obligation,
+        borrow,
+        clock,
+    )?;
+    check_same_reserve_rollover_liquidity_available(reserve, borrow)?;
+    check_below_reserve_borrow_limit(reserve, Fraction::ZERO)?;
+    check_below_reserve_utilization_limit(reserve, Fraction::ZERO)?;
+    check_borrow_limit_outside_elevation_group_not_exceeded(reserve)?;
+
+   
+    let borrow = obligation.get_active_borrow_mut(borrow_index)?;
+    borrow.last_borrowed_at_timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+    borrow.borrowed_amount_at_expiration = 0;
+
+   
+    obligation.last_update.mark_stale();
+
+   
+    Ok(())
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pub fn rollover_borrow_into_different_reserve(
+    market: &LendingMarket,
+    source_reserve_address: Pubkey,
+    source_reserve: &mut Reserve,
+    target_reserve_address: Pubkey,
+    target_reserve: &mut Reserve,
+    obligation: &mut Obligation,
+    clock: &Clock,
+) -> Result<FixedTermRolloverResult> {
+   
+    let (source_borrow, source_borrow_index) =
+        obligation.find_liquidity_in_borrows(source_reserve_address)?;
+    check_rollover_possible(
+        market,
+        source_reserve_address,
+        source_reserve,
+        target_reserve_address,
+        target_reserve,
+        obligation,
+        source_borrow,
+        clock,
+    )?;
+
+   
+   
+    let full_borrow_amount = source_borrow.borrowed_amount();
+    let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+    let tokens_to_transfer_over = min(
+        target_reserve.borrowable_liquidity_amount(timestamp)?,
+        full_borrow_amount.to_ceil(),
+    );
+
+   
+    let is_full_rollover = Fraction::from(tokens_to_transfer_over) >= full_borrow_amount;
+    if !is_full_rollover {
+        let rollover_value = calculate_market_value_from_liquidity_amount(
+            target_reserve,
+            Fraction::from(tokens_to_transfer_over),
+        );
+        if rollover_value < market.min_partial_rollover_value {
+            msg!(
+                "Partial rollover value {} below minimum {}",
+                rollover_value.to_display(),
+                market.min_partial_rollover_value
+            );
+            return err!(LendingError::PartialRolloverValueTooSmall);
+        }
+    }
+
+   
+    let borrowed_amount = Fraction::from(tokens_to_transfer_over);
+    let repaid_amount = min(borrowed_amount, full_borrow_amount);
+    let obligation_borrowed_amount_increase = borrowed_amount - repaid_amount;
+
+   
+    check_below_obligation_allowed_borrow_value(
+        obligation,
+        target_reserve,
+        obligation_borrowed_amount_increase,
+    )?;
+
+   
+   
+   
+   
+    sub_from_withdrawal_accum(
+        &mut source_reserve.config.debt_withdrawal_cap,
+        tokens_to_transfer_over,
+        timestamp,
+    )?;
+    add_to_withdrawal_accum(
+        &mut target_reserve.config.debt_withdrawal_cap,
+        tokens_to_transfer_over,
+        timestamp,
+    )?;
+
+   
+    source_reserve
+        .liquidity
+        .repay(tokens_to_transfer_over, repaid_amount)?;
+    target_reserve.borrow(borrowed_amount, false)?;
+
+   
+    let preserved_rollover_config = if preserves_rollover_config(source_borrow, target_reserve) {
+        source_borrow.fixed_term_borrow_rollover_config
+    } else {
+        FixedTermBorrowRolloverConfig::default()
+    };
+
+   
+    obligation.repay(repaid_amount, source_borrow_index);
+    let (target_borrow, target_borrow_index) = obligation.find_or_add_liquidity_to_borrows(
+        target_reserve_address,
+        BigFraction::from(target_reserve.liquidity.cumulative_borrow_rate_bsf),
+    )?;
+    target_borrow.borrow(borrowed_amount, timestamp);
+    target_borrow.borrowed_amount_at_expiration = 0;
+
+   
+    target_borrow.fixed_term_borrow_rollover_config = preserved_rollover_config;
+
+   
+    utils::update_elevation_group_debt_trackers_on_rollover(
+        obligation,
+        tokens_to_transfer_over,
+        source_reserve,
+        target_reserve,
+        source_reserve_address,
+        target_borrow_index,
+    )?;
+
+   
+    obligation_order_operations::check_orders_supported_after_user_operation(obligation)?;
+
+   
+    source_reserve.last_update.mark_stale();
+    target_reserve.last_update.mark_stale();
+    obligation.last_update.mark_stale();
+
+   
+    Ok(FixedTermRolloverResult {
+        repaid_amount,
+        borrowed_amount,
+        tokens_to_transfer_over,
+    })
+}
+
+
+
+
+
+#[allow(clippy::too_many_arguments)]
+fn check_rollover_possible(
+    market: &LendingMarket,
+    source_reserve_address: Pubkey,
+    source_reserve: &Reserve,
+    target_reserve_address: Pubkey,
+    target_reserve: &Reserve,
+    obligation: &Obligation,
+    source_borrow: &ObligationLiquidity,
+    clock: &Clock,
+) -> Result<()> {
+   
+    if obligation.elevation_group != ELEVATION_GROUP_NONE {
+       
+       
+       
+       
+       
+       
+        msg!("Cannot rollover an obligation that is in an elevation group");
+        return err!(LendingError::RolloverNotSupportedInElevationGroup);
+    }
+
+   
+    check_repay_possible(source_reserve, obligation, clock)?;
+    check_borrow_possible(market, target_reserve, obligation, clock)?;
+
+   
+    if target_reserve.config.borrow_factor_pct != source_reserve.config.borrow_factor_pct {
+        xmsg!(
+            "Target reserve borrow factor ({}) is different from source reserve's ({})",
+            target_reserve.config.borrow_factor_pct,
+            source_reserve.config.borrow_factor_pct
+        );
+        return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
+    }
+
+   
+    let rollover_mode = source_borrow
+        .fixed_term_borrow_rollover_config
+        .resolve_rollover_mode(&source_reserve.config, &target_reserve.config)?;
+
+   
+    match market.resolve_allowed_rollover_time(rollover_mode)? {
+        AllowedRolloverTime::Always => {
+           
+        }
+        AllowedRolloverTime::BeforeDebtExpiration(window_seconds) => {
+            check_within_rollover_window(source_reserve, source_borrow, window_seconds, clock)?;
+        }
+    }
+
+   
+    if source_reserve_address != target_reserve_address {
+        if let Ok((existing_target_borrow, _)) =
+            obligation.find_liquidity_in_borrows(target_reserve_address)
+        {
+            check_rollover_into_existing_slot_possible(
+                source_borrow,
+                existing_target_borrow,
+                source_reserve,
+                target_reserve,
+            )?;
+        }
+    }
+
+   
+   
+   
+
+    Ok(())
+}
+
+
+
+fn preserves_rollover_config(
+    source_borrow: &ObligationLiquidity,
+    target_reserve: &Reserve,
+) -> bool {
+   
+    target_reserve.config.get_debt_term_seconds().is_some()
+       
+        || source_borrow.fixed_term_borrow_rollover_config.is_migration_to_fixed_enabled()
+}
+
+
+
+
+
+
+
+
+
+
+pub(crate) fn check_rollover_into_existing_slot_possible(
+    source_borrow: &ObligationLiquidity,
+    target_borrow: &ObligationLiquidity,
+    source_reserve: &Reserve,
+    target_reserve: &Reserve,
+) -> Result<()> {
+   
+    if source_borrow.fixed_term_borrow_rollover_config
+        != target_borrow.fixed_term_borrow_rollover_config
+    {
+        msg!("Source and target borrow slots have different rollover configs");
+        return err!(LendingError::ObligationBorrowRolloverConfigMismatch);
+    }
+
+   
+    match (
+        source_borrow.get_debt_term_end_timestamp(&source_reserve.config),
+        target_borrow.get_debt_term_end_timestamp(&target_reserve.config),
+    ) {
+        (Some(source_end_timestamp), Some(target_end_timestamp)) => {
+            if target_end_timestamp <= source_end_timestamp {
+                msg!(
+                    "Target borrow term end {} <= source borrow term end {}",
+                    target_end_timestamp,
+                    source_end_timestamp,
+                );
+                err!(LendingError::ObligationBorrowRolloverMustProlongDebtTerm)
+            } else {
+               
+               
+               
+                Ok(())
+            }
+        }
+        (None, Some(_target_end_timestamp)) => {
+           
+           
+           
+            Ok(())
+        }
+        (Some(_source_end_timestamp), None) => {
+           
+           
+            Ok(())
+        }
+        (None, None) => {
+            panic!("Unreachable: rollover from open- to open-term");
+        }
+    }
+}
+
+
+
+fn check_within_rollover_window(
+    source_reserve: &Reserve,
+    source_borrow: &ObligationLiquidity,
+    rollover_window_duration_seconds: u64,
+    clock: &Clock,
+) -> Result<()> {
+   
+    let Some(debt_term_end_timestamp) =
+        source_borrow.get_debt_term_end_timestamp(&source_reserve.config)
+    else {
+       
+        return err!(LendingError::ObligationBorrowRolloverNotApplicable);
+    };
+
+   
+    let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+    let seconds_until_debt_term_end = debt_term_end_timestamp.saturating_sub(timestamp);
+    if rollover_window_duration_seconds < seconds_until_debt_term_end {
+        msg!(
+            "Borrow debt term ends at {} (in {} seconds), outside the {} seconds rollover window",
+            debt_term_end_timestamp,
+            seconds_until_debt_term_end,
+            rollover_window_duration_seconds
+        );
+        return err!(LendingError::ObligationBorrowOutsideRolloverWindow);
+    }
+
+    Ok(())
+}
+
+
+
+
+
+fn check_same_reserve_rollover_liquidity_available(
+    reserve: &Reserve,
+    borrow: &ObligationLiquidity,
+) -> Result<()> {
+    let rollover_amount = borrow.borrowed_amount();
+   
+   
+   
+    let total_available_liquidity_after_repay =
+        Fraction::from(reserve.liquidity.total_available_amount) + rollover_amount;
+    let freely_available_liquidity_after_repay = total_available_liquidity_after_repay
+        .saturating_sub(Fraction::from(reserve.queued_liquidity_amount()));
+    if rollover_amount > freely_available_liquidity_after_repay {
+        msg!(
+            "Rolling over {} would exceed the target reserve's freely-available liquidity {}",
+            rollover_amount,
+            freely_available_liquidity_after_repay,
+        );
+        return err!(LendingError::InsufficientLiquidity);
+    }
+    Ok(())
+}
+
 fn check_min_withdrawn_queued_liquidity_value(
     lending_market: &LendingMarket,
     reserve: &Reserve,
@@ -1045,6 +1346,84 @@ fn check_ltv_not_worse_if_marked_for_deleveraging(
             return err!(LendingError::WorseLtvBlocked);
         }
     }
+    Ok(())
+}
+
+
+
+pub fn check_below_reserve_utilization_limit(
+    reserve: &Reserve,
+    borrow_amount: Fraction,
+) -> Result<()> {
+    let new_utilization_rate =
+        (reserve.liquidity.total_borrow() + borrow_amount) / reserve.liquidity.total_supply();
+    let utilization_limit = reserve.config.utilization_limit_block_borrowing_above_pct;
+   
+    if new_utilization_rate >= Fraction::from_percent(utilization_limit) && utilization_limit != 0 {
+        msg!(
+            "Borrowing above utilization rate is disabled, current {}, new {}, limit {}",
+            reserve.liquidity.utilization_rate().to_display(),
+            new_utilization_rate.to_display(),
+            utilization_limit
+        );
+        return err!(LendingError::BorrowingAboveUtilizationRateDisabled);
+    }
+    Ok(())
+}
+
+
+pub fn check_below_reserve_borrow_limit(reserve: &Reserve, borrow_amount: Fraction) -> Result<()> {
+    let new_total_borrow = reserve.liquidity.total_borrow() + borrow_amount;
+   
+    if new_total_borrow > Fraction::from(reserve.config.borrow_limit) {
+        msg!(
+            "Borrowing {} more would exceed the target reserve's limit {} (current: {})",
+            borrow_amount.to_display(),
+            reserve.config.borrow_limit,
+            reserve.liquidity.total_borrow().to_display()
+        );
+        return err!(LendingError::BorrowLimitExceeded);
+    }
+    Ok(())
+}
+
+
+
+
+
+
+fn check_borrow_limit_outside_elevation_group_not_exceeded(reserve: &Reserve) -> Result<()> {
+    if reserve.borrowed_amount_outside_elevation_group
+        > reserve.config.borrow_limit_outside_elevation_group
+    {
+        msg!(
+            "Borrowed amount outside elevation group {} exceeds the limit {}",
+            reserve.borrowed_amount_outside_elevation_group,
+            reserve.config.borrow_limit_outside_elevation_group,
+        );
+        return err!(LendingError::ElevationGroupBorrowLimitExceeded);
+    }
+    Ok(())
+}
+
+
+
+pub fn check_below_obligation_allowed_borrow_value(
+    obligation: &Obligation,
+    reserve: &Reserve,
+    borrowed_amount_increase: Fraction,
+) -> Result<()> {
+   
+    let borrowed_value_increase = reserve
+        .liquidity
+        .liquidity_amount_to_market_value(borrowed_amount_increase);
+    let bf_adjusted_borrowed_value_increase = borrowed_value_increase
+        * reserve.borrow_factor_f(obligation.elevation_group != ELEVATION_GROUP_NONE);
+    require_gte!(
+        obligation.remaining_borrow_value(),
+        bf_adjusted_borrowed_value_increase,
+        LendingError::BorrowTooLarge,
+    );
     Ok(())
 }
 
@@ -1245,7 +1624,7 @@ pub fn refresh_obligation_borrows<'info, T, U>(
     program_id: &Pubkey,
     obligation: &mut Obligation,
     lending_market: &LendingMarket,
-    slot: u64,
+    clock: &Clock,
     elevation_group: Option<&ElevationGroup>,
     mut reserves_iter: impl Iterator<Item = T>,
     mut referrer_token_states_iter: impl Iterator<Item = U>,
@@ -1286,7 +1665,7 @@ where
             borrow_reserve,
             borrow_reserve_info_key,
             index,
-            slot,
+            clock.slot,
         )?;
 
         let cumulative_borrow_rate_bf =
@@ -1336,7 +1715,7 @@ where
             borrow_reserve,
             &obligation.referrer,
             lending_market.referral_fee_bps,
-            obligation.last_update.slots_elapsed(slot)?,
+            obligation.last_update.slots_elapsed(clock.slot)?,
             borrowed_amount_f,
             previous_borrowed_amount_f,
             obligation_has_referrer,
@@ -1360,6 +1739,12 @@ where
             borrow_factor_adjusted_market_value.to_bits();
 
         borrow_factor_adjusted_debt_value += borrow_factor_adjusted_market_value;
+
+       
+        borrow.capture_borrowed_amount_at_expiration(
+            &borrow_reserve.config,
+            clock.unix_timestamp.try_into().unwrap(),
+        );
 
        
         obligation.has_debt = 1;
@@ -1429,7 +1814,7 @@ where
         program_id,
         obligation,
         lending_market,
-        slot,
+        clock,
         elevation_group,
         &mut borrow_reserves_iter,
         &mut referrer_token_states_iter,
@@ -1727,7 +2112,7 @@ pub(crate) fn post_liquidate_redeem(
             | LiquidationReason::IndividualDeleveraging
             | LiquidationReason::MarketWideDeleveraging
             | LiquidationReason::ReserveDebtMaturityReached
-            | LiquidationReason::ObligationBorrowDebtTermReached => {
+            | LiquidationReason::ObligationBorrowDebtTermReached(_) => {
                 withdraw_reserve.config.protocol_liquidation_fee_pct
             }
             LiquidationReason::ObligationOrder(_) => {
@@ -2356,7 +2741,7 @@ pub fn update_reserve_config(
         }
         UpdateConfigMode::UpdateDebtMaturityTimestamp => {
             config_items::for_named_field!(&mut reserve.config.debt_maturity_timestamp)
-                .validating(|timestamp| check_not_set_in_the_past(*timestamp, clock))
+                .validating(|timestamp| utils::check_not_set_in_the_past(*timestamp, clock))
                 .set(value)?;
         }
         UpdateConfigMode::UpdateProposerAuthorityLock => {
@@ -2427,16 +2812,77 @@ fn check_debt_term_not_shortened_on_reserve_having_borrows(
     Ok(())
 }
 
-
-fn check_not_set_in_the_past(subject_timestamp: u64, clock: &Clock) -> Result<()> {
-    let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
-    if subject_timestamp != 0 && subject_timestamp < timestamp {
-        msg!(
-            "Timestamp must not be set in the past; got {} < current timestamp {}",
-            subject_timestamp,
-            timestamp
-        );
-        return err!(LendingError::InvalidConfig);
+pub fn update_obligation_config(
+    obligation: &mut Obligation,
+    market: &LendingMarket,
+    subject: ObligationConfigUpdateSubject,
+    mode: UpdateObligationConfigMode,
+    value: &[u8],
+) -> Result<()> {
+    msg!(
+        "Updating {:?} with mode {:?} and value {:?}",
+        subject,
+        mode,
+        value
+    );
+    match mode {
+        UpdateObligationConfigMode::FixedTermRolloverEnabled => {
+            let rollover_config = &mut obligation
+                .find_liquidity_in_borrows_mut(subject.borrow_reserve_address()?)?
+                .0
+                .fixed_term_borrow_rollover_config;
+            config_items::for_field(&mut rollover_config.auto_rollover_enabled)
+                .named("fixed_term_borrow_rollover_config.auto_rollover_enabled")
+                .validating(validations::check_bool)
+                .set(value)?;
+            if rollover_config.is_auto_rollover_enabled() {
+                utils::check_enabled_rollover_config_integrity(market, rollover_config)?;
+            }
+        }
+        UpdateObligationConfigMode::FixedTermRolloverMaxBorrowRateBps => {
+            let rollover_config = &mut obligation
+                .find_liquidity_in_borrows_mut(subject.borrow_reserve_address()?)?
+                .0
+                .fixed_term_borrow_rollover_config;
+            config_items::for_field(&mut rollover_config.max_borrow_rate_bps)
+                .named("fixed_term_borrow_rollover_config.max_borrow_rate_bps")
+                .set(value)?;
+            utils::check_enabled_rollover_config_integrity(market, rollover_config)?;
+        }
+        UpdateObligationConfigMode::FixedTermRolloverMinDebtTermSeconds => {
+            let rollover_config = &mut obligation
+                .find_liquidity_in_borrows_mut(subject.borrow_reserve_address()?)?
+                .0
+                .fixed_term_borrow_rollover_config;
+            config_items::for_field(&mut rollover_config.min_debt_term_seconds)
+                .named("fixed_term_borrow_rollover_config.min_debt_term_seconds")
+                .set(value)?;
+            utils::check_enabled_rollover_config_integrity(market, rollover_config)?;
+        }
+        UpdateObligationConfigMode::FixedTermRolloverOpenTermAllowed => {
+            let rollover_config = &mut obligation
+                .find_liquidity_in_borrows_mut(subject.borrow_reserve_address()?)?
+                .0
+                .fixed_term_borrow_rollover_config;
+            config_items::for_field(&mut rollover_config.open_term_allowed)
+                .named("fixed_term_borrow_rollover_config.open_term_allowed")
+                .validating(validations::check_bool)
+                .set(value)?;
+            utils::check_enabled_rollover_config_integrity(market, rollover_config)?;
+        }
+        UpdateObligationConfigMode::MigrationToFixedEnabled => {
+            let rollover_config = &mut obligation
+                .find_liquidity_in_borrows_mut(subject.borrow_reserve_address()?)?
+                .0
+                .fixed_term_borrow_rollover_config;
+            config_items::for_field(&mut rollover_config.migration_to_fixed_enabled)
+                .named("fixed_term_borrow_rollover_config.migration_to_fixed_enabled")
+                .validating(validations::check_bool)
+                .set(value)?;
+            if rollover_config.is_migration_to_fixed_enabled() {
+                utils::check_enabled_rollover_config_integrity(market, rollover_config)?;
+            }
+        }
     }
     Ok(())
 }
@@ -2466,7 +2912,7 @@ pub mod utils {
             accounts::has_ata_address, borsh_deserialize, ELEVATION_GROUP_NONE, FULL_BPS,
             MAX_NUM_ELEVATION_GROUPS,
         },
-        ElevationGroup, ObligationCollateral, ObligationLiquidity,
+        ElevationGroup, FixedTermBorrowRolloverConfig, ObligationCollateral, ObligationLiquidity,
     };
 
     pub(crate) fn repay_and_withdraw_from_obligation_post_liquidation(
@@ -2504,9 +2950,10 @@ pub mod utils {
         reserve: &Reserve,
         liquidity_amount: Fraction,
     ) -> Fraction {
-        let mint_decimal_factor = u128::from(reserve.liquidity.mint_factor());
-        let market_price = reserve.liquidity.get_market_price();
-        liquidity_amount.mul(market_price).div(mint_decimal_factor)
+       
+        reserve
+            .liquidity
+            .liquidity_amount_to_market_value(liquidity_amount)
     }
 
     pub(crate) fn calculate_obligation_collateral_market_value(
@@ -2932,6 +3379,59 @@ pub mod utils {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_elevation_group_debt_trackers_on_rollover(
+        obligation: &mut Obligation,
+        tokens_moved_over: u64,
+        source_borrow_reserve: &mut Reserve,
+        target_borrow_reserve: &mut Reserve,
+        source_borrow_reserve_address: Pubkey,
+        target_borrow_index: usize,
+    ) -> Result<()> {
+       
+        source_borrow_reserve.borrowed_amount_outside_elevation_group = source_borrow_reserve
+            .borrowed_amount_outside_elevation_group
+            .saturating_sub(tokens_moved_over);
+
+       
+        target_borrow_reserve.borrowed_amount_outside_elevation_group += tokens_moved_over;
+
+       
+       
+       
+       
+        if let Ok((source_borrow, _index)) =
+            obligation.find_liquidity_in_borrows_mut(source_borrow_reserve_address)
+        {
+            source_borrow.borrowed_amount_outside_elevation_groups = source_borrow
+                .borrowed_amount_outside_elevation_groups
+                .saturating_sub(tokens_moved_over);
+        }
+
+       
+        let target_borrow = &mut obligation.borrows[target_borrow_index];
+        target_borrow.borrowed_amount_outside_elevation_groups += tokens_moved_over;
+
+        Ok(())
+    }
+
+
+
     pub fn clear_obligation_orders_if_no_debt(obligation: &mut Obligation) {
         if !obligation.has_debt() {
             let obligation_had_orders = obligation_order_operations::remove_all_orders(obligation);
@@ -2939,6 +3439,98 @@ pub mod utils {
                 xmsg!("All obligation's debts were cleared; removing all its orders");
             }
         }
+    }
+
+
+
+
+
+
+    pub fn check_borrow_possible(
+        market: &LendingMarket,
+        reserve: &Reserve,
+        obligation: &Obligation,
+        clock: &Clock,
+    ) -> Result<()> {
+       
+        if market.is_borrowing_disabled() {
+            return err!(LendingError::BorrowingDisabled);
+        }
+
+       
+        if reserve
+            .last_update
+            .is_stale(clock.slot, PriceStatusFlags::ALL_CHECKS)?
+        {
+            msg!(
+                "Borrow reserve is stale and must be refreshed in the current slot, price_status: {:08b}",
+                reserve.last_update.get_price_status().0
+            );
+            return err!(LendingError::ReserveStale);
+        }
+
+       
+        let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+        if let Some(secs_since_debt_maturity_reached) = reserve
+            .config
+            .get_secs_since_debt_maturity_reached(timestamp)
+        {
+            msg!(
+                "Cannot borrow from a reserve that reached its debt maturity {} seconds ago",
+                secs_since_debt_maturity_reached
+            );
+           
+           
+           
+            return err!(LendingError::ReserveDebtMaturityReached);
+        }
+
+       
+        obligation.check_not_marked_for_deleveraging()?;
+        if obligation.has_obsolete_reserves() {
+            return err!(LendingError::ObligationInObsoleteReserve);
+        }
+
+       
+        check_obligation_fully_refreshed_and_not_null(obligation, clock.slot)?;
+
+       
+        check_same_elevation_group(obligation, reserve)?;
+        check_elevation_group_borrowing_enabled(market, obligation)?;
+        check_non_elevation_group_borrowing_enabled(obligation)?;
+
+        Ok(())
+    }
+
+
+
+
+
+
+    pub fn check_repay_possible(
+        reserve: &Reserve,
+        obligation: &Obligation,
+        clock: &Clock,
+    ) -> Result<()> {
+       
+        if reserve
+            .last_update
+            .is_stale(clock.slot, PriceStatusFlags::NONE)?
+        {
+            msg!("Repay reserve is stale and must be refreshed in the current slot");
+            return err!(LendingError::ReserveStale);
+        }
+
+       
+        if obligation
+            .last_update
+            .is_stale(clock.slot, PriceStatusFlags::NONE)?
+        {
+            msg!("Obligation is stale and must be refreshed in the current slot");
+            return err!(LendingError::ObligationStale);
+        }
+
+        Ok(())
     }
 
     pub fn check_non_elevation_group_borrowing_enabled(obligation: &Obligation) -> Result<()> {
@@ -3726,6 +4318,51 @@ pub mod utils {
         }
 
         config.borrow_rate_curve.validate()?;
+        Ok(())
+    }
+
+
+    pub fn check_not_set_in_the_past(subject_timestamp: u64, clock: &Clock) -> Result<()> {
+        let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+        if subject_timestamp != 0 && subject_timestamp < timestamp {
+            msg!(
+                "Timestamp must not be set in the past; got {} < current timestamp {}",
+                subject_timestamp,
+                timestamp
+            );
+            return err!(LendingError::InvalidConfig);
+        }
+        Ok(())
+    }
+
+
+
+
+
+
+    pub fn check_enabled_rollover_config_integrity(
+        market: &LendingMarket,
+        config: &FixedTermBorrowRolloverConfig,
+    ) -> Result<()> {
+        let any_enabled =
+            config.is_auto_rollover_enabled() || config.is_migration_to_fixed_enabled();
+        if any_enabled && !market.is_obligation_borrow_rollover_configuration_enabled() {
+            return err!(LendingError::BorrowRolloverConfigurationDisabled);
+        }
+
+       
+        if any_enabled && config.max_borrow_rate_bps == 0 {
+            msg!("max_borrow_rate_bps must be set when rollover/migration is enabled");
+            return err!(LendingError::InvalidConfig);
+        }
+
+       
+       
+       
+        if config.is_migration_to_fixed_enabled() && config.min_debt_term_seconds == 0 {
+            msg!("min_debt_term_seconds must be set when migration to fixed-term is enabled (0 means open-term only)");
+            return err!(LendingError::InvalidConfig);
+        }
         Ok(())
     }
 }

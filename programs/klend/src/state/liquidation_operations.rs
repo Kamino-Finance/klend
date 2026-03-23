@@ -26,12 +26,9 @@ use crate::{
 
 
 pub fn max_liquidatable_borrowed_amount(
+    market: &LendingMarket,
     obligation: &Obligation,
-    liquidation_max_debt_close_factor_pct: u8,
-    market_max_liquidatable_debt_value_at_once: u64,
     liquidity: &ObligationLiquidity,
-    user_ltv: Fraction,
-    insolvency_risk_ltv_pct: u8,
     liquidation_reason: LiquidationReason,
 ) -> Fraction {
     match liquidation_reason {
@@ -47,8 +44,23 @@ pub fn max_liquidatable_borrowed_amount(
             order_size_amount.min(liquidity.borrowed_amount())
         }
        
-        LiquidationReason::ReserveDebtMaturityReached
-        | LiquidationReason::ObligationBorrowDebtTermReached => liquidity.borrowed_amount(),
+        LiquidationReason::ReserveDebtMaturityReached => liquidity.borrowed_amount(),
+       
+        LiquidationReason::ObligationBorrowDebtTermReached(secs_since_debt_term_end) => {
+            let throttle_protected_amount = market
+                .get_term_based_full_liquidation_duration_secs()
+                .map(|full_liquidation_duration_secs| {
+                    let secs_until_full_liq =
+                        full_liquidation_duration_secs.saturating_sub(secs_since_debt_term_end);
+                    liquidity
+                        .borrowed_amount_at_expiration()
+                        .full_mul_int_ratio(secs_until_full_liq, full_liquidation_duration_secs)
+                })
+                .unwrap_or_default();
+            liquidity
+                .borrowed_amount()
+                .saturating_sub(throttle_protected_amount)
+        }
        
         LiquidationReason::LtvExceeded
         | LiquidationReason::IndividualDeleveraging
@@ -60,21 +72,18 @@ pub fn max_liquidatable_borrowed_amount(
             let total_obligation_debt_mv = obligation.get_borrowed_assets_market_value();
 
             let liquidation_max_debt_close_factor_rate =
-                if user_ltv > Fraction::from_percent(insolvency_risk_ltv_pct) {
+                if obligation.loan_to_value() > market.get_insolvency_risk_unhealthy_ltv() {
                     Fraction::ONE
                 } else {
-                    Fraction::from_percent(liquidation_max_debt_close_factor_pct)
+                    market.get_liquidation_max_debt_close_factor()
                 };
-
-            let market_max_liquidatable_debt_value_at_once =
-                Fraction::from_num(market_max_liquidatable_debt_value_at_once);
 
             let calculated_liquidatable_mv =
                 total_obligation_debt_mv * liquidation_max_debt_close_factor_rate;
 
             let max_liquidatable_mv = calculated_liquidatable_mv
                 .min(obligation_debt_for_liquidity_mv)
-                .min(market_max_liquidatable_debt_value_at_once);
+                .min(market.get_max_liquidatable_debt_market_value_at_once());
 
            
             let max_liquidation_ratio = max_liquidatable_mv / obligation_debt_for_liquidity_mv;
@@ -99,14 +108,7 @@ pub fn calculate_liquidation(
     is_collateral_reserve_lowest_liquidation_ltv: bool,
     max_allowed_ltv_override_pct_opt: Option<u64>,
 ) -> Result<CalculateLiquidationResult> {
-    if obligation.deposited_value_sf == 0 {
-       
-        msg!("Deposited value backing a loan cannot be 0");
-        return err!(LendingError::InvalidObligationCollateral);
-    }
-
     let LiquidationParams {
-        user_ltv,
         liquidation_bonus_rate,
         liquidation_reason,
     } = get_liquidation_params(
@@ -148,16 +150,8 @@ pub fn calculate_liquidation(
         }
         borrowed_amount
     } else {
-        max_liquidatable_borrowed_amount(
-            obligation,
-            lending_market.liquidation_max_debt_close_factor_pct,
-            lending_market.max_liquidatable_debt_market_value_at_once,
-            liquidity,
-            user_ltv,
-            lending_market.insolvency_risk_unhealthy_ltv_pct,
-            liquidation_reason,
-        )
-        .min(debt_amount_to_liquidate)
+        max_liquidatable_borrowed_amount(lending_market, obligation, liquidity, liquidation_reason)
+            .min(debt_amount_to_liquidate)
     };
 
     let liquidation_ratio = debt_liquidation_amount_f / borrowed_amount;
@@ -237,7 +231,7 @@ pub fn get_liquidation_params(
         LiquidationReason::LtvExceeded
             | LiquidationReason::ObligationOrder(..)
             | LiquidationReason::ReserveDebtMaturityReached
-            | LiquidationReason::ObligationBorrowDebtTermReached
+            | LiquidationReason::ObligationBorrowDebtTermReached(..)
     ) && !is_collateral_reserve_lowest_liquidation_ltv
     {
         xmsg!("Collateral reserve must be the lowest liquidation LTV reserve");
@@ -296,7 +290,6 @@ pub fn check_liquidate_obligation(
     );
 
     Some(LiquidationParams {
-        user_ltv,
         liquidation_bonus_rate: calculate_liquidation_bonus(
             &collateral_reserve.config,
             &debt_reserve.config,
@@ -508,7 +501,6 @@ fn check_individual_autodeleverage_obligation(
     );
     xmsg!("Auto-deleveraging individual target LTV: {user_ltv}/{autodeleverage_target_ltv}, secs: {secs_since_deleveraging_started} ({days_since_deleveraging_started} days), liquidation bonus: {liquidation_bonus_rate}", );
     Some(LiquidationParams {
-        user_ltv,
         liquidation_bonus_rate,
         liquidation_reason: LiquidationReason::IndividualDeleveraging,
     })
@@ -604,7 +596,6 @@ fn check_reserve_debt_maturity_reached(
 
     xmsg!("Debt reserve's maturity timestamp has been reached, seconds: {secs_since_debt_maturity} ({days_since_debt_maturity} days), liquidation bonus: {liquidation_bonus_rate}", );
     Some(LiquidationParams {
-        user_ltv: obligation.loan_to_value(),
         liquidation_bonus_rate,
         liquidation_reason: LiquidationReason::ReserveDebtMaturityReached,
     })
@@ -642,11 +633,12 @@ fn check_borrow_reserve_debt_term_reached(
         obligation,
         days_since_debt_term_end,
     );
-    xmsg!("Obligation borrow's debt term has been reached, seconds: {secs_since_debt_term_end} ({days_since_debt_term_end} days), liquidation bonus: {liquidation_bonus_rate}", );
+    xmsg!("Obligation borrow's debt term has been reached {days_since_debt_term_end} days ago, liquidation bonus: {liquidation_bonus_rate}", );
     Some(LiquidationParams {
-        user_ltv: obligation.loan_to_value(),
         liquidation_bonus_rate,
-        liquidation_reason: LiquidationReason::ObligationBorrowDebtTermReached,
+        liquidation_reason: LiquidationReason::ObligationBorrowDebtTermReached(
+            secs_since_debt_term_end,
+        ),
     })
 }
 
@@ -684,7 +676,6 @@ fn check_obligation_order_execution(
         order.opportunity_to_display()
     );
     Some(LiquidationParams {
-        user_ltv: obligation.loan_to_value(),
         liquidation_bonus_rate: calculate_order_execution_bonus_rate(
             order,
             &condition_hit,
@@ -754,7 +745,6 @@ fn get_autodeleverage_liquidation_params(
        
         xmsg!("Auto-deleveraging LTV threshold crossed: {user_ltv}/{autodeleverage_ltv_threshold}, seconds: {secs_since_deleveraging_started} ({days_since_deleveraging_started} days), liquidation bonus: {liquidation_bonus_rate}", );
         Some(LiquidationParams {
-            user_ltv,
             liquidation_bonus_rate,
             liquidation_reason: LiquidationReason::MarketWideDeleveraging,
         })
