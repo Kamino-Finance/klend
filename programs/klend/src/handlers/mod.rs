@@ -1,4 +1,6 @@
 pub mod handler_borrow_obligation_liquidity;
+pub mod handler_cancel_withdraw_ticket;
+pub mod handler_clone_reserve_config;
 pub mod handler_delete_referrer_state_and_short_url;
 pub mod handler_deposit_and_withdraw;
 pub mod handler_deposit_obligation_collateral;
@@ -47,6 +49,8 @@ pub mod handler_withdraw_queued_liquidity;
 pub mod handler_withdraw_referrer_fees;
 
 pub use handler_borrow_obligation_liquidity::*;
+pub use handler_cancel_withdraw_ticket::*;
+pub use handler_clone_reserve_config::*;
 pub use handler_delete_referrer_state_and_short_url::*;
 pub use handler_deposit_and_withdraw::*;
 pub use handler_deposit_obligation_collateral::*;

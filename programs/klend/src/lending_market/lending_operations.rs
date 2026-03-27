@@ -26,8 +26,8 @@ use crate::{
     liquidation_operations, obligation_order_operations,
     state::{CalculateBorrowResult, CalculateLiquidationResult, CalculateRepayResult, Reserve},
     utils::{
-        consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction, Fraction, GetPriceResult,
-        IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
+        accounts::is_default_array, consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction,
+        Fraction, GetPriceResult, IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
     withdraw_ticket::WithdrawTicket,
     xmsg, AllowedRolloverTime, BorrowSize, DepositLiquidityResult, ElevationGroup,
@@ -35,8 +35,8 @@ use crate::{
     LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
     MaxReservesAsCollateralCheck, Obligation, ObligationConfigUpdateSubject, ObligationLiquidity,
     PriceStatusFlags, RedeemCollateralOptions, ReferrerTokenState, RefreshObligationBorrowsResult,
-    RefreshObligationDepositsResult, ReserveStatus, TicketedWithdrawResult, UpdateConfigMode,
-    UpdateObligationConfigMode, WithdrawResult,
+    RefreshObligationDepositsResult, ReserveConfig, ReserveConfigCustomizations, ReserveStatus,
+    TicketedWithdrawResult, UpdateConfigMode, UpdateObligationConfigMode, WithdrawResult,
 };
 
 pub fn refresh_reserve(
@@ -664,6 +664,36 @@ pub fn withdraw_queued_liquidity(
     })
 }
 
+pub fn cancel_withdraw_ticket(
+    lending_market: &LendingMarket,
+    reserve: &mut Reserve,
+    withdraw_ticket: &mut WithdrawTicket,
+    collateral_amount_to_cancel: u64,
+) -> Result<u64> {
+   
+    if collateral_amount_to_cancel == 0 {
+        msg!("Cannot cancel 0 ctokens");
+        return err!(LendingError::InvalidAmount);
+    }
+    let amount_to_cancel = min(
+        collateral_amount_to_cancel,
+        withdraw_ticket.queued_collateral_amount,
+    );
+
+   
+    let remaining_collateral = withdraw_ticket.queued_collateral_amount - amount_to_cancel;
+    if remaining_collateral != 0 {
+        check_min_withdraw_ticket_value(lending_market, reserve, remaining_collateral)?;
+    }
+   
+
+   
+    withdraw_ticket.queued_collateral_amount = remaining_collateral;
+    reserve.withdraw_queue.dequeue(amount_to_cancel, false);
+
+    Ok(amount_to_cancel)
+}
+
 pub fn redeem_fees(reserve: &mut Reserve, slot: Slot) -> Result<u64> {
     if reserve.last_update.is_stale(slot, PriceStatusFlags::NONE)? {
         msg!(
@@ -723,10 +753,17 @@ where
         return err!(LendingError::RepayTooSmall);
     }
 
+    let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
+
+    let early_repay_penalty =
+        liquidity.calculate_early_repay_penalty(repay_reserve, settle_amount, timestamp)?;
+
+    let repay_amount_with_penalty = repay_amount + early_repay_penalty;
+
     sub_from_withdrawal_accum(
         &mut repay_reserve.config.debt_withdrawal_cap,
         repay_amount,
-        u64::try_from(clock.unix_timestamp).unwrap(),
+        timestamp,
     )?;
 
     update_elevation_group_debt_trackers_on_repay(
@@ -738,6 +775,13 @@ where
     )?;
 
     repay_reserve.liquidity.repay(repay_amount, settle_amount)?;
+
+    if early_repay_penalty > 0 {
+        repay_reserve
+            .liquidity
+            .accumulate_early_repay_penalty(early_repay_penalty)?;
+    }
+
     repay_reserve.last_update.mark_stale();
 
     obligation.repay(settle_amount, liquidity_index);
@@ -758,7 +802,7 @@ where
         Fraction::from_bits(lending_market.min_net_value_in_obligation_sf),
     )?;
 
-    Ok(repay_amount)
+    Ok(repay_amount_with_penalty)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2762,6 +2806,11 @@ pub fn update_reserve_config(
                 })
                 .set(value)?;
         }
+        UpdateConfigMode::UpdateEarlyRepayRemainingInterestPct => {
+            config_items::for_named_field!(&mut reserve.config.early_repay_remaining_interest_pct)
+                .validating(validations::check_valid_pct)
+                .set(value)?;
+        }
         UpdateConfigMode::UpdateBlockCTokenUsage => {
             config_items::for_named_field!(&mut reserve.config.block_ctoken_usage)
                 .validating(validations::check_bool)
@@ -2779,6 +2828,26 @@ pub fn update_reserve_config(
     }
 
     reserve.last_update.mark_stale();
+    Ok(())
+}
+
+pub fn clone_reserve_config(
+    source_reserve: &Reserve,
+    target_reserve: &mut Reserve,
+    customizations: ReserveConfigCustomizations,
+) -> Result<()> {
+    target_reserve.config = ReserveConfig::from_customized(&source_reserve.config, customizations);
+
+    if source_reserve.lending_market != target_reserve.lending_market
+        && !is_default_array(&target_reserve.config.elevation_groups)
+    {
+        msg!(
+            "Cannot clone from {} into different market {} reserve config with elevation groups {:?}",
+            source_reserve.lending_market, target_reserve.lending_market, target_reserve.config.elevation_groups
+        );
+        return err!(LendingError::InvalidConfig);
+    }
+
     Ok(())
 }
 
@@ -4083,7 +4152,8 @@ pub mod utils {
             | UpdateConfigMode::UpdateMinDeleveragingBonusBps
             | UpdateConfigMode::UpdateDebtMaturityTimestamp
             | UpdateConfigMode::UpdateDebtTermSeconds
-            | UpdateConfigMode::UpdateProposerAuthorityLock => false,
+            | UpdateConfigMode::UpdateProposerAuthorityLock
+            | UpdateConfigMode::UpdateEarlyRepayRemainingInterestPct => false,
         }
     }
 
@@ -4150,6 +4220,22 @@ pub mod utils {
         } else {
             lending_market.lending_market_owner == signer
         }
+    }
+
+
+
+
+
+
+
+    pub fn is_allowed_signer_to_clone_reserve_config(
+        signer: Pubkey,
+        lending_market: &LendingMarket,
+        reserve: &Reserve,
+    ) -> bool {
+        signer == lending_market.lending_market_owner
+            || (reserve.config.proposer_authority_locked == false as u8
+                && signer == lending_market.proposer_authority)
     }
 
     pub fn allowed_signer_update_reserve_config(
@@ -4258,6 +4344,10 @@ pub mod utils {
                 msg!("Invalid deleveraging_bonus_increase_bps_per_day, must be greater than 0 when autodeleverage_enabled");
                 return err!(LendingError::InvalidConfig);
             }
+        }
+        if config.early_repay_remaining_interest_pct > 100 {
+            msg!("Early repay penalty remaining interest pct must be in range [0, 100]");
+            return err!(LendingError::InvalidConfig);
         }
         if config.borrow_limit_outside_elevation_group != u64::MAX
             && config.borrow_limit < config.borrow_limit_outside_elevation_group

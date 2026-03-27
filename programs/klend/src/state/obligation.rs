@@ -12,9 +12,9 @@ use strum::{EnumIter, EnumString};
 
 use crate::{
     obligation_order_operations::{ConditionType, OpportunityType},
-    state::{LastUpdate, LtvMaxWithdrawalCheck},
+    state::{LastUpdate, LtvMaxWithdrawalCheck, Reserve},
     utils::{
-        accounts::default_array, BigFraction, Fraction, FractionExtra, IterExt,
+        accounts::default_array, secs, BigFraction, Fraction, FractionExtra, IterExt,
         ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256,
     },
     xmsg, BigFractionBytes, LendingError, ReserveConfig,
@@ -721,15 +721,7 @@ impl ObligationLiquidity {
 
 
     pub fn accrue_interest(&mut self, new_cumulative_borrow_rate: BigFraction) -> Result<()> {
-       
-       
-
-       
-       
-       
-
         let former_cumulative_borrow_rate_bsf: U256 = U256(self.cumulative_borrow_rate_bsf.value);
-
         let new_cumulative_borrow_rate_bsf: U256 = new_cumulative_borrow_rate.0;
 
         match new_cumulative_borrow_rate_bsf.cmp(&former_cumulative_borrow_rate_bsf) {
@@ -739,12 +731,11 @@ impl ObligationLiquidity {
             }
             Ordering::Equal => {}
             Ordering::Greater => {
-                let borrowed_amount_sf_u256 = U256::from(self.borrowed_amount_sf)
-                    * new_cumulative_borrow_rate_bsf
-                    / former_cumulative_borrow_rate_bsf;
-                self.borrowed_amount_sf = borrowed_amount_sf_u256
-                    .try_into()
-                    .map_err(|_| error!(LendingError::MathOverflow))?;
+                self.borrowed_amount_sf = Self::calculate_amount_with_accrued_interest(
+                    self.borrowed_amount_sf,
+                    former_cumulative_borrow_rate_bsf,
+                    new_cumulative_borrow_rate_bsf,
+                )?;
                 self.cumulative_borrow_rate_bsf.value = new_cumulative_borrow_rate_bsf.0;
             }
         }
@@ -777,6 +768,52 @@ impl ObligationLiquidity {
             return;
         }
         self.borrowed_amount_at_expiration = self.borrowed_amount().to_ceil();
+    }
+
+
+
+    fn calculate_amount_with_accrued_interest(
+        amount_sf: u128,
+        former_cumulative_borrow_rate_bsf: U256,
+        new_cumulative_borrow_rate_bsf: U256,
+    ) -> Result<u128> {
+       
+       
+       
+
+        let amount_sf_u256 = U256::from(amount_sf) * new_cumulative_borrow_rate_bsf
+            / former_cumulative_borrow_rate_bsf;
+        amount_sf_u256
+            .try_into()
+            .map_err(|_| error!(LendingError::MathOverflow))
+    }
+
+
+
+
+
+
+
+
+    fn calculate_interest_for_period(
+        &self,
+        amount: Fraction,
+        time_period: Fraction,
+        reserve: &Reserve,
+    ) -> Result<Fraction> {
+        let future_slot =
+            secs::estimate_slot_after_period(reserve.last_update.get_slot(), time_period)?;
+        let future_cumulative_borrow_rate_bsf =
+            reserve.calculate_future_cumulative_borrow_rate(future_slot)?;
+
+        let amount_with_interest =
+            Fraction::from_bits(Self::calculate_amount_with_accrued_interest(
+                amount.to_bits(),
+                U256(self.cumulative_borrow_rate_bsf.value),
+                future_cumulative_borrow_rate_bsf.0,
+            )?);
+
+        Ok(amount_with_interest - amount)
     }
 
 
@@ -823,6 +860,64 @@ impl ObligationLiquidity {
             return None;
         }
         Some(self.last_borrowed_at_timestamp + debt_term_seconds)
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+    pub fn calculate_early_repay_penalty(
+        &self,
+        reserve: &Reserve,
+        repay_amount: Fraction,
+        current_timestamp: u64,
+    ) -> Result<u64> {
+        let Some(debt_term_seconds) = reserve.config.get_debt_term_seconds() else {
+            return Ok(0);
+        };
+
+        if self.last_borrowed_at_timestamp == 0 {
+            xmsg!(
+                "Debt reserve has a debt term of {} seconds, but an Obligation did not track its last borrow timestamp; ignoring it",
+                debt_term_seconds,
+            );
+            return Ok(0);
+        }
+
+       
+        if self.borrowed_amount_sf == 0 {
+            return Ok(0);
+        }
+
+        if repay_amount > self.borrowed_amount() {
+            panic!("caller must cap repay_amount to borrowed_amount");
+        }
+
+        let seconds_since_last_borrowed =
+            current_timestamp.saturating_sub(self.last_borrowed_at_timestamp);
+        if seconds_since_last_borrowed >= debt_term_seconds {
+            return Ok(0);
+        }
+
+        let remaining_secs = debt_term_seconds - seconds_since_last_borrowed;
+        let remaining_interest = self.calculate_interest_for_period(
+            repay_amount,
+            Fraction::from_num(remaining_secs),
+            reserve,
+        )?;
+
+        let penalty_pct = reserve
+            .config
+            .get_early_repay_penalty_remaining_interest_pct();
+
+        Ok((remaining_interest * penalty_pct).to_ceil::<u64>())
     }
 }
 

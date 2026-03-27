@@ -67,7 +67,7 @@ where
     )?;
     let initial_reserve_available_liquidity = repay_reserve.total_available_liquidity_amount();
 
-    let repay_amount = lending_operations::repay_obligation_liquidity(
+    let repay_amount_with_penalty = lending_operations::repay_obligation_liquidity(
         repay_reserve,
         obligation,
         &clock,
@@ -81,17 +81,18 @@ where
 
     xmsg!(
         "pnl: Repaying obligation liquidity {} liquidity_amount {}",
-        repay_amount,
+        repay_amount_with_penalty,
         liquidity_amount
     );
 
+   
     token_transfer::repay_obligation_liquidity_transfer(
         accounts.token_program.to_account_info(),
         accounts.reserve_liquidity_mint.to_account_info(),
         accounts.user_source_liquidity.to_account_info(),
         accounts.reserve_destination_liquidity.to_account_info(),
         accounts.owner.to_account_info(),
-        repay_amount,
+        repay_amount_with_penalty,
         accounts.reserve_liquidity_mint.decimals,
     )?;
 
@@ -103,7 +104,7 @@ where
         repay_reserve.total_available_liquidity_amount(),
         initial_reserve_token_balance,
         initial_reserve_available_liquidity,
-        LendingAction::Additive(repay_amount),
+        LendingAction::Additive(repay_amount_with_penalty),
     )?;
 
     Ok(())

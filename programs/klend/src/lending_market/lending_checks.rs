@@ -560,6 +560,51 @@ pub fn post_ticket_collateral_recovery_owner_queued_collateral_vault_balance_che
     Ok(())
 }
 
+pub fn cancel_withdraw_ticket_checks(accounts: &CancelWithdrawTicket) -> Result<()> {
+    let reserve = &accounts.reserve.load()?;
+
+    if reserve.version != PROGRAM_VERSION as u64 {
+        msg!("Reserve version does not match the program version");
+        return err!(LendingError::ReserveDeprecated);
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn post_cancel_withdraw_ticket_balance_checks(
+    final_owner_queued_collateral_vault_balance: u64,
+    final_user_destination_collateral_balance: u64,
+    final_queued_collateral: u64,
+    initial_owner_queued_collateral_vault_balance: u64,
+    initial_user_destination_collateral_balance: u64,
+    initial_queued_collateral: u64,
+    amount_transferred: u64,
+) -> Result<()> {
+   
+    require_eq!(
+        initial_owner_queued_collateral_vault_balance - amount_transferred,
+        final_owner_queued_collateral_vault_balance,
+        LendingError::ReserveVaultBalanceMismatch,
+    );
+
+   
+    require_eq!(
+        initial_user_destination_collateral_balance + amount_transferred,
+        final_user_destination_collateral_balance,
+        LendingError::UserTokenBalanceMismatch,
+    );
+
+   
+    require_eq!(
+        initial_queued_collateral - amount_transferred,
+        final_queued_collateral,
+        LendingError::ReserveAccountingMismatch,
+    );
+
+    Ok(())
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct ReserveAccountingAndBalance {
     pub total_available_liquidity_amount: u64,

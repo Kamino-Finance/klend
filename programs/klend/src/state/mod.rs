@@ -150,6 +150,7 @@ pub enum UpdateConfigMode {
     UpdateBlockCTokenUsage = 53,
     UpdateDebtMaturityTimestamp = 54,
     UpdateDebtTermSeconds = 55,
+    UpdateEarlyRepayRemainingInterestPct = 56,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -256,6 +257,7 @@ pub enum UpdateLendingMarketMode {
     UpdateTermBasedFullLiquidationDurationSecs = 38,
     UpdateObligationBorrowMigrationToFixedExecutionEnabled = 39,
     UpdateMinPartialRolloverValue = 40,
+    UpdateWithdrawTicketCancellationEnabled = 41,
 }
 
 #[cfg(feature = "serde")]

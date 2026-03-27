@@ -116,7 +116,6 @@ impl LastUpdate {
         PriceStatusFlags::from_bits_truncate(self.price_status)
     }
 
-    #[cfg(feature = "no-entrypoint")]
 
     pub fn get_slot(&self) -> Slot {
         self.slot

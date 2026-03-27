@@ -209,12 +209,17 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub obligation_borrow_migration_to_fixed_execution_enabled: u8,
 
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub withdraw_ticket_cancellation_enabled: u8,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding2: [u8; 4],
+    pub padding2: [u8; 3],
 
 
 
@@ -318,6 +323,7 @@ impl Default for LendingMarket {
             proposer_authority: Pubkey::default(),
             withdraw_ticket_issuance_enabled: 0,
             withdraw_ticket_redemption_enabled: 0,
+            withdraw_ticket_cancellation_enabled: 0,
             min_withdraw_queued_liquidity_value: MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE,
             fixed_term_rollover_window_duration_seconds: 0,
             open_term_rollover_window_duration_seconds: 0,
@@ -418,6 +424,10 @@ impl LendingMarket {
 
     pub fn is_obligation_borrow_rollover_configuration_enabled(&self) -> bool {
         self.obligation_borrow_rollover_configuration_enabled != false as u8
+    }
+
+    pub fn is_withdraw_ticket_cancellation_enabled(&self) -> bool {
+        self.withdraw_ticket_cancellation_enabled != false as u8
     }
 
 

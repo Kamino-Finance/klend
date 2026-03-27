@@ -583,6 +583,26 @@ impl Reserve {
     }
 
 
+
+
+
+
+    pub fn calculate_future_cumulative_borrow_rate(&self, future_slot: u64) -> Result<BigFraction> {
+        let slots_elapsed = self.last_update.slots_elapsed(future_slot)?;
+        let current_borrow_rate = self.current_borrow_rate()?;
+        let host_fixed_interest_rate = Fraction::from_bps(self.config.host_fixed_interest_rate_bps);
+        let previous_cumulative_borrow_rate =
+            BigFraction::from(self.liquidity.cumulative_borrow_rate_bsf);
+
+        let compounded_interest_rate = approximate_compounded_interest(
+            current_borrow_rate + host_fixed_interest_rate,
+            slots_elapsed,
+        );
+
+        Ok(previous_cumulative_borrow_rate * BigFraction::from(compounded_interest_rate))
+    }
+
+
     pub fn calculate_borrow(
         &self,
         borrow_size: BorrowSize,
@@ -823,6 +843,14 @@ impl Reserve {
         self.config.deposit_limit == 0 && self.config.borrow_limit == 0
     }
 
+
+
+
+
+    pub fn is_predeposit(&self, min_initial_deposit_amount: u64) -> bool {
+        !self.is_used(min_initial_deposit_amount) && self.is_usage_blocked()
+    }
+
     pub fn has_initial_deposit(&self) -> bool {
         self.total_available_liquidity_amount() > 0 || self.collateral.mint_total_supply > 0
     }
@@ -927,9 +955,10 @@ impl WithdrawQueue {
 
 
 
-    pub fn dequeue(&mut self, collateral_amount: u64, ticket_emptied: bool) {
+
+    pub fn dequeue(&mut self, collateral_amount: u64, ticket_closed: bool) {
         self.queued_collateral_amount -= collateral_amount;
-        if ticket_emptied {
+        if ticket_closed {
             self.next_withdrawable_ticket_sequence_number += 1;
         }
     }
@@ -1037,6 +1066,17 @@ impl ReserveLiquidity {
             })?
             .to_bits();
 
+        Ok(())
+    }
+
+
+
+
+    pub fn accumulate_early_repay_penalty(&mut self, penalty_lamports: u64) -> LendingResult<()> {
+        let penalty_f = Fraction::from_num(penalty_lamports);
+        let accumulated_protocol_fees_f = Fraction::from_bits(self.accumulated_protocol_fees_sf);
+        self.accumulated_protocol_fees_sf = (accumulated_protocol_fees_f + penalty_f).to_bits();
+        self.total_available_amount += penalty_lamports;
         Ok(())
     }
 
@@ -1420,9 +1460,13 @@ pub struct ReserveConfig {
     pub block_ctoken_usage: u8,
 
 
+
+    pub early_repay_remaining_interest_pct: u8,
+
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 6],
+    pub reserved_1: [u8; 5],
 
 
     pub protocol_order_execution_fee_pct: u8,
@@ -1551,6 +1595,11 @@ impl ReserveConfig {
     }
 
 
+    pub fn get_early_repay_penalty_remaining_interest_pct(&self) -> Fraction {
+        Fraction::from_percent(self.early_repay_remaining_interest_pct)
+    }
+
+
     pub fn get_debt_maturity_timestamp(&self) -> Option<u64> {
         if self.debt_maturity_timestamp == 0 {
             return None;
@@ -1588,6 +1637,98 @@ impl ReserveConfig {
         Some(Fraction::from_percent(
             self.utilization_limit_block_borrowing_above_pct,
         ))
+    }
+
+
+    pub fn from_customized(
+        source: &ReserveConfig,
+        customizations: ReserveConfigCustomizations,
+    ) -> Self {
+       
+        let &ReserveConfig {
+            status: _,
+            padding_deprecated_asset_tier: _,
+            host_fixed_interest_rate_bps,
+            min_deleveraging_bonus_bps,
+            block_ctoken_usage,
+            reserved_1: _,
+            protocol_order_execution_fee_pct,
+            protocol_take_rate_pct,
+            protocol_liquidation_fee_pct,
+            loan_to_value_pct,
+            liquidation_threshold_pct,
+            min_liquidation_bonus_bps,
+            max_liquidation_bonus_bps,
+            bad_debt_liquidation_bonus_bps,
+            deleveraging_margin_call_period_secs,
+            deleveraging_threshold_decrease_bps_per_day,
+            fees,
+            borrow_rate_curve,
+            borrow_factor_pct,
+            deposit_limit: _,
+            borrow_limit: _, 
+            token_info,
+            deposit_withdrawal_cap,
+            debt_withdrawal_cap,
+            elevation_groups,
+            disable_usage_as_coll_outside_emode,
+            utilization_limit_block_borrowing_above_pct,
+            autodeleverage_enabled,
+            proposer_authority_locked: _,
+            borrow_limit_outside_elevation_group,
+            borrow_limit_against_this_collateral_in_elevation_group,
+            deleveraging_bonus_increase_bps_per_day,
+            debt_maturity_timestamp,
+            debt_term_seconds,
+            early_repay_remaining_interest_pct,
+        } = source;
+
+       
+        let ReserveConfigCustomizations {
+            overridden_fixed_rate_bps,
+            overridden_debt_term_seconds,
+            overridden_elevation_groups,
+        } = customizations;
+
+        Self {
+            status: ReserveStatus::Hidden.into(),
+            padding_deprecated_asset_tier: 0,    
+            host_fixed_interest_rate_bps,
+            min_deleveraging_bonus_bps,
+            block_ctoken_usage,
+            reserved_1: default_array(),
+            protocol_order_execution_fee_pct,
+            protocol_take_rate_pct,
+            protocol_liquidation_fee_pct,
+            loan_to_value_pct,
+            liquidation_threshold_pct,
+            min_liquidation_bonus_bps,
+            max_liquidation_bonus_bps,
+            bad_debt_liquidation_bonus_bps,
+            deleveraging_margin_call_period_secs,
+            deleveraging_threshold_decrease_bps_per_day,
+            fees,
+            borrow_rate_curve: overridden_fixed_rate_bps
+                .map(BorrowRateCurve::new_flat)
+                .unwrap_or(borrow_rate_curve),
+            borrow_factor_pct,
+            deposit_limit: 0,
+            borrow_limit: 0, 
+            token_info,
+            deposit_withdrawal_cap,
+            debt_withdrawal_cap,
+            elevation_groups: overridden_elevation_groups.unwrap_or(elevation_groups),
+            disable_usage_as_coll_outside_emode,
+            utilization_limit_block_borrowing_above_pct,
+            autodeleverage_enabled,
+            proposer_authority_locked: false as u8,
+            borrow_limit_outside_elevation_group,
+            borrow_limit_against_this_collateral_in_elevation_group,
+            deleveraging_bonus_increase_bps_per_day,
+            debt_maturity_timestamp,
+            debt_term_seconds: overridden_debt_term_seconds.unwrap_or(debt_term_seconds),
+            early_repay_remaining_interest_pct,
+        }
     }
 }
 
@@ -1911,6 +2052,12 @@ pub enum FeeCalculation {
 
 
 
+
+
+
+
+
+
 pub fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fraction {
     let base = rate / u128::from(SLOTS_PER_YEAR);
 
@@ -1931,16 +2078,25 @@ pub fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fr
     let exp_minus_one = exp.wrapping_sub(1);
     let exp_minus_two = exp.wrapping_sub(2);
 
-    let base_power_two = base * base;
-    let base_power_three = base_power_two * base;
-
     let first_term = base * exp;
 
-    let second_term = (base_power_two * exp * exp_minus_one) / 2;
+    let second_term = (first_term * base * exp_minus_one) / 2;
 
-    let third_term = (base_power_three * exp * exp_minus_one * exp_minus_two) / 6;
+    let third_term = (second_term * base * exp_minus_two) / 3;
 
     Fraction::ONE + first_term + second_term + third_term
+}
+
+
+pub struct ReserveConfigCustomizations {
+
+    pub overridden_fixed_rate_bps: Option<u32>,
+
+
+    pub overridden_debt_term_seconds: Option<u64>,
+
+
+    pub overridden_elevation_groups: Option<[u8; 20]>,
 }
 
 

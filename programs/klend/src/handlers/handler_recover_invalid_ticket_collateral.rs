@@ -124,6 +124,7 @@ pub struct RecoverInvalidTicketCollateral<'info> {
 
     #[account(mut,
         close = withdraw_ticket_owner,
+        has_one = reserve,
         seeds = [seeds::WITHDRAW_TICKET, reserve.key().as_ref(), &ticket_sequence_number.to_le_bytes()],
         constraint = !withdraw_ticket.load()?.is_valid() @ LendingError::WithdrawTicketStillValid,
         bump,
