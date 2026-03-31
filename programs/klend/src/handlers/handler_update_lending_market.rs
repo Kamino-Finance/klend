@@ -287,6 +287,11 @@ pub fn process(
                 .validating(validations::check_not_zero)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateWithdrawTicketCancellationEnabled => {
+            config_items::for_named_field!(&mut market.withdraw_ticket_cancellation_enabled)
+                .validating(validations::check_bool)
+                .set(&value)?;
+        }
     }
 
     Ok(())

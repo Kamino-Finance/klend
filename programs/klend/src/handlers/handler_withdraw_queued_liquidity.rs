@@ -33,6 +33,22 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
     );
 
     let withdraw_ticket = ctx.accounts.withdraw_ticket.load()?;
+
+   
+    if withdraw_ticket.queued_collateral_amount == 0 {
+       
+       
+       
+       
+        msg!("Progressing over a cancelled ticket; closing the ticket account");
+        reserve.withdraw_queue.dequeue(0, true);
+        drop(withdraw_ticket);
+        ctx.accounts
+            .withdraw_ticket
+            .close(ctx.accounts.withdraw_ticket_owner.to_account_info())?;
+        return Ok(true);
+    }
+
     let destination_ta_validity = DestinationTokenAccountValidity::resolve(
         &ctx.accounts.user_destination_liquidity,
         &withdraw_ticket.owner,
@@ -347,6 +363,7 @@ pub struct WithdrawQueuedLiquidity<'info> {
     #[account(mut,
         seeds = [seeds::WITHDRAW_TICKET, reserve.key().as_ref(), &reserve.load()?.withdraw_queue.next_withdrawable_ticket_sequence_number.to_le_bytes()],
         bump,
+        has_one = reserve,
         constraint = withdraw_ticket.load()?.is_valid() @ LendingError::WithdrawTicketInvalid,
     )]
     pub withdraw_ticket: AccountLoader<'info, WithdrawTicket>,

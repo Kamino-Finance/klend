@@ -265,48 +265,6 @@ macro_rules! assert_fuzzy_eq_percentage {
 }
 
 #[macro_export]
-macro_rules! assert_almost_eq_fraction {
-    ($left:expr, $right:expr $(,)?) => {
-        $crate::assert_almost_eq_fraction!($left, $right, 0.0001);
-    };
-    ($left:expr, $right:expr, $epsilon_rate:expr $(,)?) => {
-        let left_val: Fraction = $left;
-        let right_val: Fraction = $right;
-        let scaler: f64 = $epsilon_rate + 1.0;
-
-        let left_val_upper = left_val * $crate::utils::fraction::Fraction::from_num(scaler);
-        let right_val_upper = right_val * $crate::utils::fraction::Fraction::from_num(scaler);
-
-        if left_val_upper < right_val || right_val_upper < left_val {
-            panic!(
-                "assertion failed: `(left ~= right)` \
-                 \n  left: `{}`,\
-                 \n right: `{}`\n",
-                left_val, right_val
-            );
-        }
-    };
-    ($left:expr, $right:expr, $epsilon:expr, $($arg:tt)+) => {
-        let left_val: Fraction = $left;
-        let right_val: Fraction = $right;
-        let scaler: f64 = $epsilon_rate + 1.0;
-
-        let left_val_upper = left_val * $crate::utils::fraction::Fraction::from_num(scaler);
-        let right_val_upper = right_val * $crate::utils::fraction::Fraction::from_num(scaler);
-
-        if left_val_upper < right_val || right_val_upper < left_val {
-            panic!(
-                "assertion failed: `(left ~= right)` \
-                 \n  left: `{}`,\
-                 \n right: `{}`,\
-                 \n reason: `{}`\n",
-                left_val, right_val, std::fmt::format(format_args!($($arg)+))
-            );
-        }
-    };
-}
-
-#[macro_export]
 macro_rules! assert_gt {
     ($left:expr, $right:expr) => {
        

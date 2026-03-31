@@ -15,6 +15,8 @@ pub mod spltoken;
 pub mod token_transfer;
 pub mod validation;
 
+use std::sync::Arc;
+
 pub use account_loader_trait::*;
 pub use account_ops::*;
 use anchor_lang::prelude::Pubkey;
@@ -33,6 +35,44 @@ pub fn maybe_null_pk(pubkey: Pubkey) -> Option<Pubkey> {
         None
     } else {
         Some(pubkey)
+    }
+}
+
+
+
+
+
+
+
+
+
+
+pub trait JustRef<T> {
+
+    fn just_ref(&self) -> &T;
+}
+
+impl<T> JustRef<T> for T {
+    fn just_ref(&self) -> &T {
+        self
+    }
+}
+
+impl<T> JustRef<T> for &T {
+    fn just_ref(&self) -> &T {
+        self
+    }
+}
+
+impl<T> JustRef<T> for Arc<T> {
+    fn just_ref(&self) -> &T {
+        self
+    }
+}
+
+impl<T> JustRef<T> for &Arc<T> {
+    fn just_ref(&self) -> &T {
+        self
     }
 }
 

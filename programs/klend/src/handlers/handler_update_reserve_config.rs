@@ -51,7 +51,7 @@ pub fn process(
 
     if skip_config_integrity_validation {
         require!(
-            !reserve.is_used(market.min_initial_deposit_amount) && reserve.is_usage_blocked(),
+            reserve.is_predeposit(market.min_initial_deposit_amount),
             LendingError::InvalidConfig
         );
         msg!("WARNING! Skipping validation of the config");

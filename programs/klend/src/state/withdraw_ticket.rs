@@ -74,14 +74,6 @@ pub struct WithdrawTicket {
     pub end_padding: [u64; 40],
 }
 
-impl WithdrawTicket {
-
-    pub fn progress_callback_type(&self) -> ProgressCallbackType {
-        ProgressCallbackType::try_from_primitive(self.progress_callback_type)
-            .expect("validated when configuring the callback")
-    }
-}
-
 
 
 
@@ -160,7 +152,18 @@ pub enum WithdrawTicketProgressEvent {
 
 impl WithdrawTicket {
 
+    pub fn progress_callback_type(&self) -> ProgressCallbackType {
+        ProgressCallbackType::try_from_primitive(self.progress_callback_type)
+            .expect("validated when configuring the callback")
+    }
+
+
     pub fn is_valid(&self) -> bool {
         self.invalid == false as u8
+    }
+
+
+    pub fn is_fully_cancelled(&self) -> bool {
+        self.queued_collateral_amount == 0
     }
 }

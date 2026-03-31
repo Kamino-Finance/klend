@@ -60,6 +60,13 @@ pub mod kamino_lending {
         handler_init_reserve::process(ctx)
     }
 
+    pub fn clone_reserve_config<'info>(
+        ctx: Context<'_, '_, '_, 'info, CloneReserveConfig<'info>>,
+        customizations: ReserveConfigCustomizationArgs,
+    ) -> Result<()> {
+        handler_clone_reserve_config::process(ctx, customizations)
+    }
+
     pub fn init_farms_for_reserve(ctx: Context<InitFarmsForReserve>, mode: u8) -> Result<()> {
         handler_init_farms_for_reserve::process(ctx, mode)
     }
@@ -475,6 +482,19 @@ pub mod kamino_lending {
         handler_recover_invalid_ticket_collateral::process(ctx)
     }
 
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn cancel_withdraw_ticket(
+        ctx: Context<CancelWithdrawTicket>,
+        ticket_sequence_number: u64,
+        collateral_amount_to_cancel: u64,
+    ) -> Result<()> {
+        handler_cancel_withdraw_ticket::process(
+            ctx,
+            ticket_sequence_number,
+            collateral_amount_to_cancel,
+        )
+    }
+
     pub fn init_global_config(ctx: Context<InitGlobalConfig>) -> Result<()> {
         handler_init_global_config::process(ctx)
     }
@@ -858,6 +878,16 @@ pub enum LendingError {
     ObligationBorrowRolloverMustProlongDebtTerm,
     #[msg("Rollover is not supported for obligations in an elevation group")]
     RolloverNotSupportedInElevationGroup,
+    #[msg("Cancelling withdraw tickets is disabled by the market")]
+    WithdrawTicketCancellationDisabled,
+    #[msg("Cannot use ticket that was already fully-cancelled")]
+    WithdrawTicketFullyCancelled,
+    #[msg("Cannot clone config from a reserve that is disabled")]
+    CloneSourceReserveDisabled,
+    #[msg("Cannot clone config into a reserve that has been in use")]
+    CloneTargetReserveAlreadyInUse,
+    #[msg("Cannot clone config between reserves of different mints")]
+    ClonedReserveLiquidityMintMismatch,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
