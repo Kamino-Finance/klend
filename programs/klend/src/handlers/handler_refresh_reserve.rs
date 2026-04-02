@@ -20,7 +20,9 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
         LendingError::ReserveDeprecated
     );
 
-    let price_res = if lending_operations::is_price_refresh_needed(
+    let price_res = if reserve.config.is_emergency_mode() {
+        None
+    } else if lending_operations::is_price_refresh_needed(
         reserve,
         lending_market,
         clock.unix_timestamp,

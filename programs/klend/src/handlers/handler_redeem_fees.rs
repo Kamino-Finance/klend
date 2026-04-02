@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     gen_signer_seeds,
-    lending_market::lending_operations,
+    lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{constraints, seeds, token_transfer},
 };
@@ -17,6 +17,7 @@ pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
     let clock = &Clock::get()?;
 
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
+    lending_checks::check_reserve_emergency_mode(reserve)?;
     let lending_market = &ctx.accounts.lending_market.load()?;
     let lending_market_key = ctx.accounts.lending_market.key();
 

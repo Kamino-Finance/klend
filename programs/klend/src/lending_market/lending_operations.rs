@@ -51,7 +51,11 @@ pub fn refresh_reserve(
     reserve.accrue_interest(slot, referral_fee_bps)?;
 
    
-    let price_status = if let Some(GetPriceResult {
+    let price_status = if reserve.config.is_emergency_mode() {
+       
+        reserve.liquidity.market_price_last_updated_ts = 0;
+        Some(PriceStatusFlags::empty())
+    } else if let Some(GetPriceResult {
         price,
         status,
         timestamp,
@@ -2816,6 +2820,11 @@ pub fn update_reserve_config(
                 .validating(validations::check_bool)
                 .set(value)?;
         }
+        UpdateConfigMode::UpdateReserveEmergencyMode => {
+            config_items::for_named_field!(&mut reserve.config.emergency_mode)
+                .validating(validations::check_bool)
+                .set(value)?;
+        }
         UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
         | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
         | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
@@ -4152,6 +4161,7 @@ pub mod utils {
             | UpdateConfigMode::UpdateMinDeleveragingBonusBps
             | UpdateConfigMode::UpdateDebtMaturityTimestamp
             | UpdateConfigMode::UpdateDebtTermSeconds
+            | UpdateConfigMode::UpdateReserveEmergencyMode
             | UpdateConfigMode::UpdateProposerAuthorityLock
             | UpdateConfigMode::UpdateEarlyRepayRemainingInterestPct => false,
         }
@@ -4167,6 +4177,10 @@ pub mod utils {
                 true
             }
             UpdateConfigMode::UpdateBlockPriceUsage if borsh_deserialize::<u8>(value) == 1 => {
+               
+                true
+            }
+            UpdateConfigMode::UpdateReserveEmergencyMode if borsh_deserialize::<u8>(value) == 1 => {
                
                 true
             }

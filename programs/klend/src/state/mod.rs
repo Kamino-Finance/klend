@@ -151,6 +151,7 @@ pub enum UpdateConfigMode {
     UpdateDebtMaturityTimestamp = 54,
     UpdateDebtTermSeconds = 55,
     UpdateEarlyRepayRemainingInterestPct = 56,
+    UpdateReserveEmergencyMode = 57,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -366,6 +367,54 @@ pub mod serde_bool_u8 {
     {
         let s: bool = serde::Deserialize::deserialize(deserializer)?;
         Ok(s as u8)
+    }
+}
+
+#[cfg(feature = "serde")]
+pub mod serde_reserve_status {
+    use super::ReserveStatus;
+
+    pub fn serialize<S>(field: &u8, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let status = ReserveStatus::try_from(*field).map_err(serde::ser::Error::custom)?;
+        serde::Serialize::serialize(&status, serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<u8, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct StatusVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for StatusVisitor {
+            type Value = u8;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a reserve status name (\"Active\", \"Obsolete\", \"Hidden\") or a number (0, 1, 2)")
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<u8, E> {
+                let num = v as u8;
+                ReserveStatus::try_from(num)
+                    .map_err(|_| E::custom(format!("invalid reserve status: {num}")))?;
+                Ok(num)
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<u8, E> {
+                match v {
+                    "Active" => Ok(ReserveStatus::Active as u8),
+                    "Obsolete" => Ok(ReserveStatus::Obsolete as u8),
+                    "Hidden" => Ok(ReserveStatus::Hidden as u8),
+                    _ => Err(E::custom(format!(
+                        "unknown reserve status: \"{v}\", expected \"Active\", \"Obsolete\", or \"Hidden\""
+                    ))),
+                }
+            }
+        }
+
+        deserializer.deserialize_any(StatusVisitor)
     }
 }
 

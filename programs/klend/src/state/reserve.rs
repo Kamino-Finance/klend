@@ -17,6 +17,8 @@ use serde;
 
 #[cfg(feature = "serde")]
 use super::serde_bool_u8;
+#[cfg(feature = "serde")]
+use super::serde_reserve_status;
 use crate::{
     fraction::FractionExtra,
     lending_market::withdrawal_cap_operations::utils::remaining_withdrawal_caps_amount,
@@ -1446,6 +1448,7 @@ static_assertions::const_assert_eq!(0, std::mem::size_of::<ReserveConfig>() % 8)
 #[repr(C)]
 pub struct ReserveConfig {
 
+    #[cfg_attr(feature = "serde", serde(with = "serde_reserve_status"))]
     pub status: u8,
 
     pub padding_deprecated_asset_tier: u8,
@@ -1464,9 +1467,17 @@ pub struct ReserveConfig {
     pub early_repay_remaining_interest_pct: u8,
 
 
+
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub emergency_mode: u8,
+
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 5],
+    pub reserved_1: [u8; 4],
 
 
     pub protocol_order_execution_fee_pct: u8,
@@ -1585,6 +1596,10 @@ impl ReserveConfig {
         self.block_ctoken_usage != false as u8
     }
 
+    pub fn is_emergency_mode(&self) -> bool {
+        self.emergency_mode != false as u8
+    }
+
 
     pub fn get_debt_term_seconds(&self) -> Option<u64> {
         if self.debt_term_seconds == 0 {
@@ -1651,6 +1666,7 @@ impl ReserveConfig {
             host_fixed_interest_rate_bps,
             min_deleveraging_bonus_bps,
             block_ctoken_usage,
+            emergency_mode,
             reserved_1: _,
             protocol_order_execution_fee_pct,
             protocol_take_rate_pct,
@@ -1696,6 +1712,7 @@ impl ReserveConfig {
             host_fixed_interest_rate_bps,
             min_deleveraging_bonus_bps,
             block_ctoken_usage,
+            emergency_mode,
             reserved_1: default_array(),
             protocol_order_execution_fee_pct,
             protocol_take_rate_pct,
@@ -1744,6 +1761,7 @@ impl ReserveConfig {
     Clone,
     Copy,
 )]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum ReserveStatus {
     Active = 0,
     Obsolete = 1,

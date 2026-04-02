@@ -1,8 +1,9 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    lending_market::lending_operations, utils::FatAccountLoader, LendingError, LendingMarket,
-    Obligation, ReferrerTokenState, Reserve,
+    lending_market::{lending_checks, lending_operations},
+    utils::FatAccountLoader,
+    LendingError, LendingMarket, Obligation, ReferrerTokenState, Reserve,
 };
 
 pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> Result<()> {
@@ -21,6 +22,13 @@ pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> 
 
     if ctx.remaining_accounts.iter().len() != expected_remaining_accounts {
         return err!(LendingError::InvalidAccountInput);
+    }
+
+   
+    for account_info in ctx.remaining_accounts.iter().take(reserves_count) {
+        let reserve_loader = FatAccountLoader::<Reserve>::try_from(account_info)?;
+        let reserve = reserve_loader.load()?;
+        lending_checks::check_reserve_emergency_mode(&reserve)?;
     }
 
     let deposit_reserves_iter = ctx
