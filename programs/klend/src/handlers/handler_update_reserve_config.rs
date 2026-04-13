@@ -35,7 +35,8 @@ pub fn process(
     require!(
         !market.is_immutable()
             || (is_update_reserve_config_mode_global_admin_only(mode)
-                && ctx.accounts.signer.key() == ctx.accounts.global_config.load()?.global_admin),
+                && ctx.accounts.signer.key() == ctx.accounts.global_config.load()?.global_admin)
+            || mode == UpdateConfigMode::UpdateReserveEmergencyMode,
         LendingError::OperationNotPermittedMarketImmutable
     );
 

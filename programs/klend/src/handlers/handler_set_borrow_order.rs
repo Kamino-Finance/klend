@@ -3,8 +3,8 @@ use anchor_spl::token_interface::{Mint, TokenAccount};
 use solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId};
 
 use crate::{
-    borrow_order_operations, utils::ctx_event_emitter, BorrowOrderConfig, LendingError,
-    LendingMarket, Obligation, Reserve,
+    borrow_order_operations, lending_market::lending_checks, utils::ctx_event_emitter,
+    BorrowOrderConfig, LendingError, LendingMarket, Obligation, Reserve,
 };
 
 pub fn process(
@@ -15,6 +15,7 @@ pub fn process(
     let order_config = order_config.with_accounts(ctx.accounts);
     let lending_market = &ctx.accounts.lending_market.load()?;
     let reserve = &ctx.accounts.reserve.load()?;
+    lending_checks::check_reserve_emergency_mode(reserve)?;
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let clock = Clock::get()?;
 

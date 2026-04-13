@@ -8,7 +8,9 @@ use anchor_lang::{account, err, prelude::*, solana_program::clock::Slot, Result}
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use num_enum::TryFromPrimitive;
-use strum::{EnumIter, EnumString};
+#[cfg(feature = "serde")]
+use strum::EnumIter;
+use strum::EnumString;
 
 use crate::{
     obligation_order_operations::{ConditionType, OpportunityType},
@@ -1149,7 +1151,7 @@ pub enum RolloverMode {
     Debug,
     EnumString,
 )]
-// ..
+#[cfg_attr(feature = "serde", derive(EnumIter))]
 #[repr(u8)]
 pub enum UpdateObligationConfigMode {
 

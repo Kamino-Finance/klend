@@ -45,6 +45,7 @@ pub struct CloneReserveConfig<'info> {
 
     #[account(
         constraint = !source_reserve.load()?.is_usage_blocked() @ LendingError::CloneSourceReserveDisabled,
+        constraint = !source_reserve.load()?.config.is_emergency_mode() @ LendingError::ReserveEmergencyMode,
     )]
     source_reserve: AccountLoader<'info, Reserve>,
 
@@ -52,6 +53,7 @@ pub struct CloneReserveConfig<'info> {
     #[account(mut,
         constraint = target_reserve.load()?.is_predeposit(target_lending_market.load()?.min_initial_deposit_amount) @ LendingError::CloneTargetReserveAlreadyInUse,
         constraint = target_reserve.load()?.liquidity.mint_pubkey == source_reserve.load()?.liquidity.mint_pubkey @ LendingError::ClonedReserveLiquidityMintMismatch,
+        constraint = !target_reserve.load()?.config.is_emergency_mode() @ LendingError::ReserveEmergencyMode,
     )]
     target_reserve: AccountLoader<'info, Reserve>,
 }

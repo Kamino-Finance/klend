@@ -64,7 +64,9 @@ pub fn process(ctx: Context<RefreshReservesBatch>, skip_price_updates: bool) -> 
             let switchboard_twap_oracle = maybe_price_account(remaining_accounts_it.next())?;
             let scope_prices = maybe_price_account(remaining_accounts_it.next())?;
 
-            if lending_operations::is_price_refresh_needed(
+            if reserve.config.is_emergency_mode() {
+                None
+            } else if lending_operations::is_price_refresh_needed(
                 reserve,
                 lending_market,
                 clock.unix_timestamp,

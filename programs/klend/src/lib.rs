@@ -888,6 +888,8 @@ pub enum LendingError {
     CloneTargetReserveAlreadyInUse,
     #[msg("Cannot clone config between reserves of different mints")]
     ClonedReserveLiquidityMintMismatch,
+    #[msg("Reserve emergency mode is enabled")]
+    ReserveEmergencyMode,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
