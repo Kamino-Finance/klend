@@ -5,12 +5,13 @@ use super::{
     common::{build_refresh_all_obligation_reserves, build_refresh_obligation},
     info::{ObligationInfo, ReserveInfo},
 };
-use crate::{types::UpdateObligationConfigMode, util::writable};
+use crate::{pda, types::UpdateObligationConfigMode, util::readonly, KLEND_PROGRAM_ID};
 
 /// Build instructions to request an elevation group change for an obligation.
 ///
 /// The remaining_accounts for `request_elevation_group` must include all
-/// deposit and borrow reserves on the obligation.
+/// deposit and borrow reserves on the obligation. When the obligation has a
+/// referrer, a `ReferrerTokenState` PDA per borrow reserve is appended.
 ///
 /// `obligation_reserves` should contain [`ReserveInfo`] for every deposit and
 /// borrow reserve on the obligation.
@@ -26,10 +27,16 @@ pub fn request_elevation_group(
     let mut remaining =
         Vec::with_capacity(obligation.deposit_reserves.len() + obligation.borrow_reserves.len());
     for r in &obligation.deposit_reserves {
-        remaining.push(writable(*r));
+        remaining.push(readonly(*r));
     }
     for r in &obligation.borrow_reserves {
-        remaining.push(writable(*r));
+        remaining.push(readonly(*r));
+    }
+    if let Some(referrer) = obligation.referrer {
+        for borrow_reserve in &obligation.borrow_reserves {
+            let (rts, _) = pda::referrer_token_state(&KLEND_PROGRAM_ID, &referrer, borrow_reserve);
+            remaining.push(readonly(rts));
+        }
     }
 
     let mut ixs = build_refresh_all_obligation_reserves(obligation, obligation_reserves, &[]);

@@ -25,6 +25,8 @@ pub enum AccountDataError {
     DataTooShort { expected: usize, actual: usize },
     /// The 8-byte discriminator does not match the expected value.
     InvalidDiscriminator { expected: [u8; 8], actual: [u8; 8] },
+    /// The data slice is not properly aligned for the target type.
+    AlignmentError,
 }
 
 impl core::fmt::Display for AccountDataError {
@@ -40,6 +42,12 @@ impl core::fmt::Display for AccountDataError {
                 write!(
                     f,
                     "invalid discriminator: expected {expected:?}, got {actual:?}"
+                )
+            }
+            Self::AlignmentError => {
+                write!(
+                    f,
+                    "account data is not properly aligned for the target type"
                 )
             }
         }
@@ -69,9 +77,8 @@ pub fn from_account_data<T: bytemuck::Pod + SplDiscriminate>(
         expected.copy_from_slice(T::SPL_DISCRIMINATOR_SLICE);
         return Err(AccountDataError::InvalidDiscriminator { expected, actual });
     }
-    Ok(bytemuck::from_bytes(
-        &data[DISCRIMINATOR_SIZE..expected_len],
-    ))
+    bytemuck::try_from_bytes(&data[DISCRIMINATOR_SIZE..expected_len])
+        .map_err(|_| AccountDataError::AlignmentError)
 }
 
 #[cfg(test)]
