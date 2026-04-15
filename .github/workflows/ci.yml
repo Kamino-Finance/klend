@@ -78,6 +78,17 @@ jobs:
         working-directory: libs/klend-interface
         run: cargo clippy --all-targets -- -D warnings
 
+  klend-interface-fmt:
+    name: klend-interface fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          components: rustfmt
+          toolchain: nightly-2026-01-01
+
       - name: Fmt
         working-directory: libs/klend-interface
-        run: cargo fmt --all -- --check
+        run: cargo +nightly-2026-01-01 fmt --all -- --check
