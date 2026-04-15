@@ -1,0 +1,42 @@
+[package]
+name = "klend-interface"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.86.0"
+description = "Instruction builders for Kamino Lending (klend) — no anchor-lang dependency"
+authors = ["Kamino Finance"]
+license-file = "LICENSE"
+repository = "https://github.com/Kamino-Finance/klend"
+homepage = "https://kamino.com"
+documentation = "https://kamino.com/docs/build/developers/overview"
+readme = "README.md"
+keywords = ["solana", "lending", "kamino", "klend"]
+categories = ["cryptography::cryptocurrencies"]
+exclude = ["tests/"]
+
+[dependencies]
+solana-pubkey = { version = "2.1", features = ["borsh", "curve25519", "bytemuck"] }
+solana-instruction = "2.1"
+borsh = { version = "0.10.3", features = ["const-generics"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
+fixed = "1"
+sha2 = { version = "0.10", default-features = false }
+spl-discriminator = "0.5"
+spl-pod = "0.5"
+solana-account = { version = "2.1", optional = true }
+
+[dev-dependencies]
+litesvm = "0.7"
+solana-sdk = "~2.3"
+solana-client = "~2.3"
+solana-account = "2.1"
+solana-system-interface = { version = "1.0.0", features = ["bincode"] }
+spl-token = "7"
+spl-associated-token-account = "6"
+
+[profile.ci]
+inherits = "dev"
+debug = false
+incremental = false
+
+[workspace]
