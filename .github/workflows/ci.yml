@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build-klend:
+    name: Build klend (solana-verify)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install essentials
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config build-essential libudev-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install solana-verify
+        run: cargo install --locked solana-verify
+
+      - uses: actions/checkout@v4
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "build-klend"
+
+      - name: Build with solana-verify
+        run: solana-verify build
+
+      - name: Print executable hash
+        run: solana-verify get-executable-hash target/deploy/kamino_lending.so
+
+      - name: Upload .so artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kamino-lending-so
+          path: target/deploy/kamino_lending.so
+          retention-days: 7
+
+  klend-interface-tests:
+    name: klend-interface tests
+    needs: [build-klend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86.0"
+          components: clippy
+
+      - name: Download .so artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kamino-lending-so
+          path: target/deploy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "klend-interface"
+          workspaces: "libs/klend-interface -> target"
+
+      - name: Run unit tests
+        working-directory: libs/klend-interface
+        run: cargo test --lib
+
+      - name: Run integration tests
+        working-directory: libs/klend-interface
+        run: cargo test --test litesvm_integration
+
+      - name: Clippy
+        working-directory: libs/klend-interface
+        run: cargo clippy --all-targets -- -D warnings
+
+  klend-interface-fmt:
+    name: klend-interface fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          components: rustfmt
+          toolchain: nightly-2026-01-01
+
+      - name: Fmt
+        working-directory: libs/klend-interface
+        run: cargo +nightly-2026-01-01 fmt --all -- --check
