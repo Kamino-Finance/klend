@@ -459,6 +459,30 @@ pub mod kamino_lending {
         handler_fill_borrow_order::process(ctx)
     }
 
+   
+    pub fn initiate_obligation_ownership_transfer(
+        ctx: Context<InitiateObligationOwnershipTransfer>,
+        new_owner: Pubkey,
+    ) -> Result<()> {
+        handler_initiate_obligation_ownership_transfer::process(ctx, new_owner)
+    }
+
+    pub fn approve_obligation_ownership_transfer(
+        ctx: Context<ApproveObligationOwnershipTransfer>,
+    ) -> Result<()> {
+        handler_approve_obligation_ownership_transfer::process(ctx)
+    }
+
+    pub fn accept_obligation_ownership(ctx: Context<AcceptObligationOwnership>) -> Result<()> {
+        handler_accept_obligation_ownership_transfer::process(ctx)
+    }
+
+    pub fn abort_obligation_ownership_transfer(
+        ctx: Context<AbortObligationOwnershipTransfer>,
+    ) -> Result<()> {
+        handler_abort_obligation_ownership_transfer::process(ctx)
+    }
+
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn enqueue_to_withdraw(
         ctx: Context<EnqueueToWithdraw>,
@@ -890,6 +914,20 @@ pub enum LendingError {
     ClonedReserveLiquidityMintMismatch,
     #[msg("Reserve emergency mode is enabled")]
     ReserveEmergencyMode,
+    #[msg("Obligation ownership transfer is in progress")]
+    ObligationOwnershipTransferInProgress,
+    #[msg("Obligation ownership transfer is not in initiated state")]
+    ObligationOwnershipTransferNotInitiated,
+    #[msg("Obligation pending owner not set")]
+    ObligationPendingOwnerNotSet,
+    #[msg("Invalid pending owner address")]
+    ObligationInvalidPendingOwner,
+    #[msg("Obligation ownership transfer not approved by admin")]
+    ObligationOwnershipTransferNotApproved,
+    #[msg("Obligation has active borrow orders")]
+    ObligationHasActiveBorrowOrders,
+    #[msg("Only ComputeBudget instructions may accompany this instruction")]
+    OnlyComputeBudgetCompanionIxsAllowed,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

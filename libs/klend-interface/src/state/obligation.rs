@@ -43,12 +43,17 @@ pub struct Obligation {
     pub autodeleverage_target_ltv_pct: u8,
     pub lowest_reserve_deposit_max_ltv_pct: u8,
     pub num_of_obsolete_borrow_reserves: u8,
-    pub reserved: [u8; 4],
+    /// State of the ownership transfer process (see `OwnershipTransferState` in klend).
+    pub ownership_transfer_state: u8,
+    pub reserved: [u8; 3],
     pub highest_borrow_factor_pct: u64,
     pub autodeleverage_margin_call_started_timestamp: u64,
     pub obligation_orders: [ObligationOrder; 2],
     pub borrow_order: BorrowOrder,
-    pub padding_3: [u64; 73],
+    /// Pending owner during ownership transfer process.
+    /// `Pubkey::default()` means no pending owner.
+    pub pending_owner: Pubkey,
+    pub padding_3: [u64; 69],
 }
 
 const _: () = assert!(core::mem::size_of::<Obligation>() == 3336);

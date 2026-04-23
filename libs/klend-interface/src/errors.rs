@@ -256,6 +256,13 @@ define_lending_errors! {
     CloneTargetReserveAlreadyInUse = 173 => "Cannot clone config into a reserve that has been in use",
     ClonedReserveLiquidityMintMismatch = 174 => "Cannot clone config between reserves of different mints",
     ReserveEmergencyMode = 175 => "Reserve emergency mode is enabled",
+    ObligationOwnershipTransferInProgress = 176 => "Obligation ownership transfer is in progress",
+    ObligationOwnershipTransferNotInitiated = 177 => "Obligation ownership transfer is not in initiated state",
+    ObligationPendingOwnerNotSet = 178 => "Obligation pending owner not set",
+    ObligationInvalidPendingOwner = 179 => "Invalid pending owner address",
+    ObligationOwnershipTransferNotApproved = 180 => "Obligation ownership transfer not approved by admin",
+    ObligationHasActiveBorrowOrders = 181 => "Obligation has active borrow orders",
+    OnlyComputeBudgetCompanionIxsAllowed = 182 => "Only ComputeBudget instructions may accompany this instruction",
 }
 
 impl std::error::Error for LendingError {}
@@ -271,6 +278,10 @@ mod tests {
         assert_eq!(
             LendingError::ClonedReserveLiquidityMintMismatch.error_code(),
             6174
+        );
+        assert_eq!(
+            LendingError::OnlyComputeBudgetCompanionIxsAllowed.error_code(),
+            6182
         );
     }
 
@@ -289,7 +300,11 @@ mod tests {
             LendingError::from_error_code(6175),
             Some(LendingError::ReserveEmergencyMode)
         );
-        assert_eq!(LendingError::from_error_code(6176), None);
+        assert_eq!(
+            LendingError::from_error_code(6182),
+            Some(LendingError::OnlyComputeBudgetCompanionIxsAllowed)
+        );
+        assert_eq!(LendingError::from_error_code(6183), None);
     }
 
     #[test]
@@ -309,16 +324,16 @@ mod tests {
         );
     }
 
-    /// Verify variant count matches the on-chain program (175 variants, codes 6000..=6174).
+    /// Verify variant count matches the on-chain program (183 variants, codes 6000..=6182).
     #[test]
     fn test_all_codes_roundtrip() {
         let mut count = 0u32;
-        for code in 6000..=6174 {
+        for code in 6000..=6182 {
             let err = LendingError::from_error_code(code)
                 .unwrap_or_else(|| panic!("Missing variant for code {code}"));
             assert_eq!(err.error_code(), code);
             count += 1;
         }
-        assert_eq!(count, 175);
+        assert_eq!(count, 183);
     }
 }
