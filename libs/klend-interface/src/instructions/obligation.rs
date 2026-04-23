@@ -4,7 +4,7 @@ use solana_pubkey::Pubkey;
 
 use crate::{
     discriminators, types::UpdateObligationConfigMode, util::*, FARMS_PROGRAM_ID, KLEND_PROGRAM_ID,
-    SYSTEM_PROGRAM_ID, SYSVAR_RENT_ID,
+    SYSTEM_PROGRAM_ID, SYSVAR_INSTRUCTIONS_ID, SYSVAR_RENT_ID,
 };
 
 // ---------------------------------------------------------------------------
@@ -208,5 +208,107 @@ pub fn update_obligation_config(
             readonly(accounts.lending_market),
         ],
         data,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// initiate_obligation_ownership_transfer
+// ---------------------------------------------------------------------------
+
+pub struct InitiateObligationOwnershipTransferAccounts {
+    pub owner: Pubkey,
+    pub obligation: Pubkey,
+}
+
+pub fn initiate_obligation_ownership_transfer(
+    accounts: InitiateObligationOwnershipTransferAccounts,
+    new_owner: Pubkey,
+) -> Instruction {
+    #[derive(BorshSerialize)]
+    struct Args {
+        new_owner: Pubkey,
+    }
+
+    let mut data = discriminators::INITIATE_OBLIGATION_OWNERSHIP_TRANSFER.to_vec();
+    Args { new_owner }.serialize(&mut data).unwrap();
+
+    Instruction {
+        program_id: KLEND_PROGRAM_ID,
+        accounts: vec![
+            signer(accounts.owner),
+            writable(accounts.obligation),
+            readonly(SYSVAR_INSTRUCTIONS_ID),
+        ],
+        data,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// approve_obligation_ownership_transfer
+// ---------------------------------------------------------------------------
+
+pub struct ApproveObligationOwnershipTransferAccounts {
+    pub global_admin: Pubkey,
+    pub global_config: Pubkey,
+    pub obligation: Pubkey,
+    pub pending_owner: Pubkey,
+}
+
+pub fn approve_obligation_ownership_transfer(
+    accounts: ApproveObligationOwnershipTransferAccounts,
+) -> Instruction {
+    Instruction {
+        program_id: KLEND_PROGRAM_ID,
+        accounts: vec![
+            signer(accounts.global_admin),
+            readonly(accounts.global_config),
+            writable(accounts.obligation),
+            readonly(accounts.pending_owner),
+        ],
+        data: discriminators::APPROVE_OBLIGATION_OWNERSHIP_TRANSFER.to_vec(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// accept_obligation_ownership
+// ---------------------------------------------------------------------------
+
+pub struct AcceptObligationOwnershipAccounts {
+    pub pending_owner: Pubkey,
+    pub obligation: Pubkey,
+}
+
+pub fn accept_obligation_ownership(accounts: AcceptObligationOwnershipAccounts) -> Instruction {
+    Instruction {
+        program_id: KLEND_PROGRAM_ID,
+        accounts: vec![
+            signer(accounts.pending_owner),
+            writable(accounts.obligation),
+            readonly(SYSVAR_INSTRUCTIONS_ID),
+        ],
+        data: discriminators::ACCEPT_OBLIGATION_OWNERSHIP.to_vec(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// abort_obligation_ownership_transfer
+// ---------------------------------------------------------------------------
+
+pub struct AbortObligationOwnershipTransferAccounts {
+    pub owner: Pubkey,
+    pub obligation: Pubkey,
+}
+
+pub fn abort_obligation_ownership_transfer(
+    accounts: AbortObligationOwnershipTransferAccounts,
+) -> Instruction {
+    Instruction {
+        program_id: KLEND_PROGRAM_ID,
+        accounts: vec![
+            signer(accounts.owner),
+            writable(accounts.obligation),
+            readonly(SYSVAR_INSTRUCTIONS_ID),
+        ],
+        data: discriminators::ABORT_OBLIGATION_OWNERSHIP_TRANSFER.to_vec(),
     }
 }

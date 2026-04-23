@@ -2409,6 +2409,19 @@ pub fn mark_obligation_for_deleveraging(
     Ok(())
 }
 
+pub fn clear_expired_borrow_order_on_initiating_obligation_ownership_transfer(
+    obligation: &mut Obligation,
+    clock: &Clock,
+) -> Result<()> {
+    let timestamp = clock.unix_timestamp.try_into().expect("negative timestamp");
+
+    obligation
+        .borrow_order
+        .clear_if_past_fillable_timestamp(timestamp);
+
+    Ok(())
+}
+
 pub fn add_referrer_fee(
     borrow_reserve: &mut Reserve,
     referrer_token_state: &mut ReferrerTokenState,

@@ -252,3 +252,6 @@ impl CpiWhitelistedAccount {
 
 pub const RESTRICTED_PROGRAMS: [Pubkey; 1] =
     [pubkey!("jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi")];
+
+pub const COMPUTE_BUDGET_PROGRAM_ID: Pubkey =
+    pubkey!("ComputeBudget111111111111111111111111111111");

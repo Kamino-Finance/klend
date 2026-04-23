@@ -1,20 +1,22 @@
 use anchor_lang::{
     accounts::account_loader::AccountLoader,
     err, error,
-    prelude::{msg, Context, Pubkey},
+    prelude::{msg, AccountInfo, Context, Pubkey},
     require, require_eq, require_gt, require_gte, Key, Result, ToAccountInfo,
 };
 
 use crate::{
     fraction::Fraction,
     handlers::*,
+    lending_market::ix_utils,
     state::{
         DepositObligationCollateralAccounts, RedeemReserveCollateralAccounts,
         WithdrawObligationCollateralAccounts,
         WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
     },
     utils::{
-        constraints, seeds::BASE_SEED_REFERRER_TOKEN_STATE, FatAccountLoader, PROGRAM_VERSION,
+        constraints, consts::COMPUTE_BUDGET_PROGRAM_ID, seeds::BASE_SEED_REFERRER_TOKEN_STATE,
+        FatAccountLoader, PROGRAM_VERSION,
     },
     FixedTermRolloverResult, LendingAction, LendingError, Obligation, ReferrerTokenState, Reserve,
     ReserveStatus,
@@ -819,6 +821,63 @@ pub fn validate_referrer_token_state(
 
     if referrer_token_state.referrer != owner_referrer {
         return err!(LendingError::ReferrerAccountReferrerMissmatch);
+    }
+
+    Ok(())
+}
+
+pub fn is_only_with_compute_budget_ixs_check(
+    instruction_sysvar_account: &AccountInfo,
+) -> Result<()> {
+    let instruction_loader = ix_utils::BpfInstructionLoader {
+        instruction_sysvar_account_info: instruction_sysvar_account,
+    };
+
+    let current_index =
+        ix_utils::InstructionLoader::load_current_index(&instruction_loader)? as usize;
+    for (ix_index, ix_result) in ix_utils::IxIterator::new_at(0, &instruction_loader).enumerate() {
+        let ix = ix_result?;
+        if ix_index != current_index && ix.program_id != COMPUTE_BUDGET_PROGRAM_ID {
+            msg!(
+                "Transaction contains non-ComputeBudget instruction at index {}, only ComputeBudget instructions may accompany this ix",
+                ix_index
+            );
+            return err!(LendingError::OnlyComputeBudgetCompanionIxsAllowed);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn ownership_transfer_cpi_check(instruction_sysvar_account: &AccountInfo) -> Result<()> {
+    crate::utils::check_cpi_call(instruction_sysvar_account)
+}
+
+pub fn obligation_ownership_transfer_execution_context_checks(
+    instruction_sysvar_account: &AccountInfo,
+) -> Result<()> {
+    is_only_with_compute_budget_ixs_check(instruction_sysvar_account)?;
+    ownership_transfer_cpi_check(instruction_sysvar_account)?;
+    Ok(())
+}
+
+pub fn obligation_ownership_transfer_precondition_checks(
+    instruction_sysvar_account: &AccountInfo,
+    obligation: &Obligation,
+) -> Result<()> {
+    obligation_ownership_transfer_execution_context_checks(instruction_sysvar_account)?;
+    obligation_has_no_active_borrow_orders_check(obligation)?;
+
+    Ok(())
+}
+
+pub fn obligation_has_no_active_borrow_orders_check(obligation: &Obligation) -> Result<()> {
+    if obligation.borrow_order != Default::default() {
+        msg!(
+            "Obligation has active borrow order with remaining debt amount: {}",
+            obligation.borrow_order.remaining_debt_amount
+        );
+        return err!(LendingError::ObligationHasActiveBorrowOrders);
     }
 
     Ok(())

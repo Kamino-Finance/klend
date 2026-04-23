@@ -7,7 +7,7 @@ use std::{
 use anchor_lang::{account, err, prelude::*, solana_program::clock::Slot, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use num_enum::TryFromPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "serde")]
 use strum::EnumIter;
 use strum::EnumString;
@@ -21,6 +21,18 @@ use crate::{
     },
     xmsg, BigFractionBytes, LendingError, ReserveConfig,
 };
+
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum OwnershipTransferState {
+
+    None = 0,
+
+    Initiated = 1,
+
+    Approved = 2,
+}
 
 static_assertions::const_assert_eq!(OBLIGATION_SIZE, std::mem::size_of::<Obligation>());
 static_assertions::const_assert_eq!(0, std::mem::size_of::<Obligation>() % 8);
@@ -84,8 +96,11 @@ pub struct Obligation {
 
     pub num_of_obsolete_borrow_reserves: u8,
 
+
+    pub ownership_transfer_state: u8,
+
     #[derivative(Debug = "ignore")]
-    pub reserved: [u8; 4],
+    pub reserved: [u8; 3],
 
     pub highest_borrow_factor_pct: u64,
 
@@ -101,8 +116,12 @@ pub struct Obligation {
 
     pub borrow_order: BorrowOrder,
 
+
+
+    pub pending_owner: Pubkey,
+
     #[derivative(Debug = "ignore")]
-    pub padding_3: [u64; 73],
+    pub padding_3: [u64; 69],
 }
 
 impl Default for Obligation {
@@ -135,6 +154,8 @@ impl Default for Obligation {
             autodeleverage_margin_call_started_timestamp: 0,
             obligation_orders: default_array(),
             borrow_order: Default::default(),
+            pending_owner: Pubkey::default(),
+            ownership_transfer_state: OwnershipTransferState::None.into(),
         }
     }
 }
@@ -560,6 +581,108 @@ impl Obligation {
 
     pub fn is_single_debt_single_coll(&self) -> bool {
         self.active_deposits_count() == 1 && self.active_borrows_count() == 1
+    }
+
+
+    pub fn ownership_transfer_state(&self) -> OwnershipTransferState {
+        OwnershipTransferState::try_from(self.ownership_transfer_state)
+            .expect("Invalid serialized ownership transfer state")
+    }
+
+
+    pub fn is_ownership_transfer_in_progress(&self) -> bool {
+        self.ownership_transfer_state() != OwnershipTransferState::None
+    }
+
+    pub fn check_ownership_transfer_not_in_progress(&self) -> Result<()> {
+        if self.is_ownership_transfer_in_progress() {
+            xmsg!("Obligation ownership transfer in progress");
+            return err!(LendingError::ObligationOwnershipTransferInProgress);
+        }
+        Ok(())
+    }
+
+    pub fn check_ownership_transfer_in_progress(&self) -> Result<()> {
+        if !self.is_ownership_transfer_in_progress() {
+            xmsg!("Obligation ownership transfer not initiated");
+            return err!(LendingError::ObligationOwnershipTransferNotInitiated);
+        }
+        Ok(())
+    }
+
+
+    pub fn is_ownership_transfer_initiated(&self) -> bool {
+        self.ownership_transfer_state() == OwnershipTransferState::Initiated
+    }
+
+
+    pub fn is_ownership_transfer_approved(&self) -> bool {
+        self.ownership_transfer_state() == OwnershipTransferState::Approved
+    }
+
+    pub fn check_ownership_transfer_initiated(&self) -> Result<()> {
+        if !self.is_ownership_transfer_initiated() {
+            xmsg!("Obligation ownership transfer not initiated");
+            return err!(LendingError::ObligationOwnershipTransferNotInitiated);
+        }
+        Ok(())
+    }
+
+    pub fn check_ownership_transfer_approved(&self) -> Result<()> {
+        if !self.is_ownership_transfer_approved() {
+            xmsg!("Obligation ownership transfer not approved");
+            return err!(LendingError::ObligationOwnershipTransferNotApproved);
+        }
+        Ok(())
+    }
+
+
+
+
+    pub fn initiate_ownership_transfer(&mut self, pending_owner: Pubkey) -> Result<()> {
+       
+        if pending_owner == Pubkey::default() {
+            xmsg!("Pending owner cannot be the default pubkey");
+            return err!(LendingError::ObligationInvalidPendingOwner);
+        }
+
+       
+        if pending_owner == self.owner {
+            xmsg!("Pending owner cannot be the current owner");
+            return err!(LendingError::ObligationInvalidPendingOwner);
+        }
+
+        self.ownership_transfer_state = OwnershipTransferState::Initiated.into();
+        self.pending_owner = pending_owner;
+        Ok(())
+    }
+
+
+
+
+
+    pub fn approve_ownership_transfer(&mut self) -> Result<()> {
+        self.ownership_transfer_state = OwnershipTransferState::Approved.into();
+        Ok(())
+    }
+
+
+
+
+    pub fn accept_ownership(&mut self) -> Result<()> {
+        self.owner = self.pending_owner;
+        self.pending_owner = Pubkey::default();
+        self.ownership_transfer_state = OwnershipTransferState::None.into();
+        Ok(())
+    }
+
+
+
+
+    pub fn abort_ownership_transfer(&mut self) -> Result<()> {
+        self.pending_owner = Pubkey::default();
+        self.ownership_transfer_state = OwnershipTransferState::None.into();
+        Ok(())
     }
 }
 

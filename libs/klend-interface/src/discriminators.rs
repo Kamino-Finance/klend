@@ -262,6 +262,21 @@ disc!(UPDATE_OBLIGATION_CONFIG, "update_obligation_config");
 // Admin
 disc!(CLONE_RESERVE_CONFIG, "clone_reserve_config");
 
+// Obligation ownership transfer
+disc!(
+    INITIATE_OBLIGATION_OWNERSHIP_TRANSFER,
+    "initiate_obligation_ownership_transfer"
+);
+disc!(
+    APPROVE_OBLIGATION_OWNERSHIP_TRANSFER,
+    "approve_obligation_ownership_transfer"
+);
+disc!(ACCEPT_OBLIGATION_OWNERSHIP, "accept_obligation_ownership");
+disc!(
+    ABORT_OBLIGATION_OWNERSHIP_TRANSFER,
+    "abort_obligation_ownership_transfer"
+);
+
 /// Known Klend instruction types, identified by their 8-byte discriminator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -301,6 +316,10 @@ pub enum KlendInstruction {
     RolloverFixedTermBorrow,
     UpdateObligationConfig,
     CloneReserveConfig,
+    InitiateObligationOwnershipTransfer,
+    ApproveObligationOwnershipTransfer,
+    AcceptObligationOwnership,
+    AbortObligationOwnershipTransfer,
 }
 
 impl core::fmt::Display for KlendInstruction {
@@ -386,6 +405,16 @@ pub fn identify_instruction(data: &[u8]) -> Option<KlendInstruction> {
         d if d == ROLLOVER_FIXED_TERM_BORROW => Some(KlendInstruction::RolloverFixedTermBorrow),
         d if d == UPDATE_OBLIGATION_CONFIG => Some(KlendInstruction::UpdateObligationConfig),
         d if d == CLONE_RESERVE_CONFIG => Some(KlendInstruction::CloneReserveConfig),
+        d if d == INITIATE_OBLIGATION_OWNERSHIP_TRANSFER => {
+            Some(KlendInstruction::InitiateObligationOwnershipTransfer)
+        }
+        d if d == APPROVE_OBLIGATION_OWNERSHIP_TRANSFER => {
+            Some(KlendInstruction::ApproveObligationOwnershipTransfer)
+        }
+        d if d == ACCEPT_OBLIGATION_OWNERSHIP => Some(KlendInstruction::AcceptObligationOwnership),
+        d if d == ABORT_OBLIGATION_OWNERSHIP_TRANSFER => {
+            Some(KlendInstruction::AbortObligationOwnershipTransfer)
+        }
         _ => None,
     }
 }
@@ -487,5 +516,18 @@ mod tests {
         check_disc!("rollover_fixed_term_borrow", ROLLOVER_FIXED_TERM_BORROW);
         check_disc!("update_obligation_config", UPDATE_OBLIGATION_CONFIG);
         check_disc!("clone_reserve_config", CLONE_RESERVE_CONFIG);
+        check_disc!(
+            "initiate_obligation_ownership_transfer",
+            INITIATE_OBLIGATION_OWNERSHIP_TRANSFER
+        );
+        check_disc!(
+            "approve_obligation_ownership_transfer",
+            APPROVE_OBLIGATION_OWNERSHIP_TRANSFER
+        );
+        check_disc!("accept_obligation_ownership", ACCEPT_OBLIGATION_OWNERSHIP);
+        check_disc!(
+            "abort_obligation_ownership_transfer",
+            ABORT_OBLIGATION_OWNERSHIP_TRANSFER
+        );
     }
 }
