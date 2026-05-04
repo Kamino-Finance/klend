@@ -313,7 +313,10 @@ impl Reserve {
 
 
 
-    pub fn borrowable_liquidity_amount(&self, timestamp: u64) -> Result<u64> {
+    pub fn borrowable_liquidity_amount_outside_elevation_group(
+        &self,
+        timestamp: u64,
+    ) -> Result<u64> {
        
         let sufficient_liquidity_limit = self.freely_available_liquidity_amount();
         if sufficient_liquidity_limit == 0 {
@@ -327,11 +330,11 @@ impl Reserve {
         }
 
        
-        let remaining_elevation_group_borrow_limit = self
+        let remaining_borrow_limit_outside_elevation_group = self
             .config
             .borrow_limit_outside_elevation_group
             .saturating_sub(self.borrowed_amount_outside_elevation_group);
-        if remaining_elevation_group_borrow_limit == 0 {
+        if remaining_borrow_limit_outside_elevation_group == 0 {
             return err!(LendingError::ElevationGroupBorrowLimitExceeded);
         }
 
@@ -368,7 +371,7 @@ impl Reserve {
         Ok([
             sufficient_liquidity_limit,
             borrow_capacity_limit,
-            remaining_elevation_group_borrow_limit,
+            remaining_borrow_limit_outside_elevation_group,
             utilization_rate_limit,
             withdrawal_caps_limit,
         ]

@@ -292,6 +292,15 @@ pub fn process(
                 .validating(validations::check_bool)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdatePermissioningAuthority => {
+            config_items::for_named_field!(&mut market.permissioning_authority).set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdatePermissionedOps => {
+            config_items::for_named_field!(&mut market.permissioned_ops)
+                .validating(validations::check_valid_permissioned_ops)
+                .rendering(renderings::as_permissioned_ops_bitflags)
+                .set(&value)?;
+        }
     }
 
     Ok(())

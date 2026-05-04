@@ -1045,7 +1045,7 @@ pub fn rollover_borrow_into_different_reserve(
     let full_borrow_amount = source_borrow.borrowed_amount();
     let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
     let tokens_to_transfer_over = min(
-        target_reserve.borrowable_liquidity_amount(timestamp)?,
+        target_reserve.borrowable_liquidity_amount_outside_elevation_group(timestamp)?,
         full_borrow_amount.to_ceil(),
     );
 

@@ -12,7 +12,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     refresh_farms,
     state::{obligation::Obligation, DepositObligationCollateralAccounts, LendingMarket, Reserve},
-    utils::{seeds, token_transfer},
+    utils::{permissioning::PermissionedOp, seeds, token_transfer},
     MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
@@ -22,14 +22,22 @@ pub fn process_v1(ctx: Context<DepositObligationCollateral>, collateral_amount: 
         ctx.accounts.deposit_reserve,
         ReserveFarmKind::Collateral
     );
-    process_impl(ctx.accounts, collateral_amount)
+    process_impl(
+        ctx.accounts,
+        collateral_amount,
+        ctx.remaining_accounts.last(),
+    )
 }
 
 pub fn process_v2(
     ctx: Context<DepositObligationCollateralV2>,
     collateral_amount: u64,
 ) -> Result<()> {
-    process_impl(&ctx.accounts.deposit_accounts, collateral_amount)?;
+    process_impl(
+        &ctx.accounts.deposit_accounts,
+        collateral_amount,
+        ctx.remaining_accounts.last(),
+    )?;
     refresh_farms!(
         ctx.accounts.deposit_accounts,
         ctx.accounts.lending_market_authority,
@@ -42,7 +50,11 @@ pub fn process_v2(
     Ok(())
 }
 
-fn process_impl(accounts: &DepositObligationCollateral, collateral_amount: u64) -> Result<()> {
+fn process_impl(
+    accounts: &DepositObligationCollateral,
+    collateral_amount: u64,
+    permission_account: Option<&AccountInfo>,
+) -> Result<()> {
     lending_checks::deposit_obligation_collateral_checks(&DepositObligationCollateralAccounts {
         obligation: accounts.obligation.clone(),
         deposit_reserve: accounts.deposit_reserve.clone(),
@@ -57,6 +69,8 @@ fn process_impl(accounts: &DepositObligationCollateral, collateral_amount: u64) 
     let lending_market = &accounts.lending_market.load()?;
     let deposit_reserve = &mut accounts.deposit_reserve.load_mut()?;
     let obligation = &mut accounts.obligation.load_mut()?;
+
+    lending_market.check_permissions(PermissionedOp::DEPOSIT, permission_account)?;
 
     lending_operations::refresh_reserve(
         deposit_reserve,

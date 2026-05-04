@@ -14,7 +14,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     refresh_farms,
     state::{nested_accounts::*, obligation::Obligation, LendingMarket, Reserve},
-    utils::{seeds, token_transfer},
+    utils::{permissioning::PermissionedOp, seeds, token_transfer},
     DepositLiquidityResult, LendingAction, MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
@@ -31,6 +31,7 @@ pub fn process_v1(
         ctx.accounts,
         liquidity_amount,
         MaxReservesAsCollateralCheck::Perform,
+        ctx.remaining_accounts.last(),
     )
 }
 
@@ -42,6 +43,7 @@ pub fn process_v2(
         &ctx.accounts.deposit_accounts,
         liquidity_amount,
         MaxReservesAsCollateralCheck::Perform,
+        ctx.remaining_accounts.last(),
     )?;
 
     refresh_farms!(
@@ -60,6 +62,7 @@ pub(super) fn process_impl(
     accounts: &DepositReserveLiquidityAndObligationCollateral,
     liquidity_amount: u64,
     max_reserves_as_collateral_check: MaxReservesAsCollateralCheck,
+    lending_market_permission_acct: Option<&AccountInfo>,
 ) -> Result<()> {
     msg!(
         "DepositReserveLiquidityAndObligationCollateral Reserve {} amount {}",
@@ -81,6 +84,8 @@ pub(super) fn process_impl(
     let lending_market = &accounts.lending_market.load()?;
     let lending_market_key = accounts.lending_market.key();
     let clock = Clock::get()?;
+
+    lending_market.check_permissions(PermissionedOp::DEPOSIT, lending_market_permission_acct)?;
 
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);

@@ -1,6 +1,6 @@
 [package]
 name = "kamino_lending"
-version = "1.19.0"
+version = "1.20.0"
 description = "Kamino lending Solana program"
 edition = "2021"
 license = "BUSL-1.1"
@@ -52,7 +52,7 @@ derive_builder = "0.13.0"
 fixed = { version = "1.23.1" }
 fixed-macro = "1.1"
 uint = "0.9.5"
-bitflags = "2.4.1"
+bitflags = "2.9.4"
 
 # Only required when serializing to market config to JSON and in tests
 serde = { workspace = true, optional = true }

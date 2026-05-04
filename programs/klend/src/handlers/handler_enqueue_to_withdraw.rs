@@ -45,6 +45,10 @@ pub fn process(
     let sequence_number =
         lending_operations::enqueue_to_withdraw(lending_market, reserve, collateral_amount)?;
 
+    msg!(
+        "enqueued withdraw ticket with sequence number {sequence_number} for {collateral_amount} ctokens",
+    );
+
     let progress_callback_custom_accounts =
         extract_progress_callback_custom_accounts(progress_callback_type, ctx.accounts)?;
 

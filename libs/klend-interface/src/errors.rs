@@ -257,12 +257,13 @@ define_lending_errors! {
     ClonedReserveLiquidityMintMismatch = 174 => "Cannot clone config between reserves of different mints",
     ReserveEmergencyMode = 175 => "Reserve emergency mode is enabled",
     ObligationOwnershipTransferInProgress = 176 => "Obligation ownership transfer is in progress",
-    ObligationOwnershipTransferNotInitiated = 177 => "Obligation ownership transfer is not in initiated state",
+    ObligationOwnershipTransferNotInInitiatedState = 177 => "Obligation ownership transfer is not in initiated state",
     ObligationPendingOwnerNotSet = 178 => "Obligation pending owner not set",
     ObligationInvalidPendingOwner = 179 => "Invalid pending owner address",
     ObligationOwnershipTransferNotApproved = 180 => "Obligation ownership transfer not approved by admin",
     ObligationHasActiveBorrowOrders = 181 => "Obligation has active borrow orders",
     OnlyComputeBudgetCompanionIxsAllowed = 182 => "Only ComputeBudget instructions may accompany this instruction",
+    MissingPermissioner = 183 => "Required permissioning account is missing",
 }
 
 impl std::error::Error for LendingError {}
@@ -279,6 +280,7 @@ mod tests {
             LendingError::ClonedReserveLiquidityMintMismatch.error_code(),
             6174
         );
+        assert_eq!(LendingError::MissingPermissioner.error_code(), 6183);
         assert_eq!(
             LendingError::OnlyComputeBudgetCompanionIxsAllowed.error_code(),
             6182
@@ -304,7 +306,11 @@ mod tests {
             LendingError::from_error_code(6182),
             Some(LendingError::OnlyComputeBudgetCompanionIxsAllowed)
         );
-        assert_eq!(LendingError::from_error_code(6183), None);
+        assert_eq!(
+            LendingError::from_error_code(6183),
+            Some(LendingError::MissingPermissioner)
+        );
+        assert_eq!(LendingError::from_error_code(6184), None);
     }
 
     #[test]
@@ -328,12 +334,12 @@ mod tests {
     #[test]
     fn test_all_codes_roundtrip() {
         let mut count = 0u32;
-        for code in 6000..=6182 {
+        for code in 6000..=6183 {
             let err = LendingError::from_error_code(code)
                 .unwrap_or_else(|| panic!("Missing variant for code {code}"));
             assert_eq!(err.error_code(), code);
             count += 1;
         }
-        assert_eq!(count, 183);
+        assert_eq!(count, 184);
     }
 }

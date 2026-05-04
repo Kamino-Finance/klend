@@ -209,7 +209,10 @@ pub mod validations {
     use std::{any::type_name, ops::RangeInclusive};
 
     use super::*;
-    use crate::{utils::FULL_BPS, LendingError};
+    use crate::{
+        utils::{permissioning::PermissionedOp, FULL_BPS},
+        LendingError,
+    };
 
     pub fn check_bool<T: Into<u128> + Clone>(value: &T) -> Result<()> {
         let value = value.clone().into();
@@ -297,6 +300,15 @@ pub mod validations {
             }
         }
     }
+
+    pub fn check_valid_permissioned_ops(bits: &u64) -> Result<()> {
+        PermissionedOp::from_bits(*bits)
+            .ok_or_else(|| {
+                msg!("Invalid permissioned ops bits: {:?}", bits);
+                error!(LendingError::InvalidConfig)
+            })
+            .map(|_| ())
+    }
 }
 
 
@@ -330,6 +342,20 @@ pub mod renderings {
             Ok(value) => value.fmt(f),
             Err(_) => write!(f, "<unknown {} = {}>", type_name::<E>(), repr),
         }
+    }
+
+    pub fn as_permissioned_ops_bitflags(
+        bits: &u64,
+        f: &mut std::fmt::Formatter,
+    ) -> std::fmt::Result {
+        use crate::utils::permissioning::PermissionedOp;
+
+        if *bits == 0 {
+            return write!(f, "NONE");
+        }
+
+        let str = PermissionedOp::from_bits_retain(*bits).to_string();
+        write!(f, "{}", str)
     }
 }
 
