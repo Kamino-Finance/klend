@@ -7,6 +7,7 @@ pub mod consts;
 pub mod emit_cpi_support;
 pub mod fraction;
 pub mod macros;
+pub mod permissioning;
 pub mod prices;
 pub mod refresh_ix_utils;
 pub mod secs;

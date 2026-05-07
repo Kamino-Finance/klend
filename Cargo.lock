@@ -440,9 +440,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.4.1"
+version = "2.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327762f6e5a765692301e5bb513e0d9fef63be86bbc14528052b1cd3e6f03e07"
+checksum = "2261d10cca569e4643e526d8dc2e62e433cc8aba21ab764233731f8d369bf394"
 dependencies = [
  "serde",
 ]
@@ -1385,11 +1385,11 @@ dependencies = [
 
 [[package]]
 name = "kamino_lending"
-version = "1.19.0"
+version = "1.20.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
- "bitflags 2.4.1",
+ "bitflags 2.9.4",
  "borsh 0.10.3",
  "bytemuck",
  "derivative",
@@ -2493,7 +2493,7 @@ dependencies = [
  "ark-serialize",
  "base64 0.21.5",
  "bincode",
- "bitflags 2.4.1",
+ "bitflags 2.9.4",
  "blake3",
  "borsh 0.10.3",
  "borsh 0.9.3",
@@ -2544,7 +2544,7 @@ dependencies = [
  "assert_matches",
  "base64 0.21.5",
  "bincode",
- "bitflags 2.4.1",
+ "bitflags 2.9.4",
  "borsh 0.10.3",
  "bs58 0.4.0",
  "bytemuck",

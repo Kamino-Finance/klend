@@ -37,6 +37,11 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
 
+    lending_market.check_permissions(
+        crate::utils::permissioning::PermissionedOp::DEPOSIT,
+        ctx.remaining_accounts.last(),
+    )?;
+
     let lending_market_key = ctx.accounts.lending_market.key();
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);

@@ -28,6 +28,15 @@ pub(crate) fn process_impl_refresh_obligation_farms_for_reserve(
         account_ctx.obligation.key(),
         LendingError::InvalidAccountInput
     );
+   
+   
+   
+   
+    require_keys_eq!(
+        account_ctx.obligation_farm_user_state.load()?.farm_state,
+        account_ctx.reserve_farm_state.key(),
+        LendingError::InvalidAccountInput
+    );
 
     msg!("RefreshObligationFarmsForReserve {:?}", farm_kind);
     let reserve = &account_ctx.reserve.load()?;
@@ -102,11 +111,13 @@ pub struct RefreshObligationFarmsForReserveBase<'info> {
     #[account(has_one = lending_market)]
     pub reserve: AccountLoader<'info, Reserve>,
 
-    /// CHECK: Checked against the reserve's stored farm account + CPI checks
+    /// CHECK: Checked against the reserve's stored farm account + the
+
+
+
     #[account(mut)]
     pub reserve_farm_state: AccountInfo<'info>,
 
-    /// CHECK: Checked against the farm state account in CPI
     #[account(mut)]
     pub obligation_farm_user_state: AccountLoader<'info, FarmsUserState>,
 

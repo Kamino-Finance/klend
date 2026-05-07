@@ -6,8 +6,10 @@ use crate::{
     handler_refresh_obligation_farms_for_reserve::*,
     handler_withdraw_obligation_collateral_and_redeem_reserve_collateral::{self, *},
     lending_market::lending_operations,
-    refresh_farms, LendingError, LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck,
-    RefreshObligation, RefreshObligationBumps, ReserveFarmKind,
+    refresh_farms,
+    utils::permissioning::PermissionedOp,
+    LendingError, LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck, RefreshObligation,
+    RefreshObligationBumps, ReserveFarmKind,
 };
 
 pub fn process(
@@ -32,11 +34,22 @@ pub fn process(
         obligation.loan_to_value()
     };
 
+    let remaining_accounts_end = {
+        let lending_market = ctx.accounts.deposit_accounts.lending_market.load()?;
+        if lending_market.requires_permission(PermissionedOp::DEPOSIT) {
+           
+            ctx.remaining_accounts.len() - 1
+        } else {
+            ctx.remaining_accounts.len()
+        }
+    };
+
     {
         handler_deposit_reserve_liquidity_and_obligation_collateral::process_impl(
             &ctx.accounts.deposit_accounts,
             liquidity_amount,
             MaxReservesAsCollateralCheck::Skip,
+            ctx.remaining_accounts.last(),
         )?;
     }
 
@@ -62,7 +75,7 @@ pub fn process(
                 obligation: ctx.accounts.deposit_accounts.obligation.clone(),
                 lending_market: ctx.accounts.deposit_accounts.lending_market.clone(),
             },
-            remaining_accounts: ctx.remaining_accounts,
+            remaining_accounts: &ctx.remaining_accounts[..remaining_accounts_end],
             bumps: RefreshObligationBumps {},
         };
 
@@ -102,13 +115,12 @@ pub fn process(
         };
 
         let remaining_accounts: Vec<AccountInfo> = if is_full_withdrawal {
+            let withdraw_reserve_key = ctx.accounts.withdraw_accounts.withdraw_reserve.key();
             let mut withdraw_reserve_found = false;
-            ctx.remaining_accounts
+            ctx.remaining_accounts[..remaining_accounts_end]
                 .iter()
                 .filter_map(|account| {
-                    if account.key() == ctx.accounts.withdraw_accounts.withdraw_reserve.key()
-                        && !withdraw_reserve_found
-                    {
+                    if account.key() == withdraw_reserve_key && !withdraw_reserve_found {
                         withdraw_reserve_found = true;
                         None
                     } else {
@@ -117,7 +129,7 @@ pub fn process(
                 })
                 .collect()
         } else {
-            ctx.remaining_accounts.to_vec()
+            ctx.remaining_accounts[..remaining_accounts_end].to_vec()
         };
 
         let refresh_obligation_ctx = Context {

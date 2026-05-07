@@ -15,7 +15,7 @@ pub fn process(ctx: Context<AbortObligationOwnershipTransfer>) -> Result<()> {
     lending_checks::obligation_ownership_transfer_execution_context_checks(
         &ctx.accounts.instruction_sysvar_account,
     )?;
-    obligation.check_ownership_transfer_in_progress()?;
+    obligation.check_ownership_transfer_in_initiated_state()?;
 
     obligation.abort_ownership_transfer()?;
 

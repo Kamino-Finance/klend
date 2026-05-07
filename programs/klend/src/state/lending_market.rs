@@ -7,13 +7,15 @@ use serde_values::*;
 
 #[cfg(feature = "serde")]
 use super::{serde_bool_u8, serde_string, serde_utf_string};
+#[cfg(feature = "serde")]
+use crate::utils::permissioning::bitflags_str;
 use crate::{
     utils::{
-        accounts::default_array, Fraction, FractionExtra, CLOSE_TO_INSOLVENCY_RISKY_LTV,
-        DEFAULT_MIN_DEPOSIT_AMOUNT, ELEVATION_GROUP_NONE, GLOBAL_ALLOWED_BORROW_VALUE,
-        LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR, LIQUIDATION_CLOSE_VALUE,
-        MAX_LIQUIDATABLE_VALUE_AT_ONCE, MIN_BORROW_ORDER_FILL_VALUE, MIN_NET_VALUE_IN_OBLIGATION,
-        MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE, PROGRAM_VERSION,
+        accounts::default_array, permissioning::PermissionedOp, Fraction, FractionExtra,
+        CLOSE_TO_INSOLVENCY_RISKY_LTV, DEFAULT_MIN_DEPOSIT_AMOUNT, ELEVATION_GROUP_NONE,
+        GLOBAL_ALLOWED_BORROW_VALUE, LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR,
+        LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE, MIN_BORROW_ORDER_FILL_VALUE,
+        MIN_NET_VALUE_IN_OBLIGATION, MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE, PROGRAM_VERSION,
     },
     LendingError, RolloverMode,
 };
@@ -275,12 +277,19 @@ pub struct LendingMarket {
 
     pub term_based_full_liquidation_duration_secs: u64,
 
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_string", default))]
+    pub permissioning_authority: Pubkey,
+
+    #[cfg_attr(feature = "serde", serde(with = "bitflags_str", default))]
+    pub permissioned_ops: u64,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 158],
+    pub padding1: [u64; 153],
 }
 
 impl Default for LendingMarket {
@@ -332,6 +341,8 @@ impl Default for LendingMarket {
             term_based_full_liquidation_duration_secs: 0,
             obligation_borrow_migration_to_fixed_execution_enabled: 0,
             min_partial_rollover_value: 0,
+            permissioning_authority: Pubkey::default(),
+            permissioned_ops: 0,
             padding2: default_array(),
             padding1: default_array(),
         }
@@ -480,6 +491,36 @@ impl LendingMarket {
             return None;
         }
         Some(self.term_based_full_liquidation_duration_secs)
+    }
+
+    pub fn requires_permission(&self, op: PermissionedOp) -> bool {
+        self.is_permissioned_market() && op.intersects(self.get_permissioned_ops())
+    }
+
+    pub fn check_permissions(
+        &self,
+        ops: PermissionedOp,
+        permissioning_acct: Option<&AccountInfo>,
+    ) -> Result<bool> {
+        if !self.requires_permission(ops) {
+            return Ok(false);
+        }
+        let acct = permissioning_acct.ok_or(error!(LendingError::MissingPermissioner))?;
+        require_keys_eq!(
+            acct.key(),
+            self.permissioning_authority,
+            LendingError::MissingPermissioner
+        );
+        require!(acct.is_signer, ErrorCode::AccountNotSigner);
+        Ok(true)
+    }
+
+    pub fn is_permissioned_market(&self) -> bool {
+        self.permissioning_authority != Pubkey::default()
+    }
+
+    pub fn get_permissioned_ops(&self) -> PermissionedOp {
+        PermissionedOp::from_bits_truncate(self.permissioned_ops)
     }
 }
 

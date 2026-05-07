@@ -917,7 +917,7 @@ pub enum LendingError {
     #[msg("Obligation ownership transfer is in progress")]
     ObligationOwnershipTransferInProgress,
     #[msg("Obligation ownership transfer is not in initiated state")]
-    ObligationOwnershipTransferNotInitiated,
+    ObligationOwnershipTransferNotInInitiatedState,
     #[msg("Obligation pending owner not set")]
     ObligationPendingOwnerNotSet,
     #[msg("Invalid pending owner address")]
@@ -928,6 +928,8 @@ pub enum LendingError {
     ObligationHasActiveBorrowOrders,
     #[msg("Only ComputeBudget instructions may accompany this instruction")]
     OnlyComputeBudgetCompanionIxsAllowed,
+    #[msg("Required permissioning account is missing")]
+    MissingPermissioner,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

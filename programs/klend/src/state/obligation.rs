@@ -602,16 +602,8 @@ impl Obligation {
         Ok(())
     }
 
-    pub fn check_ownership_transfer_in_progress(&self) -> Result<()> {
-        if !self.is_ownership_transfer_in_progress() {
-            xmsg!("Obligation ownership transfer not initiated");
-            return err!(LendingError::ObligationOwnershipTransferNotInitiated);
-        }
-        Ok(())
-    }
 
-
-    pub fn is_ownership_transfer_initiated(&self) -> bool {
+    pub fn is_ownership_transfer_in_initiated_state(&self) -> bool {
         self.ownership_transfer_state() == OwnershipTransferState::Initiated
     }
 
@@ -620,10 +612,10 @@ impl Obligation {
         self.ownership_transfer_state() == OwnershipTransferState::Approved
     }
 
-    pub fn check_ownership_transfer_initiated(&self) -> Result<()> {
-        if !self.is_ownership_transfer_initiated() {
-            xmsg!("Obligation ownership transfer not initiated");
-            return err!(LendingError::ObligationOwnershipTransferNotInitiated);
+    pub fn check_ownership_transfer_in_initiated_state(&self) -> Result<()> {
+        if !self.is_ownership_transfer_in_initiated_state() {
+            xmsg!("Obligation ownership transfer not in initiated state");
+            return err!(LendingError::ObligationOwnershipTransferNotInInitiatedState);
         }
         Ok(())
     }

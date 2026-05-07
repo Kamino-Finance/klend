@@ -16,7 +16,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     refresh_farms,
     state::{obligation::Obligation, LendingMarket, RedeemReserveCollateralAccounts, Reserve},
-    utils::{seeds, token_transfer, FatAccountLoader},
+    utils::{permissioning::PermissionedOp, seeds, token_transfer, FatAccountLoader},
     xmsg, LendingAction, LiquidateAndRedeemResult, ReserveFarmKind,
 };
 
@@ -106,6 +106,15 @@ fn process_impl(
     let obligation = &mut accounts.obligation.load_mut()?;
     let lending_market_key = accounts.lending_market.key();
     let clock = &Clock::get()?;
+
+    let remaining_accounts = if lending_market
+        .check_permissions(PermissionedOp::LIQUIDATE, remaining_accounts.last())?
+    {
+       
+        &remaining_accounts[..remaining_accounts.len() - 1]
+    } else {
+        remaining_accounts
+    };
 
    
 

@@ -259,6 +259,8 @@ pub enum UpdateLendingMarketMode {
     UpdateObligationBorrowMigrationToFixedExecutionEnabled = 39,
     UpdateMinPartialRolloverValue = 40,
     UpdateWithdrawTicketCancellationEnabled = 41,
+    UpdatePermissioningAuthority = 42,
+    UpdatePermissionedOps = 43,
 }
 
 #[cfg(feature = "serde")]
