@@ -75,7 +75,7 @@ pub fn deposit_reserve_liquidity_transfer<'a>(
 pub fn deposit_initial_reserve_liquidity_transfer<'a>(
     source_liquidity_deposit: AccountInfo<'a>,
     destination_liquidity_deposit: AccountInfo<'a>,
-    admin_authority: AccountInfo<'a>,
+    source_authority: AccountInfo<'a>,
     liquidity_mint: AccountInfo<'a>,
     liquidity_token_program: AccountInfo<'a>,
     liquidity_deposit_amount: u64,
@@ -91,7 +91,7 @@ pub fn deposit_initial_reserve_liquidity_transfer<'a>(
             token_interface::TransferChecked {
                 from: source_liquidity_deposit,
                 to: destination_liquidity_deposit,
-                authority: admin_authority,
+                authority: source_authority,
                 mint: liquidity_mint,
             },
         ),

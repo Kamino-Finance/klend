@@ -507,6 +507,63 @@ pub fn post_transfer_vault_balance_liquidity_reserve_checks(
     Ok(())
 }
 
+
+
+
+
+
+pub fn topup_reserve_rewards_checks(accounts: &TopupReserveRewards) -> Result<()> {
+    let reserve = &accounts.reserve.load()?;
+
+    if reserve.liquidity.supply_vault == accounts.source_liquidity.key() {
+        msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
+        return err!(LendingError::InvalidAccountInput);
+    }
+
+    check_reserve_status_and_version(reserve)?;
+    check_reserve_emergency_mode(reserve)?;
+
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
+        &accounts.reserve_liquidity_mint.to_account_info(),
+        &accounts.source_liquidity.to_account_info(),
+    )?;
+
+    Ok(())
+}
+
+
+
+
+
+
+pub fn post_transfer_vault_balance_rewards_deposit_checks(
+    initial_reserve_vault_balance: u64,
+    final_reserve_vault_balance: u64,
+    initial_rewards_amount_available: u64,
+    final_rewards_amount_available: u64,
+    initial_total_available_amount: u64,
+    final_total_available_amount: u64,
+    amount_transferred: u64,
+) -> anchor_lang::Result<()> {
+    require_eq!(
+        initial_reserve_vault_balance + amount_transferred,
+        final_reserve_vault_balance,
+        LendingError::ReserveVaultBalanceMismatch,
+    );
+    require_eq!(
+        initial_rewards_amount_available + amount_transferred,
+        final_rewards_amount_available,
+        LendingError::ReserveAccountingMismatch,
+    );
+    require_eq!(
+        initial_total_available_amount,
+        final_total_available_amount,
+        LendingError::ReserveAccountingMismatch,
+    );
+
+    Ok(())
+}
+
 pub fn post_transfer_owner_queued_collateral_vault_balance_checks(
     final_owner_queued_collateral_vault_balance: u64,
     final_queued_collateral: u64,

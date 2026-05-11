@@ -17,11 +17,6 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
 
-    let initial_reserve_token_balance = token_interface::accessor::amount(
-        &ctx.accounts.reserve_source_liquidity.to_account_info(),
-    )?;
-    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
-
     flash_ixs::flash_borrow_checks(&ctx, liquidity_amount)?;
 
     lending_operations::refresh_reserve(
@@ -29,7 +24,14 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
         &Clock::get()?,
         None,
         lending_market.referral_fee_bps,
+        lending_market.reserve_rewards_max_apr_pct,
     )?;
+
+   
+    let initial_reserve_token_balance = token_interface::accessor::amount(
+        &ctx.accounts.reserve_source_liquidity.to_account_info(),
+    )?;
+    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
 
     lending_operations::flash_borrow_reserve_liquidity(reserve, liquidity_amount)?;
 

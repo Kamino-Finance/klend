@@ -89,7 +89,7 @@ mod tests {
     fn verify_account_sizes() {
         assert_eq!(core::mem::size_of::<Obligation>(), 3336);
         assert_eq!(core::mem::size_of::<Reserve>(), 8616);
-        assert_eq!(core::mem::size_of::<ReserveConfig>(), 936);
+        assert_eq!(core::mem::size_of::<ReserveConfig>(), 944);
         assert_eq!(core::mem::size_of::<TokenInfo>(), 384);
         assert_eq!(core::mem::size_of::<LendingMarket>(), 4656);
         assert_eq!(core::mem::size_of::<GlobalConfig>(), 1024);

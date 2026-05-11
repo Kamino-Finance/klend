@@ -90,7 +90,7 @@ pub struct Reserve {
     pub config: ReserveConfig,
 
     #[derivative(Debug = "ignore")]
-    pub config_padding: [u64; 114],
+    pub config_padding: [u64; 113],
 
     pub borrowed_amount_outside_elevation_group: u64,
 
@@ -564,6 +564,75 @@ impl Reserve {
     }
 
 
+
+
+
+
+
+
+
+
+
+    pub fn distribute_rewards(&mut self, current_slot: Slot, max_apr_pct: u8) -> Result<u64> {
+        let slots_elapsed = self.last_update.slots_elapsed(current_slot)?;
+        if slots_elapsed == 0
+            || max_apr_pct == 0
+            || self.config.rewards_amount_per_slot == 0
+            || self.liquidity.rewards_amount_available == 0
+            || self.collateral.mint_total_supply == 0
+        {
+            return Ok(0);
+        }
+
+        let raw_distribution: u128 =
+            (self.config.rewards_amount_per_slot as u128).saturating_mul(slots_elapsed as u128);
+
+       
+       
+
+       
+       
+       
+       
+        let total_supply_u128: u128 = self.liquidity.total_supply().to_floor();
+        let apr_cap_numerator = total_supply_u128
+            .saturating_mul(u128::from(max_apr_pct))
+            .saturating_mul(u128::from(slots_elapsed));
+        let apr_cap_denominator = 100u128 * u128::from(SLOTS_PER_YEAR);
+        let apr_cap_u128 = apr_cap_numerator / apr_cap_denominator;
+
+        let to_distribute_u128 = raw_distribution
+            .min(apr_cap_u128)
+            .min(u128::from(self.liquidity.rewards_amount_available));
+        let to_distribute =
+            u64::try_from(to_distribute_u128).map_err(|_| error!(LendingError::MathOverflow))?;
+
+        if to_distribute == 0 {
+            return Ok(0);
+        }
+
+        self.liquidity.rewards_amount_available = self
+            .liquidity
+            .rewards_amount_available
+            .checked_sub(to_distribute)
+            .ok_or_else(|| error!(LendingError::MathOverflow))?;
+        self.liquidity.total_available_amount = self
+            .liquidity
+            .total_available_amount
+            .checked_add(to_distribute)
+            .ok_or_else(|| error!(LendingError::MathOverflow))?;
+
+        msg!(
+            "Reserve rewards distributed: slots={} amount={} remaining={}",
+            slots_elapsed,
+            to_distribute,
+            self.liquidity.rewards_amount_available,
+        );
+
+        Ok(to_distribute)
+    }
+
+
     pub fn update_deposit_limit_crossed_timestamp(&mut self, timestamp: u64) {
         if self.deposit_limit_crossed() {
             if self.liquidity.deposit_limit_crossed_timestamp == 0 {
@@ -923,7 +992,16 @@ pub struct ReserveLiquidity {
 
     pub token_program: Pubkey,
 
-    pub padding2: [u64; 51],
+
+
+
+
+
+
+
+    pub rewards_amount_available: u64,
+
+    pub padding2: [u64; 50],
     pub padding3: [u128; 32],
 }
 
@@ -988,6 +1066,7 @@ impl Default for ReserveLiquidity {
             absolute_referral_rate_sf: 0,
             market_price_last_updated_ts: 0,
             token_program: Pubkey::default(),
+            rewards_amount_available: 0,
             padding2: default_array(),
             padding3: default_array(),
         }
@@ -1024,6 +1103,7 @@ impl ReserveLiquidity {
             absolute_referral_rate_sf: 0,
             market_price_last_updated_ts: 0,
             token_program: mint_token_program,
+            rewards_amount_available: 0,
             padding2: default_array(),
             padding3: default_array(),
         }
@@ -1575,6 +1655,17 @@ pub struct ReserveConfig {
 
 
     pub debt_term_seconds: u64,
+
+
+
+
+
+
+
+
+
+
+    pub rewards_amount_per_slot: u64,
 }
 
 impl ReserveConfig {
@@ -1700,6 +1791,7 @@ impl ReserveConfig {
             debt_maturity_timestamp,
             debt_term_seconds,
             early_repay_remaining_interest_pct,
+            rewards_amount_per_slot: _,
         } = source;
 
        
@@ -1748,6 +1840,7 @@ impl ReserveConfig {
             debt_maturity_timestamp,
             debt_term_seconds: overridden_debt_term_seconds.unwrap_or(debt_term_seconds),
             early_repay_remaining_interest_pct,
+            rewards_amount_per_slot: 0,
         }
     }
 }

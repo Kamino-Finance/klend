@@ -301,6 +301,11 @@ pub fn process(
                 .rendering(renderings::as_permissioned_ops_bitflags)
                 .set(&value)?;
         }
+        UpdateLendingMarketMode::UpdateReserveRewardsMaxAprPct => {
+            config_items::for_named_field!(&mut market.reserve_rewards_max_apr_pct)
+                .validating(validations::check_valid_pct)
+                .set(&value)?;
+        }
     }
 
     Ok(())

@@ -96,12 +96,6 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
         }
     };
 
-    let initial_reserve_token_balance = ctx.accounts.reserve_liquidity_supply.amount;
-    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
-    let initial_owner_queued_collateral_vault_balance =
-        ctx.accounts.owner_queued_collateral_vault.amount;
-    let initial_queued_collateral_amount = reserve.withdraw_queue.queued_collateral_amount;
-
     let clock = Clock::get()?;
 
    
@@ -111,7 +105,15 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
         &clock,
         None,
         lending_market.referral_fee_bps,
+        lending_market.reserve_rewards_max_apr_pct,
     )?;
+
+   
+    let initial_reserve_token_balance = ctx.accounts.reserve_liquidity_supply.amount;
+    let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
+    let initial_owner_queued_collateral_vault_balance =
+        ctx.accounts.owner_queued_collateral_vault.amount;
+    let initial_queued_collateral_amount = reserve.withdraw_queue.queued_collateral_amount;
 
     let mut withdraw_ticket = ctx.accounts.withdraw_ticket.load_mut()?;
     let ticketed_withdraw_result = lending_operations::withdraw_queued_liquidity(

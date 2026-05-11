@@ -44,11 +44,15 @@ pub fn refresh_reserve(
     clock: &Clock,
     price: Option<GetPriceResult>,
     referral_fee_bps: u16,
+    reserve_rewards_max_apr_pct: u8,
 ) -> Result<()> {
     let slot = clock.slot;
 
    
     reserve.accrue_interest(slot, referral_fee_bps)?;
+
+   
+    reserve.distribute_rewards(slot, reserve_rewards_max_apr_pct)?;
 
    
     let price_status = if reserve.config.is_emergency_mode() {
@@ -1971,6 +1975,7 @@ where
         withdraw_amount,
         total_withdraw_liquidity_amount,
         withdraw_collateral_amount,
+        liquidation_reason,
     })
 }
 
@@ -2109,6 +2114,7 @@ where
             clock,
             None,
             lending_market.referral_fee_bps,
+            lending_market.reserve_rewards_max_apr_pct,
         )?;
         let redeem_collateral_options = RedeemCollateralOptions::resolve(liquidation_reason);
         let max_redeemable_collateral = if redeem_collateral_options.use_withdraw_queue {
@@ -2836,6 +2842,10 @@ pub fn update_reserve_config(
         UpdateConfigMode::UpdateReserveEmergencyMode => {
             config_items::for_named_field!(&mut reserve.config.emergency_mode)
                 .validating(validations::check_bool)
+                .set(value)?;
+        }
+        UpdateConfigMode::UpdateRewardsAmountPerSlot => {
+            config_items::for_named_field!(&mut reserve.config.rewards_amount_per_slot)
                 .set(value)?;
         }
         UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
@@ -4176,7 +4186,8 @@ pub mod utils {
             | UpdateConfigMode::UpdateDebtTermSeconds
             | UpdateConfigMode::UpdateReserveEmergencyMode
             | UpdateConfigMode::UpdateProposerAuthorityLock
-            | UpdateConfigMode::UpdateEarlyRepayRemainingInterestPct => false,
+            | UpdateConfigMode::UpdateEarlyRepayRemainingInterestPct
+            | UpdateConfigMode::UpdateRewardsAmountPerSlot => false,
         }
     }
 
@@ -4432,6 +4443,18 @@ pub mod utils {
         if config.utilization_limit_block_borrowing_above_pct > 100 {
             msg!("Utilization limit to block borrows above cannot be bigger than 100%");
             return err!(LendingError::InvalidConfig);
+        }
+
+       
+       
+       
+        if config.rewards_amount_per_slot > 0 && !market.is_reserve_rewards_enabled() {
+            msg!(
+                "WARNING: rewards_amount_per_slot={} is set but the market has reserve rewards \
+                 disabled (reserve_rewards_max_apr_pct == 0); RPS will be ignored on refresh \
+                 until rewards are enabled at the market level",
+                config.rewards_amount_per_slot,
+            );
         }
 
         config.borrow_rate_curve.validate()?;

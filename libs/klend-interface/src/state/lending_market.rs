@@ -32,7 +32,6 @@ pub struct LendingMarket {
     pub reserved1: [u8; 8],
     pub elevation_groups: [ElevationGroup; 32],
     pub elevation_group_padding: [u64; 90],
-    /// Min net value in obligation (scaled fraction).
     pub min_net_value_in_obligation_sf: PodU128,
     pub min_value_skip_liquidation_ltv_checks: u64,
     pub name: [u8; 32],
@@ -54,7 +53,9 @@ pub struct LendingMarket {
     pub obligation_borrow_rollover_configuration_enabled: u8,
     pub obligation_borrow_migration_to_fixed_execution_enabled: u8,
     pub withdraw_ticket_cancellation_enabled: u8,
-    pub padding2: [u8; 3],
+    /// Cap (in percent) on reserve rewards distribution APR
+    pub reserve_rewards_max_apr_pct: u8,
+    pub padding2: [u8; 2],
     pub min_withdraw_queued_liquidity_value: u64,
     pub fixed_term_rollover_window_duration_seconds: u64,
     pub open_term_rollover_window_duration_seconds: u64,

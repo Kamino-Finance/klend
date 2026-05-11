@@ -152,6 +152,7 @@ pub enum UpdateConfigMode {
     UpdateDebtTermSeconds = 55,
     UpdateEarlyRepayRemainingInterestPct = 56,
     UpdateReserveEmergencyMode = 57,
+    UpdateRewardsAmountPerSlot = 58,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]
@@ -261,6 +262,7 @@ pub enum UpdateLendingMarketMode {
     UpdateWithdrawTicketCancellationEnabled = 41,
     UpdatePermissioningAuthority = 42,
     UpdatePermissionedOps = 43,
+    UpdateReserveRewardsMaxAprPct = 44,
 }
 
 #[cfg(feature = "serde")]
