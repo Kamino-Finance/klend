@@ -39,12 +39,20 @@ pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) ->
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);
 
+    lending_operations::refresh_reserve(
+        reserve,
+        &clock,
+        None,
+        lending_market.referral_fee_bps,
+        lending_market.reserve_rewards_max_apr_pct,
+    )?;
+
+   
     let initial_reserve_token_balance = token_interface::accessor::amount(
         &ctx.accounts.reserve_liquidity_supply.to_account_info(),
     )?;
     let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
 
-    lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
     let withdraw_liquidity_amount = lending_operations::redeem_reserve_collateral(
         reserve,
         collateral_amount,

@@ -92,6 +92,12 @@ pub mod kamino_lending {
         handler_seed_deposit_on_init_reserve::process(ctx)
     }
 
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn topup_reserve_rewards(ctx: Context<TopupReserveRewards>, amount: u64) -> Result<()> {
+        handler_topup_reserve_rewards::process(ctx, amount)
+    }
+
     #[deprecated(
         since = "1.8.0",
         note = "Please use `_v2` variant of the handler instead"
@@ -930,6 +936,8 @@ pub enum LendingError {
     OnlyComputeBudgetCompanionIxsAllowed,
     #[msg("Required permissioning account is missing")]
     MissingPermissioner,
+    #[msg("Reserve rewards are disabled on this market (reserve_rewards_max_apr_pct is 0)")]
+    ReserveRewardsDisabled,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

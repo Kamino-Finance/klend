@@ -172,6 +172,8 @@ pub struct LiquidateAndRedeemResult {
     pub withdraw_collateral_amount: u64,
 
     pub total_withdraw_liquidity_amount: Option<(u64, u64)>,
+
+    pub liquidation_reason: LiquidationReason,
 }
 
 pub struct LiquidationCheckInputs<'l> {

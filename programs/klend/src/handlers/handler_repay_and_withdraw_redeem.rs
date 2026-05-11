@@ -107,6 +107,7 @@ fn process_impl(
                 &clock,
                 None,
                 lending_market.referral_fee_bps,
+                lending_market.reserve_rewards_max_apr_pct,
             )?;
         }
 
@@ -198,6 +199,7 @@ fn process_impl(
                 &clock,
                 None,
                 lending_market.referral_fee_bps,
+                lending_market.reserve_rewards_max_apr_pct,
             )?;
         }
 

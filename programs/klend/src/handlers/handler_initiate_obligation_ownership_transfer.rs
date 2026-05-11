@@ -11,9 +11,6 @@ use crate::{
 
 
 
-
-
-
 pub fn process(ctx: Context<InitiateObligationOwnershipTransfer>, new_owner: Pubkey) -> Result<()> {
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let clock = &Clock::get()?;

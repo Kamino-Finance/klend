@@ -46,7 +46,13 @@ pub fn process(
     );
 
     let clock = Clock::get()?;
-    lending_operations::refresh_reserve(reserve, &clock, None, market.referral_fee_bps)?;
+    lending_operations::refresh_reserve(
+        reserve,
+        &clock,
+        None,
+        market.referral_fee_bps,
+        market.reserve_rewards_max_apr_pct,
+    )?;
 
     lending_operations::update_reserve_config(reserve, mode, value, &clock)?;
 

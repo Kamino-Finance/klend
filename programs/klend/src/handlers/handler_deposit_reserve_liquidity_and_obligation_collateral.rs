@@ -90,6 +90,15 @@ pub(super) fn process_impl(
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);
 
+   
+    lending_operations::refresh_reserve(
+        reserve,
+        &clock,
+        None,
+        lending_market.referral_fee_bps,
+        lending_market.reserve_rewards_max_apr_pct,
+    )?;
+
     let initial_reserve_token_balance =
         token_interface::accessor::amount(&accounts.reserve_liquidity_supply.to_account_info())?;
     let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
@@ -98,7 +107,14 @@ pub(super) fn process_impl(
         collateral_amount,
     } = lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
 
-    lending_operations::refresh_reserve(reserve, &clock, None, lending_market.referral_fee_bps)?;
+   
+    lending_operations::refresh_reserve(
+        reserve,
+        &clock,
+        None,
+        lending_market.referral_fee_bps,
+        lending_market.reserve_rewards_max_apr_pct,
+    )?;
 
     lending_operations::deposit_obligation_collateral(
         lending_market,

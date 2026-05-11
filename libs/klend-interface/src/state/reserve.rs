@@ -24,7 +24,7 @@ pub struct Reserve {
     pub collateral: ReserveCollateral,
     pub reserve_collateral_padding: [u64; 150],
     pub config: ReserveConfig,
-    pub config_padding: [u64; 114],
+    pub config_padding: [u64; 113],
     pub borrowed_amount_outside_elevation_group: u64,
     pub borrowed_amounts_against_this_reserve_in_elevation_groups: [u64; 32],
     pub withdraw_queue: WithdrawQueue,
@@ -141,7 +141,9 @@ pub struct ReserveLiquidity {
     /// Referral rate (scaled fraction).
     pub absolute_referral_rate_sf: PodU128,
     pub token_program: Pubkey,
-    pub padding2: [u64; 51],
+    /// Reserve rewards budget remaining for distribution
+    pub rewards_amount_available: u64,
+    pub padding2: [u64; 50],
     pub padding3: [PodU128; 32],
 }
 
@@ -206,9 +208,11 @@ pub struct ReserveConfig {
     pub deleveraging_bonus_increase_bps_per_day: u64,
     pub debt_maturity_timestamp: u64,
     pub debt_term_seconds: u64,
+    /// Rewards token amount distributed per slot to depositors
+    pub rewards_amount_per_slot: u64,
 }
 
-const _: () = assert!(core::mem::size_of::<ReserveConfig>() == 936);
+const _: () = assert!(core::mem::size_of::<ReserveConfig>() == 944);
 
 // ---------------------------------------------------------------------------
 // ReserveFees

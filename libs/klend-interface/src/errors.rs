@@ -264,6 +264,7 @@ define_lending_errors! {
     ObligationHasActiveBorrowOrders = 181 => "Obligation has active borrow orders",
     OnlyComputeBudgetCompanionIxsAllowed = 182 => "Only ComputeBudget instructions may accompany this instruction",
     MissingPermissioner = 183 => "Required permissioning account is missing",
+    ReserveRewardsDisabled = 184 => "Reserve rewards are disabled on this market (reserve_rewards_max_apr_pct is 0)",
 }
 
 impl std::error::Error for LendingError {}
@@ -310,7 +311,11 @@ mod tests {
             LendingError::from_error_code(6183),
             Some(LendingError::MissingPermissioner)
         );
-        assert_eq!(LendingError::from_error_code(6184), None);
+        assert_eq!(
+            LendingError::from_error_code(6184),
+            Some(LendingError::ReserveRewardsDisabled)
+        );
+        assert_eq!(LendingError::from_error_code(6185), None);
     }
 
     #[test]
