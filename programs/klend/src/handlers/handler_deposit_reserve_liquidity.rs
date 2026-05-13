@@ -51,7 +51,7 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
         &clock,
         None,
         lending_market.referral_fee_bps,
-        lending_market.reserve_rewards_max_apr_pct,
+        lending_market.reserve_rewards_max_apr_bps,
     )?;
 
     let initial_reserve_token_balance = token_interface::accessor::amount(

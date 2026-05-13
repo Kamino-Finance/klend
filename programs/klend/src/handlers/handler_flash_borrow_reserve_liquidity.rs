@@ -24,7 +24,7 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
         &Clock::get()?,
         None,
         lending_market.referral_fee_bps,
-        lending_market.reserve_rewards_max_apr_pct,
+        lending_market.reserve_rewards_max_apr_bps,
     )?;
 
    

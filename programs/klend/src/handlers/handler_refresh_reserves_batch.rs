@@ -98,7 +98,7 @@ pub fn process(ctx: Context<RefreshReservesBatch>, skip_price_updates: bool) -> 
             clock,
             price_res,
             lending_market.referral_fee_bps,
-            lending_market.reserve_rewards_max_apr_pct,
+            lending_market.reserve_rewards_max_apr_bps,
         )?;
         let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
         lending_operations::refresh_reserve_limit_timestamps(reserve, timestamp);

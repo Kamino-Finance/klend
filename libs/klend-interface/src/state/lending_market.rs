@@ -53,9 +53,9 @@ pub struct LendingMarket {
     pub obligation_borrow_rollover_configuration_enabled: u8,
     pub obligation_borrow_migration_to_fixed_execution_enabled: u8,
     pub withdraw_ticket_cancellation_enabled: u8,
-    /// Cap (in percent) on reserve rewards distribution APR
-    pub reserve_rewards_max_apr_pct: u8,
-    pub padding2: [u8; 2],
+    pub padding2: [u8; 1],
+    /// Cap (in basis points; `FULL_BPS = 10_000` = 100%) on reserve rewards distribution APR
+    pub reserve_rewards_max_apr_bps: u16,
     pub min_withdraw_queued_liquidity_value: u64,
     pub fixed_term_rollover_window_duration_seconds: u64,
     pub open_term_rollover_window_duration_seconds: u64,

@@ -301,10 +301,13 @@ pub fn process(
                 .rendering(renderings::as_permissioned_ops_bitflags)
                 .set(&value)?;
         }
-        UpdateLendingMarketMode::UpdateReserveRewardsMaxAprPct => {
-            config_items::for_named_field!(&mut market.reserve_rewards_max_apr_pct)
-                .validating(validations::check_valid_pct)
+        UpdateLendingMarketMode::UpdateReserveRewardsMaxAprBps => {
+            config_items::for_named_field!(&mut market.reserve_rewards_max_apr_bps)
+                .validating(validations::check_valid_bps)
                 .set(&value)?;
+        }
+        UpdateLendingMarketMode::DeprecatedUpdateReserveRewardsMaxAprPct => {
+            panic!("Deprecated field")
         }
     }
 

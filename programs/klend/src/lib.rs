@@ -936,7 +936,7 @@ pub enum LendingError {
     OnlyComputeBudgetCompanionIxsAllowed,
     #[msg("Required permissioning account is missing")]
     MissingPermissioner,
-    #[msg("Reserve rewards are disabled on this market (reserve_rewards_max_apr_pct is 0)")]
+    #[msg("Reserve rewards are disabled on this market (reserve_rewards_max_apr_bps is 0)")]
     ReserveRewardsDisabled,
 }
 

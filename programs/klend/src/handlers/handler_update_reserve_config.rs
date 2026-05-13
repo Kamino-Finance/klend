@@ -51,7 +51,7 @@ pub fn process(
         &clock,
         None,
         market.referral_fee_bps,
-        market.reserve_rewards_max_apr_pct,
+        market.reserve_rewards_max_apr_bps,
     )?;
 
     lending_operations::update_reserve_config(reserve, mode, value, &clock)?;
