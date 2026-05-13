@@ -30,7 +30,7 @@ pub fn process(ctx: Context<TopupReserveRewards>, amount: u64) -> Result<()> {
         &clock,
         None,
         market.referral_fee_bps,
-        market.reserve_rewards_max_apr_pct,
+        market.reserve_rewards_max_apr_bps,
     )?;
 
     let initial_vault_balance = token_interface::accessor::amount(

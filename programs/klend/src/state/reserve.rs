@@ -25,7 +25,7 @@ use crate::{
     state::{DepositLiquidityResult, LastUpdate, TokenInfo},
     utils::{
         accounts::default_array, borrow_rate_curve::BorrowRateCurve, ten_pow, BigFraction,
-        Fraction, FRACTION_ONE_SCALED, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION,
+        Fraction, FRACTION_ONE_SCALED, FULL_BPS, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION,
         RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
     },
     BorrowSize, CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult,
@@ -573,10 +573,10 @@ impl Reserve {
 
 
 
-    pub fn distribute_rewards(&mut self, current_slot: Slot, max_apr_pct: u8) -> Result<u64> {
+    pub fn distribute_rewards(&mut self, current_slot: Slot, max_apr_bps: u16) -> Result<u64> {
         let slots_elapsed = self.last_update.slots_elapsed(current_slot)?;
         if slots_elapsed == 0
-            || max_apr_pct == 0
+            || max_apr_bps == 0
             || self.config.rewards_amount_per_slot == 0
             || self.liquidity.rewards_amount_available == 0
             || self.collateral.mint_total_supply == 0
@@ -596,9 +596,9 @@ impl Reserve {
        
         let total_supply_u128: u128 = self.liquidity.total_supply().to_floor();
         let apr_cap_numerator = total_supply_u128
-            .saturating_mul(u128::from(max_apr_pct))
+            .saturating_mul(u128::from(max_apr_bps))
             .saturating_mul(u128::from(slots_elapsed));
-        let apr_cap_denominator = 100u128 * u128::from(SLOTS_PER_YEAR);
+        let apr_cap_denominator = u128::from(FULL_BPS) * u128::from(SLOTS_PER_YEAR);
         let apr_cap_u128 = apr_cap_numerator / apr_cap_denominator;
 
         let to_distribute_u128 = raw_distribution

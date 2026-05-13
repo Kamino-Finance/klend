@@ -262,7 +262,8 @@ pub enum UpdateLendingMarketMode {
     UpdateWithdrawTicketCancellationEnabled = 41,
     UpdatePermissioningAuthority = 42,
     UpdatePermissionedOps = 43,
-    UpdateReserveRewardsMaxAprPct = 44,
+    DeprecatedUpdateReserveRewardsMaxAprPct = 44,
+    UpdateReserveRewardsMaxAprBps = 45,
 }
 
 #[cfg(feature = "serde")]
@@ -296,6 +297,7 @@ pub mod serde_iter {
                 *self,
                 UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints
                     | UpdateLendingMarketMode::DeprecatedUpdateGlobalUnhealthyBorrow
+                    | UpdateLendingMarketMode::DeprecatedUpdateReserveRewardsMaxAprPct
             )
         }
 

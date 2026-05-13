@@ -216,18 +216,18 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub withdraw_ticket_cancellation_enabled: u8,
 
-
-
-
-
-    pub reserve_rewards_max_apr_pct: u8,
-
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding2: [u8; 2],
+    pub padding2: [u8; 1],
+
+
+
+
+
+    pub reserve_rewards_max_apr_bps: u16,
 
 
 
@@ -349,8 +349,8 @@ impl Default for LendingMarket {
             min_partial_rollover_value: 0,
             permissioning_authority: Pubkey::default(),
             permissioned_ops: 0,
-            reserve_rewards_max_apr_pct: 0,
             padding2: default_array(),
+            reserve_rewards_max_apr_bps: 0,
             padding1: default_array(),
         }
     }
@@ -536,7 +536,7 @@ impl LendingMarket {
 
 
     pub fn is_reserve_rewards_enabled(&self) -> bool {
-        self.reserve_rewards_max_apr_pct > 0
+        self.reserve_rewards_max_apr_bps > 0
     }
 }
 

@@ -44,7 +44,7 @@ pub fn refresh_reserve(
     clock: &Clock,
     price: Option<GetPriceResult>,
     referral_fee_bps: u16,
-    reserve_rewards_max_apr_pct: u8,
+    reserve_rewards_max_apr_bps: u16,
 ) -> Result<()> {
     let slot = clock.slot;
 
@@ -52,7 +52,7 @@ pub fn refresh_reserve(
     reserve.accrue_interest(slot, referral_fee_bps)?;
 
    
-    reserve.distribute_rewards(slot, reserve_rewards_max_apr_pct)?;
+    reserve.distribute_rewards(slot, reserve_rewards_max_apr_bps)?;
 
    
     let price_status = if reserve.config.is_emergency_mode() {
@@ -2114,7 +2114,7 @@ where
             clock,
             None,
             lending_market.referral_fee_bps,
-            lending_market.reserve_rewards_max_apr_pct,
+            lending_market.reserve_rewards_max_apr_bps,
         )?;
         let redeem_collateral_options = RedeemCollateralOptions::resolve(liquidation_reason);
         let max_redeemable_collateral = if redeem_collateral_options.use_withdraw_queue {
@@ -4451,7 +4451,7 @@ pub mod utils {
         if config.rewards_amount_per_slot > 0 && !market.is_reserve_rewards_enabled() {
             msg!(
                 "WARNING: rewards_amount_per_slot={} is set but the market has reserve rewards \
-                 disabled (reserve_rewards_max_apr_pct == 0); RPS will be ignored on refresh \
+                 disabled (reserve_rewards_max_apr_bps == 0); RPS will be ignored on refresh \
                  until rewards are enabled at the market level",
                 config.rewards_amount_per_slot,
             );

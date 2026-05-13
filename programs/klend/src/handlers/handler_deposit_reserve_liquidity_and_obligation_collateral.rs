@@ -96,7 +96,7 @@ pub(super) fn process_impl(
         &clock,
         None,
         lending_market.referral_fee_bps,
-        lending_market.reserve_rewards_max_apr_pct,
+        lending_market.reserve_rewards_max_apr_bps,
     )?;
 
     let initial_reserve_token_balance =
@@ -113,7 +113,7 @@ pub(super) fn process_impl(
         &clock,
         None,
         lending_market.referral_fee_bps,
-        lending_market.reserve_rewards_max_apr_pct,
+        lending_market.reserve_rewards_max_apr_bps,
     )?;
 
     lending_operations::deposit_obligation_collateral(
