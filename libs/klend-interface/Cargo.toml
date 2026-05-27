@@ -1,6 +1,6 @@
 [package]
 name = "klend-interface"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.86.0"
 description = "Instruction builders for Kamino Lending (klend) — no anchor-lang dependency"
@@ -17,6 +17,7 @@ exclude = ["tests/"]
 [dependencies]
 solana-pubkey = { version = "2.1", features = ["borsh", "curve25519", "bytemuck"] }
 solana-instruction = "2.1"
+bitflags = "2.9.4"
 borsh = { version = "0.10.3", features = ["const-generics"] }
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 fixed = "1"

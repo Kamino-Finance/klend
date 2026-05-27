@@ -24,7 +24,7 @@ pub struct Reserve {
     pub collateral: ReserveCollateral,
     pub reserve_collateral_padding: [u64; 150],
     pub config: ReserveConfig,
-    pub config_padding: [u64; 113],
+    pub config_padding: [u64; 112],
     pub borrowed_amount_outside_elevation_group: u64,
     pub borrowed_amounts_against_this_reserve_in_elevation_groups: [u64; 32],
     pub withdraw_queue: WithdrawQueue,
@@ -210,9 +210,10 @@ pub struct ReserveConfig {
     pub debt_term_seconds: u64,
     /// Rewards token amount distributed per slot to depositors
     pub rewards_amount_per_slot: u64,
+    pub permissioned_ops: u64,
 }
 
-const _: () = assert!(core::mem::size_of::<ReserveConfig>() == 944);
+const _: () = assert!(core::mem::size_of::<ReserveConfig>() == 952);
 
 // ---------------------------------------------------------------------------
 // ReserveFees

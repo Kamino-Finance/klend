@@ -2,6 +2,7 @@ mod common;
 mod global_config;
 mod lending_market;
 mod obligation;
+mod permissioning;
 mod referral;
 mod reserve;
 mod withdraw_ticket;
@@ -10,6 +11,7 @@ pub use common::*;
 pub use global_config::*;
 pub use lending_market::*;
 pub use obligation::*;
+pub use permissioning::*;
 pub use referral::*;
 pub use reserve::*;
 pub use spl_discriminator::{ArrayDiscriminator, SplDiscriminate};
@@ -89,7 +91,7 @@ mod tests {
     fn verify_account_sizes() {
         assert_eq!(core::mem::size_of::<Obligation>(), 3336);
         assert_eq!(core::mem::size_of::<Reserve>(), 8616);
-        assert_eq!(core::mem::size_of::<ReserveConfig>(), 944);
+        assert_eq!(core::mem::size_of::<ReserveConfig>(), 952);
         assert_eq!(core::mem::size_of::<TokenInfo>(), 384);
         assert_eq!(core::mem::size_of::<LendingMarket>(), 4656);
         assert_eq!(core::mem::size_of::<GlobalConfig>(), 1024);

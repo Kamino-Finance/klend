@@ -2848,6 +2848,12 @@ pub fn update_reserve_config(
             config_items::for_named_field!(&mut reserve.config.rewards_amount_per_slot)
                 .set(value)?;
         }
+        UpdateConfigMode::UpdateReservePermissionedOps => {
+            config_items::for_named_field!(&mut reserve.config.permissioned_ops)
+                .validating(validations::check_valid_permissioned_ops)
+                .rendering(renderings::as_permissioned_ops_bitflags)
+                .set(value)?;
+        }
         UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
         | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
         | UpdateConfigMode::DeprecatedUpdateMultiplierTagBoost
@@ -4187,7 +4193,8 @@ pub mod utils {
             | UpdateConfigMode::UpdateReserveEmergencyMode
             | UpdateConfigMode::UpdateProposerAuthorityLock
             | UpdateConfigMode::UpdateEarlyRepayRemainingInterestPct
-            | UpdateConfigMode::UpdateRewardsAmountPerSlot => false,
+            | UpdateConfigMode::UpdateRewardsAmountPerSlot
+            | UpdateConfigMode::UpdateReservePermissionedOps => false,
         }
     }
 
@@ -4208,6 +4215,18 @@ pub mod utils {
                
                 true
             }
+            UpdateConfigMode::UpdateDisableUsageAsCollateralOutsideEmode
+                if borsh_deserialize::<u8>(value) == 1 =>
+            {
+               
+                true
+            }
+            UpdateConfigMode::UpdateDepositLimit if borsh_deserialize::<u64>(value) == 0 => {
+               
+                true
+            }
+           
+            UpdateConfigMode::UpdateLoanToValuePct if borsh_deserialize::<u8>(value) == 0 => true,
            
             _ => false,
         }
