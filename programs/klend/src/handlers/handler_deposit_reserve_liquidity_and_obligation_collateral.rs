@@ -14,7 +14,10 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     refresh_farms,
     state::{nested_accounts::*, obligation::Obligation, LendingMarket, Reserve},
-    utils::{permissioning::PermissionedOp, seeds, token_transfer},
+    utils::{
+        permissioning::{check_permissions, PermissionedOp},
+        seeds, token_transfer,
+    },
     DepositLiquidityResult, LendingAction, MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
@@ -85,7 +88,12 @@ pub(super) fn process_impl(
     let lending_market_key = accounts.lending_market.key();
     let clock = Clock::get()?;
 
-    lending_market.check_permissions(PermissionedOp::DEPOSIT, lending_market_permission_acct)?;
+    check_permissions(
+        lending_market,
+        &[&reserve],
+        PermissionedOp::DEPOSIT,
+        lending_market_permission_acct,
+    )?;
 
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key, lending_market.bump_seed as u8);

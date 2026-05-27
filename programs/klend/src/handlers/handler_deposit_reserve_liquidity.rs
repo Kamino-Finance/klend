@@ -13,7 +13,10 @@ use crate::{
     gen_signer_seeds,
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
-    utils::{seeds, token_transfer},
+    utils::{
+        permissioning::{check_permissions, PermissionedOp},
+        seeds, token_transfer,
+    },
     DepositLiquidityResult, LendingAction,
 };
 
@@ -37,8 +40,10 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let lending_market = &ctx.accounts.lending_market.load()?;
 
-    lending_market.check_permissions(
-        crate::utils::permissioning::PermissionedOp::DEPOSIT,
+    check_permissions(
+        lending_market,
+        &[&reserve],
+        PermissionedOp::DEPOSIT,
         ctx.remaining_accounts.last(),
     )?;
 

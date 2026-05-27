@@ -56,6 +56,17 @@ pub fn process(
 
     lending_operations::update_reserve_config(reserve, mode, value, &clock)?;
 
+    if mode == UpdateConfigMode::UpdateReservePermissionedOps
+        && reserve.config.permissioned_ops != 0
+        && !market.is_permissioned_market()
+    {
+        msg!(
+            "WARNING: reserve permissioned_ops set to {} but market has no permissioning_authority \
+             - the flag is dormant until UpdatePermissioningAuthority is called on the market",
+            reserve.config.permissioned_ops
+        );
+    }
+
     if skip_config_integrity_validation {
         require!(
             reserve.is_predeposit(market.min_initial_deposit_amount),

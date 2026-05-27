@@ -500,26 +500,12 @@ impl LendingMarket {
         Some(self.term_based_full_liquidation_duration_secs)
     }
 
-    pub fn requires_permission(&self, op: PermissionedOp) -> bool {
-        self.is_permissioned_market() && op.intersects(self.get_permissioned_ops())
-    }
 
-    pub fn check_permissions(
-        &self,
-        ops: PermissionedOp,
-        permissioning_acct: Option<&AccountInfo>,
-    ) -> Result<bool> {
-        if !self.requires_permission(ops) {
-            return Ok(false);
-        }
-        let acct = permissioning_acct.ok_or(error!(LendingError::MissingPermissioner))?;
-        require_keys_eq!(
-            acct.key(),
-            self.permissioning_authority,
-            LendingError::MissingPermissioner
-        );
-        require!(acct.is_signer, ErrorCode::AccountNotSigner);
-        Ok(true)
+
+
+
+    pub(crate) fn is_permissioned_op(&self, op: PermissionedOp) -> bool {
+        op.intersects(self.get_permissioned_ops())
     }
 
     pub fn is_permissioned_market(&self) -> bool {

@@ -12,7 +12,10 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     refresh_farms,
     state::{obligation::Obligation, DepositObligationCollateralAccounts, LendingMarket, Reserve},
-    utils::{permissioning::PermissionedOp, seeds, token_transfer},
+    utils::{
+        permissioning::{check_permissions, PermissionedOp},
+        seeds, token_transfer,
+    },
     MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
@@ -70,7 +73,12 @@ fn process_impl(
     let deposit_reserve = &mut accounts.deposit_reserve.load_mut()?;
     let obligation = &mut accounts.obligation.load_mut()?;
 
-    lending_market.check_permissions(PermissionedOp::DEPOSIT, permission_account)?;
+    check_permissions(
+        lending_market,
+        &[&deposit_reserve],
+        PermissionedOp::DEPOSIT,
+        permission_account,
+    )?;
 
     lending_operations::refresh_reserve(
         deposit_reserve,

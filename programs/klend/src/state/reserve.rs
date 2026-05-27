@@ -19,14 +19,16 @@ use serde;
 use super::serde_bool_u8;
 #[cfg(feature = "serde")]
 use super::serde_reserve_status;
+#[cfg(feature = "serde")]
+use crate::utils::permissioning::bitflags_str;
 use crate::{
     fraction::FractionExtra,
     lending_market::withdrawal_cap_operations::utils::remaining_withdrawal_caps_amount,
     state::{DepositLiquidityResult, LastUpdate, TokenInfo},
     utils::{
-        accounts::default_array, borrow_rate_curve::BorrowRateCurve, ten_pow, BigFraction,
-        Fraction, FRACTION_ONE_SCALED, FULL_BPS, INITIAL_COLLATERAL_RATE, PROGRAM_VERSION,
-        RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
+        accounts::default_array, borrow_rate_curve::BorrowRateCurve, permissioning::PermissionedOp,
+        ten_pow, BigFraction, Fraction, FRACTION_ONE_SCALED, FULL_BPS, INITIAL_COLLATERAL_RATE,
+        PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
     },
     BorrowSize, CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult,
     ReferrerTokenState,
@@ -90,7 +92,7 @@ pub struct Reserve {
     pub config: ReserveConfig,
 
     #[derivative(Debug = "ignore")]
-    pub config_padding: [u64; 113],
+    pub config_padding: [u64; 112],
 
     pub borrowed_amount_outside_elevation_group: u64,
 
@@ -184,6 +186,14 @@ impl Reserve {
             ReserveFarmKind::Collateral => self.farm_collateral,
             ReserveFarmKind::Debt => self.farm_debt,
         }
+    }
+
+    pub fn get_permissioned_ops(&self) -> PermissionedOp {
+        PermissionedOp::from_bits_truncate(self.config.permissioned_ops)
+    }
+
+    pub fn requires_permission(&self, op: PermissionedOp) -> bool {
+        op.intersects(self.get_permissioned_ops())
     }
 
     pub fn token_symbol(&self) -> &str {
@@ -1666,6 +1676,12 @@ pub struct ReserveConfig {
 
 
     pub rewards_amount_per_slot: u64,
+
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "bitflags_str", default))]
+    pub permissioned_ops: u64,
 }
 
 impl ReserveConfig {
@@ -1792,6 +1808,7 @@ impl ReserveConfig {
             debt_term_seconds,
             early_repay_remaining_interest_pct,
             rewards_amount_per_slot: _,
+            permissioned_ops: _,       
         } = source;
 
        
@@ -1841,6 +1858,7 @@ impl ReserveConfig {
             debt_term_seconds: overridden_debt_term_seconds.unwrap_or(debt_term_seconds),
             early_repay_remaining_interest_pct,
             rewards_amount_per_slot: 0,
+            permissioned_ops: 0,       
         }
     }
 }

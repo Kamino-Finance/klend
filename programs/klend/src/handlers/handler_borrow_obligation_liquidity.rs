@@ -14,7 +14,10 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     refresh_farms,
     state::{obligation::Obligation, CalculateBorrowResult, LendingMarket, Reserve},
-    utils::{permissioning::PermissionedOp, seeds, token_transfer, FatAccountLoader},
+    utils::{
+        permissioning::{check_permissions_and_strip, PermissionedOp},
+        seeds, token_transfer, FatAccountLoader,
+    },
     xmsg, BorrowSize, LendingAction, LendingError, ReferrerTokenState, ReserveFarmKind,
 };
 
@@ -69,13 +72,12 @@ pub fn borrow_obligation_liquidity_process_impl<'info>(
     let lending_market_key = accounts.lending_market.key();
     let clock = &Clock::get()?;
 
-    let remaining_accounts =
-        if lending_market.check_permissions(PermissionedOp::BORROW, remaining_accounts.last())? {
-           
-            &remaining_accounts[..remaining_accounts.len() - 1]
-        } else {
-            remaining_accounts
-        };
+    let remaining_accounts = check_permissions_and_strip(
+        lending_market,
+        &[&borrow_reserve],
+        PermissionedOp::BORROW,
+        remaining_accounts,
+    )?;
 
     let authority_signer_seeds =
         gen_signer_seeds!(lending_market_key.as_ref(), lending_market.bump_seed as u8);

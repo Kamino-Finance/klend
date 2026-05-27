@@ -1991,8 +1991,9 @@ dependencies = [
 
 [[package]]
 name = "klend-interface"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "bitflags",
  "borsh 0.10.4",
  "bytemuck",
  "fixed",

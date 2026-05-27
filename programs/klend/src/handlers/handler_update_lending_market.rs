@@ -373,6 +373,7 @@ pub struct UpdateLendingMarket<'info> {
 
 
 
+
 pub fn is_allowed_to_update_lending_market(
     signer: Pubkey,
     lending_market: &AccountLoader<LendingMarket>,
@@ -385,12 +386,26 @@ pub fn is_allowed_to_update_lending_market(
     if market.lending_market_owner == signer {
         return Ok(true);
     }
-    if market.emergency_council == signer &&
-        mode == UpdateLendingMarketMode::UpdateEmergencyMode &&
-       
-        value[0] == true as u8
-    {
-        return Ok(true);
+    if market.emergency_council == signer {
+        match mode {
+           
+            UpdateLendingMarketMode::UpdateEmergencyMode if value[0] == true as u8 => {
+                return Ok(true);
+            }
+           
+            UpdateLendingMarketMode::UpdateBorrowingDisabled if value[0] == true as u8 => {
+                return Ok(true);
+            }
+           
+            UpdateLendingMarketMode::UpdatePriceTriggeredLiquidationDisabled
+                if value[0] == true as u8 =>
+            {
+                return Ok(true);
+            }
+            _ => {
+                return Ok(false);
+            }
+        }
     }
     Ok(false)
 }
