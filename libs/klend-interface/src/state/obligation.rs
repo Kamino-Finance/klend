@@ -1,9 +1,11 @@
 use bytemuck::{Pod, Zeroable};
 use solana_pubkey::Pubkey;
 use spl_discriminator::SplDiscriminate;
-use spl_pod::primitives::PodU128;
 
-use super::common::{BigFractionBytes, LastUpdate};
+use super::{
+    common::{BigFractionBytes, LastUpdate},
+    pod::PodU128,
+};
 
 // ---------------------------------------------------------------------------
 // Obligation

@@ -6,7 +6,7 @@
 //!
 //! # Converting from on-chain `_sf` fields
 //!
-//! The `_sf` fields are stored as `u128` (or [`PodU128`](spl_pod::primitives::PodU128))
+//! The `_sf` fields are stored as `u128` (or [`PodU128`](crate::state::PodU128))
 //! on-chain. To interpret them as a [`Fraction`]:
 //!
 //! ```rust

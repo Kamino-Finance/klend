@@ -2,7 +2,7 @@
 name = "klend-interface"
 version = "0.6.0"
 edition = "2021"
-rust-version = "1.86.0"
+rust-version = "1.81"
 description = "Instruction builders for Kamino Lending (klend) — no anchor-lang dependency"
 authors = ["Kamino Finance"]
 license-file = "LICENSE"
@@ -23,7 +23,6 @@ bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 fixed = "1"
 sha2 = { version = "0.10", default-features = false }
 spl-discriminator = "0.5"
-spl-pod = "0.5"
 solana-account = { version = "2.1", optional = true }
 
 [dev-dependencies]

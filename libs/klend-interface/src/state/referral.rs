@@ -1,7 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use solana_pubkey::Pubkey;
 use spl_discriminator::SplDiscriminate;
-use spl_pod::primitives::PodU128;
+
+use super::pod::PodU128;
 
 /// Per-referrer, per-reserve fee tracking account.
 #[derive(Debug, Clone, Copy, Pod, Zeroable, SplDiscriminate)]
