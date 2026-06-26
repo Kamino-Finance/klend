@@ -1431,12 +1431,34 @@ impl CollateralExchangeRate {
 
 
 
-    pub fn fraction_collateral_to_liquidity(&self, collateral_amount: Fraction) -> Fraction {
+
+    pub fn checked_fraction_collateral_to_liquidity(
+        &self,
+        collateral_amount: Fraction,
+    ) -> Option<Fraction> {
         (BigFraction::from(collateral_amount) * BigFraction::from(self.liquidity)
             / self.collateral_supply)
             .try_into()
-           
-           
+            .ok()
+    }
+
+
+
+
+
+    pub fn saturating_fraction_collateral_to_liquidity(
+        &self,
+        collateral_amount: Fraction,
+    ) -> Fraction {
+        self.checked_fraction_collateral_to_liquidity(collateral_amount)
+            .unwrap_or_else(|| Fraction::from(u64::MAX))
+    }
+
+
+
+
+    pub fn fraction_collateral_to_liquidity(&self, collateral_amount: Fraction) -> Fraction {
+        self.checked_fraction_collateral_to_liquidity(collateral_amount)
             .expect("fraction_collateral_to_liquidity: liquidity_amount overflow")
     }
 
