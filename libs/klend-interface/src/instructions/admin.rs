@@ -1,7 +1,10 @@
 use solana_instruction::Instruction;
 use solana_pubkey::Pubkey;
 
-use crate::{discriminators, types::ReserveConfigCustomizationArgs, util::*, KLEND_PROGRAM_ID};
+use crate::{
+    discriminators, types::ReserveConfigCustomizationArgs, util::*, KLEND_PROGRAM_ID,
+    SYSVAR_INSTRUCTIONS_ID,
+};
 
 // ---------------------------------------------------------------------------
 // clone_reserve_config
@@ -30,6 +33,7 @@ pub fn clone_reserve_config(
             readonly(accounts.target_lending_market),
             readonly(accounts.source_reserve),
             writable(accounts.target_reserve),
+            readonly(SYSVAR_INSTRUCTIONS_ID),
         ],
         data,
     }

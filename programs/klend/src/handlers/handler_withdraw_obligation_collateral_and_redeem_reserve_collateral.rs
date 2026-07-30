@@ -15,7 +15,7 @@ use crate::{
     refresh_farms,
     state::{obligation::Obligation, LendingMarket, Reserve},
     utils::{close_account_loader, seeds, token_transfer},
-    LendingAction, LtvMaxWithdrawalCheck, RedeemCollateralOptions, ReserveFarmKind,
+    xmsg, LendingAction, LtvMaxWithdrawalCheck, RedeemCollateralOptions, ReserveFarmKind,
     WithdrawObligationCollateralAndRedeemReserveCollateralAccounts,
 };
 
@@ -106,13 +106,21 @@ pub(super) fn process_impl(
             accounts.withdraw_reserve.key(),
             ltv_max_withdrawal_check,
         )?;
+       
+        lending_operations::refresh_reserve(
+            reserve,
+            clock,
+            None,
+            lending_market.referral_fee_bps,
+            lending_market.reserve_rewards_max_apr_bps,
+        )?;
         let withdraw_liquidity_amount = lending_operations::redeem_reserve_collateral(
             reserve,
             withdraw_obligation_amount,
             clock,
             RedeemCollateralOptions::REGULAR,
         )?;
-        msg!(
+        xmsg!(
             "pnl: Withdraw obligation collateral {} and redeem reserve collateral {}",
             withdraw_obligation_amount,
             withdraw_liquidity_amount

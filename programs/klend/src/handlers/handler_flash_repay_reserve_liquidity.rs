@@ -6,7 +6,7 @@ use crate::{
     lending_market::{flash_ixs, lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{seeds, token_transfer},
-    LendingAction, ReferrerTokenState,
+    xmsg, LendingAction, ReferrerTokenState,
 };
 
 pub fn process(
@@ -45,7 +45,7 @@ pub fn process(
                 Some(referrer_token_state_loader)
             }
             None => {
-                msg!("No referrer account provided");
+                xmsg!("No referrer account provided");
                 None
             }
         }

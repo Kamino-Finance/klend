@@ -1,13 +1,17 @@
 use std::ops::Deref;
 
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 use anchor_spl::{
     token::Token,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
 
 use crate::{
-    gen_reserve_token_account_signer_seeds,
+    check_advance_nonce_ix_if_needed, gen_reserve_token_account_signer_seeds,
     lending_market::lending_operations,
     state::{
         reserve::{
@@ -16,11 +20,13 @@ use crate::{
         },
         LendingMarket, Reserve, ReserveConfig,
     },
-    utils::{account_ops, constraints, seeds, spltoken, token_transfer},
+    utils::{account_ops, constraints, seeds, spltoken, token_transfer, COLLATERAL_MINT_DECIMALS},
     LendingError, ReserveStatus,
 };
 
 pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Result<()> {
+    check_advance_nonce_ix_if_needed!(ctx.accounts);
+
     let clock = &Clock::get()?;
     let reserve = &mut ctx.accounts.reserve.load_init()?;
     let market = &ctx.accounts.lending_market.load()?;
@@ -154,7 +160,7 @@ pub struct InitReserve<'info> {
         seeds = [seeds::RESERVE_COLL_MINT, reserve.key().as_ref()],
         bump,
         payer = signer,
-        mint::decimals = 6,
+        mint::decimals = COLLATERAL_MINT_DECIMALS,
         mint::authority = lending_market_authority,
         mint::token_program = collateral_token_program,
     )]
@@ -181,4 +187,8 @@ pub struct InitReserve<'info> {
     pub liquidity_token_program: Interface<'info, TokenInterface>,
     pub collateral_token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

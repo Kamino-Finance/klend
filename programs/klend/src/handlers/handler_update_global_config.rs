@@ -1,10 +1,16 @@
 use std::fmt::Debug;
 
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
 use crate::{
+    lending_market::ix_utils,
     state::{GlobalConfig, UpdateGlobalConfigMode},
     utils::seeds,
+    xmsg,
 };
 
 pub fn process(
@@ -12,9 +18,11 @@ pub fn process(
     mode: UpdateGlobalConfigMode,
     value: &[u8],
 ) -> Result<()> {
+    ix_utils::check_no_advance_nonce_ix_within_tx(&ctx.accounts.instruction_sysvar_account)?;
+
     let global_config = &mut ctx.accounts.global_config.load_mut()?;
 
-    msg!(
+    xmsg!(
         "Updating global config with mode {:?} and value {:?}",
         mode,
         &value
@@ -35,4 +43,8 @@ pub struct UpdateGlobalConfig<'info> {
         bump,
         has_one = global_admin)]
     pub global_config: AccountLoader<'info, GlobalConfig>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

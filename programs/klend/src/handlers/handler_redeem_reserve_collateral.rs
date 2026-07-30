@@ -13,7 +13,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, RedeemReserveCollateralAccounts, Reserve},
     utils::{seeds, token_transfer},
-    LendingAction, RedeemCollateralOptions,
+    xmsg, LendingAction, RedeemCollateralOptions,
 };
 
 pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) -> Result<()> {
@@ -60,7 +60,7 @@ pub fn process(ctx: Context<RedeemReserveCollateral>, collateral_amount: u64) ->
         RedeemCollateralOptions::REGULAR,
     )?;
 
-    msg!(
+    xmsg!(
         "pnl: Redeeming reserve collateral {}",
         withdraw_liquidity_amount
     );

@@ -6,6 +6,7 @@ use crate::{
     lending_market::{lending_checks, lending_operations},
     state::{LendingMarket, Reserve},
     utils::{constraints, seeds, token_transfer},
+    xmsg,
 };
 
 pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
@@ -26,7 +27,7 @@ pub fn process(ctx: Context<RedeemFees>) -> Result<()> {
 
     let withdraw_amount = lending_operations::redeem_fees(reserve, clock.slot)?;
 
-    msg!("Redeeming fees: {}", withdraw_amount);
+    xmsg!("Redeeming fees: {}", withdraw_amount);
 
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),

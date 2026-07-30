@@ -7,7 +7,7 @@ use anchor_lang::{
 use crate::{
     lending_market::{lending_checks, lending_operations},
     state::Obligation,
-    LendingError,
+    xmsg, LendingError,
 };
 
 
@@ -17,9 +17,7 @@ pub fn process(ctx: Context<AcceptObligationOwnership>) -> Result<()> {
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let clock = &Clock::get()?;
 
-    lending_operations::clear_expired_borrow_order_on_initiating_obligation_ownership_transfer(
-        obligation, clock,
-    )?;
+    lending_operations::clear_expired_borrow_orders_for_ownership_transfer(obligation, clock)?;
     lending_checks::obligation_ownership_transfer_precondition_checks(
         &ctx.accounts.instruction_sysvar_account,
         obligation,
@@ -28,7 +26,7 @@ pub fn process(ctx: Context<AcceptObligationOwnership>) -> Result<()> {
 
     obligation.accept_ownership()?;
 
-    msg!(
+    xmsg!(
         "Completed ownership transfer for obligation {} to new owner {}",
         ctx.accounts.obligation.key(),
         ctx.accounts.pending_owner.key()

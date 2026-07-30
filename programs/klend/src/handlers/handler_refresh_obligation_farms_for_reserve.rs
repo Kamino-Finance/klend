@@ -6,7 +6,7 @@ use crate::{
     lending_market::{farms_ixs, lending_checks},
     state::{obligation::Obligation, LendingMarket},
     utils::{constraints, seeds, FatAccountLoader},
-    LendingError, Reserve, ReserveFarmKind,
+    xmsg, LendingError, Reserve, ReserveFarmKind,
 };
 
 pub fn process_refresh_obligation_farms_for_reserve(
@@ -38,7 +38,7 @@ pub(crate) fn process_impl_refresh_obligation_farms_for_reserve(
         LendingError::InvalidAccountInput
     );
 
-    msg!("RefreshObligationFarmsForReserve {:?}", farm_kind);
+    xmsg!("RefreshObligationFarmsForReserve {:?}", farm_kind);
     let reserve = &account_ctx.reserve.load()?;
     let reserve_address: Pubkey = *account_ctx.reserve.to_account_info().key;
 
@@ -63,7 +63,7 @@ pub(crate) fn process_impl_refresh_obligation_farms_for_reserve(
         amount_for_obligation(&obligation, &reserve_address, farm_kind)
     };
 
-    msg!(
+    xmsg!(
         "RefreshObligationFarmsForReserve amount {} slot {}",
         amount,
         Clock::get()?.slot,
@@ -77,7 +77,7 @@ pub(crate) fn process_impl_refresh_obligation_farms_for_reserve(
     {
         farms_ixs::cpi_set_stake_delegated(account_ctx, reserve, farm_kind, amount)?;
     } else {
-        msg!("Farm stake is unchanged, skipping update");
+        xmsg!("Farm stake is unchanged, skipping update");
     }
 
     Ok(())

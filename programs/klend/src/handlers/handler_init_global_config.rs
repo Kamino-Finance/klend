@@ -1,6 +1,11 @@
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
 use crate::{
+    lending_market::ix_utils,
     state::GlobalConfig,
     utils::{
         seeds::{self, pda},
@@ -11,6 +16,8 @@ use crate::{
 
 #[cfg(not(feature = "idl-build"))]
 pub fn process(ctx: Context<InitGlobalConfig>) -> Result<()> {
+    ix_utils::check_no_advance_nonce_ix_within_tx(&ctx.accounts.instruction_sysvar_account)?;
+
     let global_config = &mut ctx.accounts.global_config.load_init()?;
     global_config.init(
         ctx.accounts
@@ -52,4 +59,8 @@ pub struct InitGlobalConfig<'info> {
 
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

@@ -1,6 +1,6 @@
 [package]
 name = "klend-interface"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.81"
 description = "Instruction builders for Kamino Lending (klend) — no anchor-lang dependency"
@@ -33,6 +33,7 @@ solana-account = "2.1"
 solana-system-interface = { version = "1.0.0", features = ["bincode"] }
 spl-token = "7"
 spl-associated-token-account = "6"
+more-asserts = "0.3"
 
 [profile.ci]
 inherits = "dev"

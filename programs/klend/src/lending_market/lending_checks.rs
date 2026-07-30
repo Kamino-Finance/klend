@@ -1,7 +1,7 @@
 use anchor_lang::{
     accounts::account_loader::AccountLoader,
     err, error,
-    prelude::{msg, AccountInfo, Context, Pubkey},
+    prelude::{AccountInfo, Context, Pubkey},
     require, require_eq, require_gt, require_gte, Key, Result, ToAccountInfo,
 };
 
@@ -18,13 +18,13 @@ use crate::{
         constraints, consts::COMPUTE_BUDGET_PROGRAM_ID, seeds::BASE_SEED_REFERRER_TOKEN_STATE,
         FatAccountLoader, PROGRAM_VERSION,
     },
-    FixedTermRolloverResult, LendingAction, LendingError, Obligation, ReferrerTokenState, Reserve,
-    ReserveStatus,
+    xmsg, FixedTermRolloverResult, LendingAction, LendingError, Obligation, ReferrerTokenState,
+    Reserve, ReserveStatus,
 };
 
 pub fn check_reserve_emergency_mode(reserve: &Reserve) -> Result<()> {
     if reserve.config.is_emergency_mode() {
-        msg!("Reserve is in emergency mode");
+        xmsg!("Reserve is in emergency mode");
         return err!(LendingError::ReserveEmergencyMode);
     }
     Ok(())
@@ -32,12 +32,12 @@ pub fn check_reserve_emergency_mode(reserve: &Reserve) -> Result<()> {
 
 pub fn check_reserve_status_and_version(reserve: &Reserve) -> Result<()> {
     if reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is not active");
+        xmsg!("Reserve is not active");
         return err!(LendingError::ReserveObsolete);
     }
 
     if reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
@@ -48,7 +48,7 @@ pub fn borrow_obligation_liquidity_checks(accounts: &BorrowObligationLiquidity) 
     let borrow_reserve = &accounts.borrow_reserve.load()?;
 
     if borrow_reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
-        msg!(
+        xmsg!(
             "Borrow reserve liquidity supply cannot be used as the destination liquidity provided"
         );
         return err!(LendingError::InvalidAccountInput);
@@ -90,7 +90,7 @@ pub fn enqueue_to_withdraw_checks(accounts: &EnqueueToWithdraw) -> Result<()> {
     let withdraw_reserve = &accounts.reserve.load()?;
 
     if withdraw_reserve.liquidity.supply_vault == accounts.user_destination_liquidity_ta.key() {
-        msg!(
+        xmsg!(
             "Withdraw reserve liquidity supply cannot be used as the destination liquidity account"
         );
         return err!(LendingError::InvalidAccountInput);
@@ -111,7 +111,7 @@ pub fn withdraw_queued_liquidity_checks(accounts: &WithdrawQueuedLiquidity) -> R
     let withdraw_reserve = &accounts.reserve.load()?;
 
     if withdraw_reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
-        msg!(
+        xmsg!(
             "Withdraw reserve liquidity supply cannot be used as the destination liquidity account"
         );
         return err!(LendingError::InvalidAccountInput);
@@ -120,7 +120,7 @@ pub fn withdraw_queued_liquidity_checks(accounts: &WithdrawQueuedLiquidity) -> R
     check_reserve_emergency_mode(withdraw_reserve)?;
 
     if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
@@ -135,7 +135,7 @@ pub fn recover_invalid_ticket_collateral_checks(
     let withdraw_reserve = &accounts.reserve.load()?;
 
     if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
@@ -151,7 +151,7 @@ pub fn deposit_obligation_collateral_checks(
     let deposit_reserve = &accounts.deposit_reserve.load()?;
 
     if deposit_reserve.collateral.supply_vault == accounts.user_source_collateral.key() {
-        msg!("Deposit reserve collateral supply cannot be used as the source collateral provided");
+        xmsg!("Deposit reserve collateral supply cannot be used as the source collateral provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
@@ -167,11 +167,11 @@ pub fn deposit_reserve_liquidity_checks(
     let reserve = &accounts.reserve.load()?;
 
     if reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
-        msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
+        xmsg!("Reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
     if reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
-        msg!("Reserve collateral supply cannot be used as the destination collateral provided");
+        xmsg!("Reserve collateral supply cannot be used as the destination collateral provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
@@ -197,7 +197,7 @@ pub fn deposit_reserve_liquidity_and_obligation_collateral_checks(
     let reserve = &accounts.reserve.load()?;
 
     if reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
-        msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
+        xmsg!("Reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
@@ -219,11 +219,11 @@ pub fn liquidate_obligation_checks(
     let withdraw_reserve = accounts.withdraw_reserve.load()?;
 
     if repay_reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
-        msg!("Repay reserve liquidity supply cannot be used as the source liquidity provided");
+        xmsg!("Repay reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
     if repay_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
-        msg!(
+        xmsg!(
             "Repay reserve collateral supply cannot be used as the destination collateral provided"
         );
         return err!(LendingError::InvalidAccountInput);
@@ -232,23 +232,23 @@ pub fn liquidate_obligation_checks(
     check_reserve_emergency_mode(&repay_reserve)?;
 
     if repay_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Withdraw reserve version does not match the program version");
+        xmsg!("Withdraw reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
     if withdraw_reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
-        msg!("Withdraw reserve liquidity supply cannot be used as the source liquidity provided");
+        xmsg!("Withdraw reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
     if withdraw_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
-        msg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
+        xmsg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
     check_reserve_emergency_mode(&withdraw_reserve)?;
 
     if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Withdraw reserve version does not match the program version");
+        xmsg!("Withdraw reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
@@ -269,19 +269,19 @@ pub fn redeem_reserve_collateral_checks(accounts: &RedeemReserveCollateralAccoun
     let reserve = &accounts.reserve.load()?;
 
     if reserve.collateral.supply_vault == accounts.user_source_collateral.key() {
-        msg!("Reserve collateral supply cannot be used as the source collateral provided");
+        xmsg!("Reserve collateral supply cannot be used as the source collateral provided");
         return err!(LendingError::InvalidAccountInput);
     }
    
     if reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
-        msg!("Reserve liquidity supply cannot be used as the destination liquidity provided");
+        xmsg!("Reserve liquidity supply cannot be used as the destination liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
     check_reserve_emergency_mode(reserve)?;
 
     if reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
@@ -301,12 +301,12 @@ pub fn withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
     check_reserve_emergency_mode(&withdraw_reserve)?;
 
     if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
     if withdraw_reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
-        msg!("Reserve liquidity supply cannot be used as the destination liquidity provided");
+        xmsg!("Reserve liquidity supply cannot be used as the destination liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
@@ -322,14 +322,14 @@ pub fn repay_obligation_liquidity_checks(accounts: &RepayObligationLiquidity) ->
     let repay_reserve = accounts.repay_reserve.load()?;
 
     if repay_reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
-        msg!("Repay reserve liquidity supply cannot be used as the source liquidity provided");
+        xmsg!("Repay reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
     check_reserve_emergency_mode(&repay_reserve)?;
 
     if repay_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
@@ -349,12 +349,12 @@ pub fn withdraw_obligation_collateral_checks(
     check_reserve_emergency_mode(&withdraw_reserve)?;
 
     if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
    
     if withdraw_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
-        msg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
+        xmsg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
@@ -373,24 +373,24 @@ pub fn flash_borrow_reserve_liquidity_checks(
     check_reserve_emergency_mode(&reserve)?;
 
     if reserve.liquidity.supply_vault == ctx.accounts.user_destination_liquidity.key() {
-        msg!(
+        xmsg!(
             "Borrow reserve liquidity supply cannot be used as the destination liquidity provided"
         );
         return err!(LendingError::InvalidAccountInput);
     }
 
     if reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
     if reserve.config.status() == ReserveStatus::Obsolete {
-        msg!("Reserve is obsolete");
+        xmsg!("Reserve is obsolete");
         return err!(LendingError::ReserveObsolete);
     }
 
     if reserve.config.fees.flash_loan_fee_sf == u64::MAX {
-        msg!("Flash loans are disabled for this reserve");
+        xmsg!("Flash loans are disabled for this reserve");
         return err!(LendingError::FlashLoansDisabled);
     }
 
@@ -411,7 +411,7 @@ pub fn flash_repay_reserve_liquidity_checks(
     check_reserve_emergency_mode(&reserve)?;
 
     if reserve.liquidity.supply_vault == ctx.accounts.user_source_liquidity.key() {
-        msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
+        xmsg!("Reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
@@ -427,7 +427,7 @@ pub fn refresh_obligation_farms_for_reserve_checks(
         let obligation = obligation_account.load()?;
 
         if obligation.lending_market != accounts.lending_market.key() {
-            msg!("Obligation lending market does not match the lending market provided");
+            xmsg!("Obligation lending market does not match the lending market provided");
             return Err(error!(LendingError::InvalidAccountInput)
                 .with_pubkeys((obligation.lending_market, accounts.lending_market.key())));
         }
@@ -516,7 +516,7 @@ pub fn topup_reserve_rewards_checks(accounts: &TopupReserveRewards) -> Result<()
     let reserve = &accounts.reserve.load()?;
 
     if reserve.liquidity.supply_vault == accounts.source_liquidity.key() {
-        msg!("Reserve liquidity supply cannot be used as the source liquidity provided");
+        xmsg!("Reserve liquidity supply cannot be used as the source liquidity provided");
         return err!(LendingError::InvalidAccountInput);
     }
 
@@ -658,7 +658,7 @@ pub fn cancel_withdraw_ticket_checks(accounts: &CancelWithdrawTicket) -> Result<
     let reserve = &accounts.reserve.load()?;
 
     if reserve.version != PROGRAM_VERSION as u64 {
-        msg!("Reserve version does not match the program version");
+        xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
 
@@ -667,7 +667,6 @@ pub fn cancel_withdraw_ticket_checks(accounts: &CancelWithdrawTicket) -> Result<
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn post_cancel_withdraw_ticket_balance_checks(
     final_owner_queued_collateral_vault_balance: u64,
     final_user_destination_collateral_balance: u64,
@@ -895,7 +894,7 @@ pub fn is_only_with_compute_budget_ixs_check(
     for (ix_index, ix_result) in ix_utils::IxIterator::new_at(0, &instruction_loader).enumerate() {
         let ix = ix_result?;
         if ix_index != current_index && ix.program_id != COMPUTE_BUDGET_PROGRAM_ID {
-            msg!(
+            xmsg!(
                 "Transaction contains non-ComputeBudget instruction at index {}, only ComputeBudget instructions may accompany this ix",
                 ix_index
             );
@@ -929,13 +928,9 @@ pub fn obligation_ownership_transfer_precondition_checks(
 }
 
 pub fn obligation_has_no_active_borrow_orders_check(obligation: &Obligation) -> Result<()> {
-    if obligation.borrow_order != Default::default() {
-        msg!(
-            "Obligation has active borrow order with remaining debt amount: {}",
-            obligation.borrow_order.remaining_debt_amount
-        );
-        return err!(LendingError::ObligationHasActiveBorrowOrders);
-    }
-
+    require!(
+        obligation.active_borrow_orders().next().is_none(),
+        LendingError::ObligationHasActiveBorrowOrders,
+    );
     Ok(())
 }

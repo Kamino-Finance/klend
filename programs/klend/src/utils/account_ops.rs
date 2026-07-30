@@ -3,9 +3,9 @@ use anchor_spl::{
     token_2022::spl_token_2022::extension::ExtensionType,
     token_interface::{Mint, TokenInterface},
 };
-use solana_program::msg;
 
 use super::{accounts, spltoken};
+use crate::xmsg;
 
 pub fn close_account_loader<'info, T: ZeroCopy + Owner>(
     close_account: bool,
@@ -13,7 +13,7 @@ pub fn close_account_loader<'info, T: ZeroCopy + Owner>(
     account_to_be_closed: &AccountLoader<'info, T>,
 ) -> Result<()> {
     if close_account {
-        msg!("Closing account");
+        xmsg!("Closing account");
         account_to_be_closed.close(owner.to_account_info().clone())?;
     }
 

@@ -63,7 +63,7 @@ pub fn borrow_obligation_liquidity_process_impl<'info>(
     remaining_accounts: &[AccountInfo<'info>],
     borrow_size: BorrowSize,
 ) -> Result<u64> {
-    msg!("borrow_size {:?}", borrow_size);
+    xmsg!("borrow_size {:?}", borrow_size);
     lending_checks::borrow_obligation_liquidity_checks(accounts)?;
 
     let borrow_reserve = &mut accounts.borrow_reserve.load_mut()?;

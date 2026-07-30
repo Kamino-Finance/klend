@@ -5,7 +5,7 @@ use anchor_lang::{
 };
 
 use crate::{
-    check_refresh_ixs,
+    check_advance_nonce_ix_if_needed, check_refresh_ixs,
     handler_refresh_obligation_farms_for_reserve::*,
     lending_market::lending_operations,
     refresh_farms,
@@ -64,6 +64,8 @@ fn process_impl(
     remaining_accounts: &[AccountInfo],
     liquidity_amount: u64,
 ) -> Result<()> {
+    check_advance_nonce_ix_if_needed!(accounts);
+
     let clock = Clock::get()?;
 
     let repay_reserve = &mut accounts.reserve.load_mut()?;
@@ -75,6 +77,7 @@ fn process_impl(
         obligation,
         liquidity_amount,
         clock.slot,
+        u64::try_from(clock.unix_timestamp).unwrap(),
         remaining_accounts.iter().map(|a| {
             FatAccountLoader::try_from(a).expect("Remaining account is not a valid deposit reserve")
         }),

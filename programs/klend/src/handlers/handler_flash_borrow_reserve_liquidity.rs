@@ -19,9 +19,10 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
 
     flash_ixs::flash_borrow_checks(&ctx, liquidity_amount)?;
 
+    let clock = Clock::get()?;
     lending_operations::refresh_reserve(
         reserve,
-        &Clock::get()?,
+        &clock,
         None,
         lending_market.referral_fee_bps,
         lending_market.reserve_rewards_max_apr_bps,
@@ -33,7 +34,11 @@ pub fn process(ctx: Context<FlashBorrowReserveLiquidity>, liquidity_amount: u64)
     )?;
     let initial_reserve_available_liquidity = reserve.total_available_liquidity_amount();
 
-    lending_operations::flash_borrow_reserve_liquidity(reserve, liquidity_amount)?;
+    lending_operations::flash_borrow_reserve_liquidity(
+        reserve,
+        liquidity_amount,
+        u64::try_from(clock.unix_timestamp).unwrap(),
+    )?;
 
     token_transfer::borrow_obligation_liquidity_transfer(
         ctx.accounts.token_program.to_account_info(),

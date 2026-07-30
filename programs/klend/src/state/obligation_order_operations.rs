@@ -6,7 +6,6 @@ use std::{
 use anchor_lang::{err, Result};
 use fixed::prelude::ToFixed;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use solana_program::msg;
 
 use crate::{
     fraction,
@@ -30,6 +29,9 @@ const VALID_DIFF_TO_LIQUIDATION_LTV_RANGE: Range<Fraction> = VALID_USER_LTV_RANG
 
 
 const EXECUTION_BONUS_SANITY_LIMIT: Fraction = fraction!(0.1);
+
+
+
 
 
 #[repr(u8)]
@@ -175,7 +177,7 @@ pub fn check_orders_supported_after_user_operation(obligation: &mut Obligation) 
             .iter()
             .filter(|order| !order.is_supported_by(obligation))
             .collect::<Vec<_>>();
-        msg!(
+        xmsg!(
             "The obligation has orders which have to be cancelled before the operation: {:?}",
             unsupported_orders
         );
@@ -212,13 +214,13 @@ pub fn set_order_on_obligation(
 ) -> Result<()> {
     validate_order(order)?;
     if !order.is_supported_by(obligation) {
-        msg!("Order {:?} not supported by obligation", order);
+        xmsg!("Order {:?} not supported by obligation", order);
         return err!(LendingError::OrderConfigurationNotSupportedByObligation);
     }
 
     let index = usize::from(index);
     if index >= obligation.obligation_orders.len() {
-        msg!(
+        xmsg!(
             "Obligation may have at most {} orders; got index {}",
             obligation.obligation_orders.len(),
             index
@@ -231,11 +233,11 @@ pub fn set_order_on_obligation(
         && order.is_active()
         && !lending_market.is_obligation_order_creation_enabled()
     {
-        msg!("Creation of new obligation orders is disabled by the market's configuration");
+        xmsg!("Creation of new obligation orders is disabled by the market's configuration");
         return err!(LendingError::OrderCreationDisabled);
     }
 
-    msg!(
+    xmsg!(
         "Setting obligation order[{}]; previous: {:?}; new: {:?}",
         index,
         previous_order,
@@ -275,6 +277,14 @@ impl ConditionType {
             | ConditionType::LiquidationLtvCloserThan => true,
         }
     }
+
+
+    pub fn iter_active() -> impl Iterator<Item = Self> {
+        (1..=u8::MAX)
+            .map(ConditionType::try_from)
+            .take_while(|condition_type| condition_type.is_ok())
+            .map(|condition_type| condition_type.expect("above we take only while no error"))
+    }
 }
 
 impl OpportunityType {
@@ -290,7 +300,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
     match ConditionType::try_from(order.condition_type) {
         Ok(ConditionType::DebtCollPriceRatioAbove | ConditionType::DebtCollPriceRatioBelow) => {
             if !VALID_DEBT_COLL_PRICE_RATIO_RANGE.contains(&order.condition_threshold()) {
-                msg!(
+                xmsg!(
                     "Invalid price ratio threshold {}; should be in range [{}; {}]",
                     order.condition_threshold().to_display(),
                     VALID_DEBT_COLL_PRICE_RATIO_RANGE.start().to_display(),
@@ -301,7 +311,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
         }
         Ok(ConditionType::UserLtvAbove | ConditionType::UserLtvBelow) => {
             if !VALID_USER_LTV_RANGE.contains(&order.condition_threshold()) {
-                msg!(
+                xmsg!(
                     "Invalid LTV threshold {}; should be in range [{}; {})",
                     order.condition_threshold().to_display(),
                     VALID_USER_LTV_RANGE.start.to_display(),
@@ -312,7 +322,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
         }
         Ok(ConditionType::Always) => {
             if order.condition_threshold() != Fraction::default() {
-                msg!(
+                xmsg!(
                     "An unconditional order should use zeroed condition threshold; got {}",
                     order.condition_threshold().to_display()
                 );
@@ -320,7 +330,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             }
             let bonus_range = order.execution_bonus_rate_range();
             if bonus_range.start() != bonus_range.end() {
-                msg!(
+                xmsg!(
                     "An unconditional order should define a constant bonus; got range [{}; {}]",
                     bonus_range.start().to_display(),
                     bonus_range.end().to_display(),
@@ -330,7 +340,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
         }
         Ok(ConditionType::Never) => {
             if order != ObligationOrder::default() {
-                msg!("A void order should be entirely zeroed; got {:?}", order);
+                xmsg!("A void order should be entirely zeroed; got {:?}", order);
                 return err!(LendingError::InvalidOrderConfiguration);
             }
            
@@ -338,7 +348,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
         }
         Ok(ConditionType::LiquidationLtvCloserThan) => {
             if !VALID_DIFF_TO_LIQUIDATION_LTV_RANGE.contains(&order.condition_threshold()) {
-                msg!(
+                xmsg!(
                     "Invalid difference to liquidation LTV {}; should be in range [{}; {})",
                     order.condition_threshold().to_display(),
                     VALID_USER_LTV_RANGE.start.to_display(),
@@ -348,7 +358,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             }
         }
         Err(error) => {
-            msg!(
+            xmsg!(
                 "Invalid order condition type {}: {:?}",
                 order.condition_type,
                 error
@@ -359,22 +369,22 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
     match OpportunityType::try_from(order.opportunity_type) {
         Ok(OpportunityType::DeleverageSingleDebtAmount) => {
             if order.opportunity_parameter().is_zero() {
-                msg!("Single debt deleveraging opportunity amount cannot be 0");
+                xmsg!("Single debt deleveraging opportunity amount cannot be 0");
                 return err!(LendingError::InvalidOrderConfiguration);
             }
             if order.opportunity_parameter() == Fraction::MAX {
-                msg!("Single debt deleveraging opportunity amount must be finite (use DeleverageAllDebt for repaying all debt)");
+                xmsg!("Single debt deleveraging opportunity amount must be finite (use DeleverageAllDebt for repaying all debt)");
                 return err!(LendingError::InvalidOrderConfiguration);
             }
         }
         Ok(OpportunityType::DeleverageAllDebt) => {
             if order.opportunity_parameter() != Fraction::MAX {
-                msg!("Deleveraging all debt opportunity must allow repaying the entire amount (Fraction::MAX)");
+                xmsg!("Deleveraging all debt opportunity must allow repaying the entire amount (Fraction::MAX)");
                 return err!(LendingError::InvalidOrderConfiguration);
             }
         }
         Err(error) => {
-            msg!(
+            xmsg!(
                 "Invalid order opportunity type {}: {:?}",
                 order.opportunity_type,
                 error
@@ -384,7 +394,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
     }
     let execution_bonus_rate_range = order.execution_bonus_rate_range();
     if execution_bonus_rate_range.start() > execution_bonus_rate_range.end() {
-        msg!(
+        xmsg!(
             "Minimum execution bonus {} higher than maximum {}",
             execution_bonus_rate_range.start().to_display(),
             execution_bonus_rate_range.end().to_display(),
@@ -392,7 +402,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
         return err!(LendingError::InvalidOrderConfiguration);
     }
     if execution_bonus_rate_range.end() > &EXECUTION_BONUS_SANITY_LIMIT {
-        msg!(
+        xmsg!(
             "Maximum execution bonus {} higher than sanity limit {}",
             execution_bonus_rate_range.end().to_display(),
             EXECUTION_BONUS_SANITY_LIMIT.to_display()
@@ -400,7 +410,7 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
         return err!(LendingError::InvalidOrderConfiguration);
     }
     if !is_default_array(&order.padding1) || !is_default_array(&order.padding2) {
-        msg!("Padding fields must be zeroed");
+        xmsg!("Padding fields must be zeroed");
         return err!(LendingError::InvalidOrderConfiguration);
     }
     Ok(())

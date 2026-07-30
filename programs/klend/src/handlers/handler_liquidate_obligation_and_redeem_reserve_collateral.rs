@@ -128,7 +128,7 @@ fn process_impl(
             if cfg!(feature = "staging") {
                 Some(max_allowed_ltv_override_percent)
             } else {
-                msg!("Warning! Attempting to set an ltv override outside the staging program");
+                xmsg!("Warning! Attempting to set an ltv override outside the staging program");
                 None
             }
         } else {

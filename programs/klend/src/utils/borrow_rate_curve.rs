@@ -12,7 +12,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{
     utils::{Fraction, FractionExtra, FULL_BPS},
-    LendingError,
+    xmsg, LendingError,
 };
 
 pub const MAX_UTILIZATION_RATE_BPS: u32 = FULL_BPS as u32;
@@ -96,11 +96,11 @@ impl CurveSegment {
             .borrow_rate_bps
             .checked_sub(start.borrow_rate_bps)
             .ok_or_else(|| {
-                msg!("Borrow rate must be ever growing in the curve");
+                xmsg!("Borrow rate must be ever growing in the curve");
                 error!(LendingError::InvalidBorrowRateCurvePoint)
             })?;
         if end.utilization_rate_bps <= start.utilization_rate_bps {
-            msg!("Utilization rate must be ever growing in the curve");
+            xmsg!("Utilization rate must be ever growing in the curve");
             return err!(LendingError::InvalidBorrowRateCurvePoint);
         }
         let slope_denom = end
@@ -147,12 +147,12 @@ impl BorrowRateCurve {
 
        
         if pts[0].utilization_rate_bps != 0 {
-            msg!("First point of borrowing rate curve must have an utilization rate of 0");
+            xmsg!("First point of borrowing rate curve must have an utilization rate of 0");
             return err!(LendingError::InvalidBorrowRateCurvePoint);
         }
 
         if pts[10].utilization_rate_bps != MAX_UTILIZATION_RATE_BPS {
-            msg!("Last point of borrowing rate curve must have an utilization rate of 1");
+            xmsg!("Last point of borrowing rate curve must have an utilization rate of 1");
             return err!(LendingError::InvalidBorrowRateCurvePoint);
         }
 
@@ -161,19 +161,19 @@ impl BorrowRateCurve {
         for pt in pts.iter().skip(1) {
             if last_pt.utilization_rate_bps == MAX_UTILIZATION_RATE_BPS {
                 if pt.utilization_rate_bps != MAX_UTILIZATION_RATE_BPS {
-                    msg!(
+                    xmsg!(
                         "Last point of borrowing rate curve must have an utilization rate of 1 but lower utilization \
                         rate found after last point"
                     );
                     return err!(LendingError::InvalidBorrowRateCurvePoint);
                 }
             } else if pt.utilization_rate_bps <= last_pt.utilization_rate_bps {
-                msg!("Borrowing rate curve points must be sorted by utilization rate");
+                xmsg!("Borrowing rate curve points must be sorted by utilization rate");
                 return err!(LendingError::InvalidBorrowRateCurvePoint);
             }
            
             if pt.borrow_rate_bps < last_pt.borrow_rate_bps {
-                msg!("Borrowing rate must growing in the curve");
+                xmsg!("Borrowing rate must growing in the curve");
                 return err!(LendingError::InvalidBorrowRateCurvePoint);
             }
             last_pt = *pt;
@@ -183,17 +183,17 @@ impl BorrowRateCurve {
 
     pub fn from_points(pts: &[CurvePoint]) -> Result<Self> {
         if pts.len() < 2 {
-            msg!("Borrowing rate curve must have at least 2 points");
+            xmsg!("Borrowing rate curve must have at least 2 points");
             return err!(LendingError::InvalidBorrowRateCurvePoint);
         }
         if pts.len() > 11 {
-            msg!("Borrowing rate curve must have at most 11 points");
+            xmsg!("Borrowing rate curve must have at most 11 points");
             return err!(LendingError::InvalidBorrowRateCurvePoint);
         }
        
         let last = pts.last().unwrap();
         if last.utilization_rate_bps != MAX_UTILIZATION_RATE_BPS {
-            msg!("Last point of borrowing rate curve must have an utilization rate of 1");
+            xmsg!("Last point of borrowing rate curve must have an utilization rate of 1");
             return err!(LendingError::InvalidBorrowRateCurvePoint);
         }
         let mut points = [*last; 11];
@@ -280,7 +280,7 @@ impl BorrowRateCurve {
 
     pub fn get_borrow_rate(&self, utilization_rate: Fraction) -> Result<Fraction> {
         let utilization_rate = if utilization_rate > Fraction::ONE {
-            msg!(
+            xmsg!(
                 "Warning: utilization rate is greater than 100% (scaled): {}",
                 utilization_rate.to_bits()
             );

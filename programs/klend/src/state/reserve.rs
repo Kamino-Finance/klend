@@ -5,7 +5,7 @@ use std::{
 
 use anchor_lang::{
     account, err,
-    prelude::{msg, Pubkey, *},
+    prelude::{Pubkey, *},
     solana_program::clock::Slot,
     Result,
 };
@@ -30,7 +30,7 @@ use crate::{
         ten_pow, BigFraction, Fraction, FRACTION_ONE_SCALED, FULL_BPS, INITIAL_COLLATERAL_RATE,
         PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
     },
-    BorrowSize, CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult,
+    xmsg, BorrowSize, CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult,
     ReferrerTokenState,
 };
 
@@ -488,7 +488,7 @@ impl Reserve {
         self.liquidity.accumulated_protocol_fees_sf = accumulated_protocol_fees_f
             .checked_sub(withdraw_amount_f)
             .ok_or_else(|| {
-                msg!(
+                xmsg!(
                     "Accumulated protocol fees {} cannot be less than withdraw amount {}",
                     accumulated_protocol_fees_f.to_display(),
                     withdraw_amount_f.to_display()
@@ -516,7 +516,7 @@ impl Reserve {
         let new_accumulated_referrer_fees_f = accumulated_referrer_fees_f
             .checked_sub(withdraw_amount_f)
             .ok_or_else(|| {
-                msg!(
+                xmsg!(
                     "Accumulated referrer fees {} cannot be less than withdraw amount {}",
                     accumulated_referrer_fees_f.to_display(),
                     withdraw_amount_f.to_display()
@@ -532,7 +532,7 @@ impl Reserve {
         let new_referrer_amount_unclaimed_f = referrer_amount_unclaimed_f
             .checked_sub(withdraw_amount_f)
             .ok_or_else(|| {
-                msg!(
+                xmsg!(
                     "Unclaimed referrer fees {} cannot be less than withdraw amount {}",
                     referrer_amount_unclaimed_f.to_display(),
                     withdraw_amount_f.to_display()
@@ -632,7 +632,7 @@ impl Reserve {
             .checked_add(to_distribute)
             .ok_or_else(|| error!(LendingError::MathOverflow))?;
 
-        msg!(
+        xmsg!(
             "Reserve rewards distributed: slots={} amount={} remaining={}",
             slots_elapsed,
             to_distribute,
@@ -796,7 +796,7 @@ impl Reserve {
         let borrow_factor_adjusted_debt_value = debt_value * borrow_factor_f;
 
         if borrow_factor_adjusted_debt_value > max_borrow_factor_adjusted_debt_value {
-            msg!(
+            xmsg!(
                 "Borrow value {} cannot exceed maximum borrow value {}",
                 borrow_factor_adjusted_debt_value.to_display(),
                 max_borrow_factor_adjusted_debt_value.to_display(),
@@ -805,7 +805,7 @@ impl Reserve {
         }
         let remaining_borrow_capacity_f = self.remaining_borrow_capacity();
         if borrow_amount_f > remaining_borrow_capacity_f {
-            msg!(
+            xmsg!(
                 "Borrowing {} (including fees: {}) would exceed the reserve's remaining limit {}",
                 receive_amount,
                 borrow_amount_f.to_display(),
@@ -816,7 +816,7 @@ impl Reserve {
         let reserve_available_liquidity_f =
             Fraction::from(self.freely_available_liquidity_amount());
         if borrow_amount_f > reserve_available_liquidity_f {
-            msg!(
+            xmsg!(
                 "Borrowing {} (including fees: {}) would exceed the reserve's remaining liquidity {}",
                 receive_amount,
                 borrow_amount_f.to_display(),
@@ -886,7 +886,7 @@ impl Reserve {
 
     fn withdraw_including_queued(&mut self, liquidity_amount: u64) -> Result<()> {
         if liquidity_amount > self.liquidity.total_available_amount {
-            msg!(
+            xmsg!(
                 "Withdraw amount {} cannot exceed the total available amount {}",
                 liquidity_amount,
                 self.liquidity.total_available_amount
@@ -901,7 +901,7 @@ impl Reserve {
     fn withdraw_freely_available(&mut self, liquidity_amount: u64) -> Result<()> {
         let freely_available_amount = self.freely_available_liquidity_amount();
         if liquidity_amount > freely_available_amount {
-            msg!(
+            xmsg!(
                 "Withdraw liquidity amount {} cannot exceed the freely available amount {}",
                 liquidity_amount,
                 freely_available_amount
@@ -1055,6 +1055,15 @@ impl WithdrawQueue {
             self.next_withdrawable_ticket_sequence_number += 1;
         }
     }
+
+
+    pub fn currently_withdrawable_ticket_sequence_number(&self) -> Option<u64> {
+        if self.next_withdrawable_ticket_sequence_number < self.next_issued_ticket_sequence_number {
+            Some(self.next_withdrawable_ticket_sequence_number)
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for ReserveLiquidity {
@@ -1152,7 +1161,7 @@ impl ReserveLiquidity {
         self.borrowed_amount_sf = borrowed_amount_f
             .checked_sub(safe_settle_amount)
             .ok_or_else(|| {
-                msg!(
+                xmsg!(
                     "Borrowed amount {} cannot be less than settle amount {}",
                     borrowed_amount_f.to_display(),
                     safe_settle_amount.to_display()
@@ -1351,7 +1360,7 @@ impl ReserveCollateral {
             .mint_total_supply
             .checked_sub(collateral_amount)
             .ok_or_else(|| {
-                msg!(
+                xmsg!(
                     "Mint total supply {} cannot be less than collateral amount {}",
                     self.mint_total_supply,
                     collateral_amount
@@ -2154,7 +2163,7 @@ impl ReserveFees {
 
             let origination_fee_f = origination_fee_amount.max(minimum_fee.into());
             if origination_fee_f >= amount {
-                msg!("Borrow amount is too small to receive liquidity after fees");
+                xmsg!("Borrow amount is too small to receive liquidity after fees");
                 return err!(LendingError::BorrowTooSmall);
             }
 

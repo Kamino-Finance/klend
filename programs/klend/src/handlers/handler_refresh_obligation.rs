@@ -4,7 +4,7 @@ use crate::{
     lending_market::lending_operations,
     state::{obligation::Obligation, LendingMarket},
     utils::FatAccountLoader,
-    LendingError, ReferrerTokenState, Reserve,
+    xmsg, LendingError, ReferrerTokenState, Reserve,
 };
 
 pub fn process(ctx: Context<RefreshObligation>) -> Result<()> {
@@ -22,7 +22,7 @@ pub fn process(ctx: Context<RefreshObligation>) -> Result<()> {
     };
 
     if ctx.remaining_accounts.len() != expected_remaining_accounts {
-        msg!(
+        xmsg!(
             "expected_remaining_accounts={}, actual_remaining_accounts {} obligation.has_referrer()={} reserves_count={} borrow_count={}",
             expected_remaining_accounts,
             ctx.remaining_accounts.len(),

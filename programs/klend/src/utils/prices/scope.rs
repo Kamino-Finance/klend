@@ -10,7 +10,7 @@ use super::{
 use crate::{
     dbg_msg,
     utils::{prices::Price, MAX_PRICE_DECIMALS_U256, NULL_PUBKEY, TARGET_PRICE_DECIMALS, U256},
-    LendingError, Result, ScopeConfiguration,
+    xmsg, LendingError, Result, ScopeConfiguration,
 };
 
 pub(super) fn get_scope_price_and_twap(
@@ -21,7 +21,7 @@ pub(super) fn get_scope_price_and_twap(
     let price = get_price_usd(&scope_prices, conf.price_chain)?;
     let twap = if conf.has_twap() {
         get_price_usd(&scope_prices, conf.twap_chain)
-            .map_err(|e| msg!("No valid twap found for scope price, error: {:?}", e))
+            .map_err(|e| xmsg!("No valid twap found for scope price, error: {:?}", e))
             .ok()
     } else {
         None
@@ -80,7 +80,7 @@ fn get_price_usd(
     tokens_chain: ScopeConversionChain,
 ) -> Result<TimestampedPrice> {
     if tokens_chain == [0, 0, 0, 0] {
-        msg!("Scope chain is not initialized properly");
+        xmsg!("Scope chain is not initialized properly");
         return err!(LendingError::PriceNotValid);
     }
    
@@ -89,7 +89,7 @@ fn get_price_usd(
     let chain_len = price_chain_raw.iter().take_while(|v| v.is_some()).count();
 
     if chain_len == 0 {
-        msg!("Scope chain is empty");
+        xmsg!("Scope chain is empty");
         return err!(LendingError::NoPriceFound);
     }
 

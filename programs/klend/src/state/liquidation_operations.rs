@@ -10,7 +10,7 @@ use std::{
     ops::RangeInclusive,
 };
 
-use anchor_lang::{err, prelude::msg, Result};
+use anchor_lang::{err, Result};
 
 use crate::{
     fraction::FractionExtra,
@@ -141,7 +141,7 @@ pub fn calculate_liquidation(
        
        
         if debt_amount_to_liquidate < borrowed_amount {
-            msg!(
+            xmsg!(
                 "Liquidator-provided debt repay amount {} is too small to satisfy the required full liquidation {}",
                 debt_amount_to_liquidate.to_display(),
                 borrowed_amount.to_display()

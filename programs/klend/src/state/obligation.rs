@@ -1,6 +1,7 @@
 use std::{
     cmp::Ordering,
     fmt::{self, Display, Formatter},
+    iter,
     ops::RangeInclusive,
 };
 
@@ -17,7 +18,7 @@ use crate::{
     state::{LastUpdate, LtvMaxWithdrawalCheck, Reserve},
     utils::{
         accounts::default_array, secs, BigFraction, Fraction, FractionExtra, IterExt,
-        ELEVATION_GROUP_NONE, OBLIGATION_SIZE, U256,
+        ELEVATION_GROUP_NONE, OBLIGATION_SIZE, SECONDS_PER_DAY, U256,
     },
     xmsg, BigFractionBytes, LendingError, ReserveConfig,
 };
@@ -33,6 +34,13 @@ pub enum OwnershipTransferState {
 
     Approved = 2,
 }
+
+
+
+pub const MAX_TAIL_BORROW_ORDERS: usize = 2;
+
+
+pub const MAX_BORROW_ORDERS: usize = MAX_TAIL_BORROW_ORDERS + 1;
 
 static_assertions::const_assert_eq!(OBLIGATION_SIZE, std::mem::size_of::<Obligation>());
 static_assertions::const_assert_eq!(0, std::mem::size_of::<Obligation>() % 8);
@@ -114,14 +122,26 @@ pub struct Obligation {
 
 
 
-    pub borrow_order: BorrowOrder,
+
+
+
+
+
+
+
+
+
+    pub head_borrow_order: BorrowOrder,
 
 
 
     pub pending_owner: Pubkey,
 
+
+    pub tail_borrow_orders: [BorrowOrder; MAX_TAIL_BORROW_ORDERS],
+
     #[derivative(Debug = "ignore")]
-    pub padding_3: [u64; 69],
+    pub padding_3: [u64; 29],
 }
 
 impl Default for Obligation {
@@ -153,8 +173,9 @@ impl Default for Obligation {
             autodeleverage_target_ltv_pct: 0,
             autodeleverage_margin_call_started_timestamp: 0,
             obligation_orders: default_array(),
-            borrow_order: Default::default(),
+            head_borrow_order: Default::default(),
             pending_owner: Pubkey::default(),
+            tail_borrow_orders: default_array(),
             ownership_transfer_state: OwnershipTransferState::None.into(),
         }
     }
@@ -474,6 +495,48 @@ impl Obligation {
     }
 
 
+    pub fn get_borrow_order(&self, index: usize) -> Result<&BorrowOrder> {
+        if index == 0 {
+            return Ok(&self.head_borrow_order);
+        }
+        self.tail_borrow_orders
+            .get(index - 1)
+            .ok_or_else(|| error!(LendingError::OrderIndexOutOfBounds))
+    }
+
+
+    pub fn get_borrow_order_mut(&mut self, index: usize) -> Result<&mut BorrowOrder> {
+        if index == 0 {
+            return Ok(&mut self.head_borrow_order);
+        }
+        self.tail_borrow_orders
+            .get_mut(index - 1)
+            .ok_or_else(|| error!(LendingError::OrderIndexOutOfBounds))
+    }
+
+
+    pub fn borrow_orders(&self) -> impl Iterator<Item = &BorrowOrder> {
+        iter::once(&self.head_borrow_order).chain(self.tail_borrow_orders.iter())
+    }
+
+
+
+    pub fn active_borrow_orders(&self) -> impl Iterator<Item = &BorrowOrder> {
+        self.borrow_orders()
+            .filter(|order| order.remaining_debt_amount > 0)
+    }
+
+
+
+    pub fn clear_expired_borrow_orders(&mut self, timestamp: u64) {
+        for borrow_order in
+            iter::once(&mut self.head_borrow_order).chain(self.tail_borrow_orders.iter_mut())
+        {
+            borrow_order.clear_if_past_fillable_timestamp(timestamp);
+        }
+    }
+
+
 
 
 
@@ -510,6 +573,11 @@ impl Obligation {
 
     pub fn has_referrer(&self) -> bool {
         self.referrer != Pubkey::default()
+    }
+
+
+    pub fn referrer(&self) -> Option<Pubkey> {
+        Some(self.referrer).filter(|referrer| referrer != &Pubkey::default())
     }
 
     pub fn update_has_debt(&mut self) {
@@ -1085,7 +1153,15 @@ pub struct FixedTermBorrowRolloverConfig {
     pub migration_to_fixed_enabled: u8,
 
 
-    pub alignment_padding: [u8; 1],
+
+
+
+
+
+
+   
+   
+    pub fixed_term_rollover_window_duration_days: u8,
 
 
 
@@ -1112,6 +1188,34 @@ impl FixedTermBorrowRolloverConfig {
 
     pub fn is_migration_to_fixed_enabled(&self) -> bool {
         self.migration_to_fixed_enabled != false as u8
+    }
+
+
+
+    pub fn is_compatible_with(&self, other: &Self) -> bool {
+       
+        let Self {
+            auto_rollover_enabled,
+            open_term_allowed,
+            migration_to_fixed_enabled,
+            fixed_term_rollover_window_duration_days: _,
+            max_borrow_rate_bps,
+            min_debt_term_seconds,
+        } = self;
+        auto_rollover_enabled == &other.auto_rollover_enabled
+            && open_term_allowed == &other.open_term_allowed
+            && migration_to_fixed_enabled == &other.migration_to_fixed_enabled
+            && max_borrow_rate_bps == &other.max_borrow_rate_bps
+            && min_debt_term_seconds == &other.min_debt_term_seconds
+    }
+
+
+
+    pub fn get_fixed_term_rollover_window_duration_seconds(&self) -> Option<u64> {
+        if self.fixed_term_rollover_window_duration_days == 0 {
+            return None;
+        }
+        Some(u64::from(self.fixed_term_rollover_window_duration_days) * SECONDS_PER_DAY)
     }
 
 
@@ -1288,6 +1392,10 @@ pub enum UpdateObligationConfigMode {
 
 
     MigrationToFixedEnabled = 4,
+
+
+
+    FixedTermRolloverWindowDurationDays = 5,
 }
 
 
@@ -1651,7 +1759,7 @@ impl BorrowOrder {
             migration_to_fixed_enabled: (self.min_debt_term_seconds != 0) as u8,
             max_borrow_rate_bps: self.max_borrow_rate_bps,
             min_debt_term_seconds: self.min_debt_term_seconds,
-            alignment_padding: default_array(),
+            fixed_term_rollover_window_duration_days: 0,
         })
     }
 }

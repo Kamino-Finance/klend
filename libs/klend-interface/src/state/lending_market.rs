@@ -54,7 +54,7 @@ pub struct LendingMarket {
     pub obligation_borrow_rollover_configuration_enabled: u8,
     pub obligation_borrow_migration_to_fixed_execution_enabled: u8,
     pub withdraw_ticket_cancellation_enabled: u8,
-    pub padding2: [u8; 1],
+    pub disable_nonce_block: u8,
     /// Cap (in basis points; `FULL_BPS = 10_000` = 100%) on reserve rewards distribution APR
     pub reserve_rewards_max_apr_bps: u16,
     pub min_withdraw_queued_liquidity_value: u64,
@@ -118,6 +118,11 @@ impl LendingMarket {
     /// Whether withdraw ticket cancellation is enabled.
     pub fn is_withdraw_ticket_cancellation_enabled(&self) -> bool {
         self.withdraw_ticket_cancellation_enabled != 0
+    }
+
+    /// Whether the per-market opt-out of the admin-ix nonce block is set.
+    pub fn is_nonce_block_disabled(&self) -> bool {
+        self.disable_nonce_block != 0
     }
 
     /// Whether migration-to-fixed rollover execution is enabled.

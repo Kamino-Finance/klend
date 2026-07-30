@@ -31,7 +31,7 @@ pub(super) fn get_validated_price(
             price_dec
         }
         Err(e) => {
-            msg!("Price is not available token=[{price_label}], {e:?}",);
+            xmsg!("Price is not available token=[{price_label}], {e:?}",);
             return None;
         }
     };
@@ -59,7 +59,7 @@ pub(super) fn get_validated_price(
             ) {
                 Ok(()) => price_status.set(PriceStatusFlags::TWAP_AGE_CHECKED, true),
                 Err(e) => {
-                    msg!("Price twap is too old token=[{price_label}], {e:?}",);
+                    xmsg!("Price twap is too old token=[{price_label}], {e:?}",);
                 }
             }
 
@@ -71,11 +71,11 @@ pub(super) fn get_validated_price(
                     price_status.set(PriceStatusFlags::TWAP_CHECKED, true);
                 }
                 Err(e) => {
-                    msg!("Price twap check failed token=[{price_label}]: {e:?}",);
+                    xmsg!("Price twap check failed token=[{price_label}]: {e:?}",);
                 }
             }
         } else {
-            msg!("Price twap is not available but required, token=[{price_label}]",);
+            xmsg!("Price twap is not available but required, token=[{price_label}]",);
            
         }
     } else {
@@ -87,7 +87,7 @@ pub(super) fn get_validated_price(
    
     match check_price_heuristics(price_dec, &token_info.heuristic) {
         Ok(()) => price_status.set(PriceStatusFlags::HEURISTIC_CHECKED, true),
-        Err(e) => msg!("Price heuristic check failed token=[{price_label}]: {e:?}",),
+        Err(e) => xmsg!("Price heuristic check failed token=[{price_label}]: {e:?}",),
     }
 
     if token_info.block_price_usage == 0 {
@@ -132,7 +132,7 @@ fn check_twap_in_tolerance(price: Fraction, twap: Fraction, token_info: &TokenIn
 
     if !is_within_tolerance(price, twap, acceptable_twap_tolerance_bps) {
         let token_span = token_info.symbol();
-        msg!(
+        xmsg!(
             "Price is too far from TWAP \
               token={token_span} \
               price={price} \

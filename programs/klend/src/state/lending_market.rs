@@ -216,12 +216,17 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub withdraw_ticket_cancellation_enabled: u8,
 
-    #[cfg_attr(
-        feature = "serde",
-        serde(skip_deserializing, skip_serializing, default = "default_array")
-    )]
-    #[derivative(Debug = "ignore")]
-    pub padding2: [u8; 1],
+
+
+
+
+
+
+
+
+
+    #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
+    pub disable_nonce_block: u8,
 
 
 
@@ -339,6 +344,7 @@ impl Default for LendingMarket {
             withdraw_ticket_issuance_enabled: 0,
             withdraw_ticket_redemption_enabled: 0,
             withdraw_ticket_cancellation_enabled: 0,
+            disable_nonce_block: 0,
             min_withdraw_queued_liquidity_value: MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE,
             fixed_term_rollover_window_duration_seconds: 0,
             open_term_rollover_window_duration_seconds: 0,
@@ -349,7 +355,6 @@ impl Default for LendingMarket {
             min_partial_rollover_value: 0,
             permissioning_authority: Pubkey::default(),
             permissioned_ops: 0,
-            padding2: default_array(),
             reserve_rewards_max_apr_bps: 0,
             padding1: default_array(),
         }
@@ -400,6 +405,10 @@ impl LendingMarket {
         self.borrow_disabled != false as u8
     }
 
+    pub fn is_nonce_block_disabled(&self) -> bool {
+        self.disable_nonce_block != false as u8
+    }
+
     pub fn is_price_triggered_liquidation_disabled(&self) -> bool {
         self.price_triggered_liquidation_disabled != false as u8
     }
@@ -444,6 +453,10 @@ impl LendingMarket {
         self.obligation_borrow_rollover_configuration_enabled != false as u8
     }
 
+    pub fn is_obligation_borrow_migration_to_fixed_execution_enabled(&self) -> bool {
+        self.obligation_borrow_migration_to_fixed_execution_enabled != false as u8
+    }
+
     pub fn is_withdraw_ticket_cancellation_enabled(&self) -> bool {
         self.withdraw_ticket_cancellation_enabled != false as u8
     }
@@ -469,7 +482,7 @@ impl LendingMarket {
                 )
             }
             RolloverMode::FromOpenToFixedTerm => {
-                if self.obligation_borrow_migration_to_fixed_execution_enabled == false as u8 {
+                if !self.is_obligation_borrow_migration_to_fixed_execution_enabled() {
                     return err!(LendingError::BorrowRolloverExecutionDisabled);
                 }
                 AllowedRolloverTime::Always

@@ -1,8 +1,14 @@
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
-use crate::{state::LendingMarket, LendingError};
+use crate::{check_advance_nonce_ix_if_needed, state::LendingMarket, LendingError};
 
 pub fn process(ctx: Context<UpdateLendingMarketOwner>) -> Result<()> {
+    check_advance_nonce_ix_if_needed!(ctx.accounts);
+
     let market = &mut ctx.accounts.lending_market.load_mut()?;
 
     require!(
@@ -21,4 +27,8 @@ pub struct UpdateLendingMarketOwner<'info> {
 
     #[account(mut, has_one = lending_market_owner_cached)]
     pub lending_market: AccountLoader<'info, LendingMarket>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

@@ -14,7 +14,7 @@ use crate::{
         WITHDRAW_TICKET_SIZE,
     },
     withdraw_ticket::{ProgressCallbackType, WithdrawTicket},
-    LendingAction, LendingError, LendingMarket, Reserve,
+    xmsg, LendingAction, LendingError, LendingMarket, Reserve,
 };
 
 pub fn process(
@@ -51,7 +51,7 @@ pub fn process(
     let sequence_number =
         lending_operations::enqueue_to_withdraw(lending_market, reserve, collateral_amount)?;
 
-    msg!(
+    xmsg!(
         "enqueued withdraw ticket with sequence number {sequence_number} for {collateral_amount} ctokens",
     );
 
@@ -132,13 +132,13 @@ fn extract_vault_address_from_kvault_signed_accounts(
 ) -> Result<Pubkey> {
    
     let Some(vault_account) = &accounts.progress_callback_custom_account_0 else {
-        msg!("The used progress callback requires the VaultState as a custom account");
+        xmsg!("The used progress callback requires the VaultState as a custom account");
         return err!(LendingError::InvalidWithdrawTicketProgressCallbackConfig);
     };
 
    
     if vault_account.owner != &CORRESPONDING_KAMINO_VAULT_PROGRAM_ID {
-        msg!(
+        xmsg!(
             "The VaultState account must belong to {}, but got {}",
             CORRESPONDING_KAMINO_VAULT_PROGRAM_ID,
             vault_account.owner
@@ -148,7 +148,7 @@ fn extract_vault_address_from_kvault_signed_accounts(
     let vault_data = vault_account.try_borrow_data()?;
     let vault_discriminator = &vault_data[..VAULT_STATE_DISCRIMINATOR.len().min(vault_data.len())];
     if vault_discriminator != VAULT_STATE_DISCRIMINATOR {
-        msg!(
+        xmsg!(
             "VaultState account should have discriminator {:?}, but got {:?}",
             VAULT_STATE_DISCRIMINATOR,
             vault_discriminator
@@ -159,7 +159,7 @@ fn extract_vault_address_from_kvault_signed_accounts(
    
     let expected_authority_address = pda::kvault::base_authority(vault_account.key());
     if accounts.owner.key != &expected_authority_address {
-        msg!(
+        xmsg!(
             "The signer must be a base authority of vault {}",
             vault_account.key()
         );

@@ -12,7 +12,7 @@ use crate::{
         FlashRepayReserveLiquidity as FlashRepayReserveLiquidityArgs,
     },
     lending_market::ix_utils::{self, InstructionLoader},
-    LendingError,
+    xmsg, LendingError,
 };
 
 pub fn flash_repay_checks(
@@ -26,13 +26,13 @@ pub fn flash_repay_checks(
    
     let current_index: usize = instruction_loader.load_current_index()?.into();
     if instruction_loader.is_flash_forbidden_cpi_call()? {
-        msg!("Flash Repay was called via CPI!");
+        xmsg!("Flash Repay was called via CPI!");
         return err!(LendingError::FlashRepayCpi);
     }
 
    
     if (borrow_instruction_index as usize) > current_index {
-        msg!(
+        xmsg!(
             "Flash repay: borrow instruction index {} has to be less than current index {}",
             borrow_instruction_index,
             current_index
@@ -42,7 +42,7 @@ pub fn flash_repay_checks(
 
     let ixn = instruction_loader.load_instruction_at(borrow_instruction_index as usize)?;
     if ixn.program_id != *ctx.program_id {
-        msg!(
+        xmsg!(
             "Flash repay: supplied instruction index {} doesn't belong to program id {}",
             borrow_instruction_index,
             *ctx.program_id
@@ -53,7 +53,7 @@ pub fn flash_repay_checks(
     let discriminator = FlashBorrowReserveLiquidityArgs::DISCRIMINATOR;
 
     if ixn.data[..8] != discriminator {
-        msg!("Flash repay: Supplied borrow instruction index is not a flash borrow");
+        xmsg!("Flash repay: Supplied borrow instruction index is not a flash borrow");
         return err!(LendingError::InvalidFlashRepay);
     }
     let borrow_liquidity_amount = u64::from_le_bytes(ixn.data[8..16].try_into().unwrap());
@@ -61,12 +61,12 @@ pub fn flash_repay_checks(
    
 
     if ixn.accounts[3].pubkey != ctx.accounts.reserve.key() {
-        msg!("Invalid reserve account on flash repay");
+        xmsg!("Invalid reserve account on flash repay");
         return err!(LendingError::InvalidFlashRepay);
     }
 
     if liquidity_amount != borrow_liquidity_amount {
-        msg!("Liquidity amount for flash repay doesn't match borrow");
+        xmsg!("Liquidity amount for flash repay doesn't match borrow");
         return err!(LendingError::InvalidFlashRepay);
     }
 
@@ -90,7 +90,7 @@ fn flash_borrow_checks_internal(
    
     let current_index: usize = instruction_loader.load_current_index()?.into();
     if instruction_loader.is_flash_forbidden_cpi_call()? {
-        msg!("Flash Borrow was called via CPI!");
+        xmsg!("Flash Borrow was called via CPI!");
         return err!(LendingError::FlashBorrowCpi);
     }
 
@@ -119,13 +119,13 @@ fn flash_borrow_checks_internal(
         }
 
         if ixn.data[..8] == flash_borrow_discriminator {
-            msg!("Multiple flash borrows not allowed");
+            xmsg!("Multiple flash borrows not allowed");
             return err!(LendingError::MultipleFlashBorrows);
         }
 
         if ixn.data[..8] == flash_repay_discriminator {
             if found_repay_ix {
-                msg!("Multiple flash repays not allowed");
+                xmsg!("Multiple flash repays not allowed");
                 return err!(LendingError::MultipleFlashBorrows);
             }
             flash_borrow_check_matching_repay(liquidity_amount, &borrow_ix, &ixn, current_index)?;
@@ -135,7 +135,7 @@ fn flash_borrow_checks_internal(
     }
 
     if !found_repay_ix {
-        msg!("No flash repay found");
+        xmsg!("No flash repay found");
         return err!(LendingError::NoFlashRepayFound);
     }
 
@@ -154,18 +154,18 @@ fn flash_borrow_check_matching_repay(
     let borrow_instruction_index = repay_ix_data.borrow_instruction_index;
 
     if repay_liquidity_amount != liquidity_amount {
-        msg!("Liquidity amount for flash repay doesn't match borrow");
+        xmsg!("Liquidity amount for flash repay doesn't match borrow");
         return err!(LendingError::InvalidFlashRepay);
     }
     if (usize::from(borrow_instruction_index)) != borrow_index {
-        msg!(
+        xmsg!(
             "Borrow instruction index {borrow_instruction_index} for flash repay doesn't match current index {borrow_index}",
         );
         return err!(LendingError::InvalidFlashRepay);
     }
 
     if repay_ix.accounts.len() != borrow_ix.accounts.len() {
-        msg!("Number of accounts mismatch between first and second ix of couple");
+        xmsg!("Number of accounts mismatch between first and second ix of couple");
         return err!(LendingError::InvalidFlashRepay);
     }
 
@@ -178,7 +178,7 @@ fn flash_borrow_check_matching_repay(
         let account_borrow_pk = &account_borrow.pubkey;
         let account_repay_pk = &account_repay.pubkey;
         if account_borrow_pk != account_repay_pk {
-            msg!("Some accounts in flash tx couple differs. index: {idx}, borrow:{account_borrow_pk}, repay:{account_repay_pk}",);
+            xmsg!("Some accounts in flash tx couple differs. index: {idx}, borrow:{account_borrow_pk}, repay:{account_repay_pk}",);
             return err!(LendingError::InvalidFlashRepay);
         }
     }

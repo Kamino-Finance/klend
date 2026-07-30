@@ -1,8 +1,4 @@
-use anchor_lang::{
-    err, error,
-    prelude::{msg, AccountInfo},
-    Result,
-};
+use anchor_lang::{err, error, prelude::AccountInfo, Result};
 use sbod_itf::accounts::PullFeedAccountData;
 use solana_program::clock::{Clock, DEFAULT_MS_PER_SLOT};
 
@@ -15,7 +11,7 @@ use crate::{
         },
         FatAccountLoader, NULL_PUBKEY,
     },
-    LendingError,
+    xmsg, LendingError,
 };
 
 pub(super) fn get_switchboard_price_and_twap(
@@ -58,7 +54,7 @@ fn get_switchboard_price(
         .ok_or(error!(LendingError::SwitchboardV2Error))?;
 
     if price_switchboard_desc.mantissa() <= 0 {
-        msg!("Switchboard oracle price is zero or negative which is not allowed");
+        xmsg!("Switchboard oracle price is zero or negative which is not allowed");
         return err!(LendingError::PriceIsZero);
     }
     let price_switchboard_desc_mantissa = u128::try_from(price_switchboard_desc.mantissa())
@@ -70,7 +66,7 @@ fn get_switchboard_price(
         .std_dev()
         .ok_or(error!(LendingError::SwitchboardV2Error))?;
     let stdev_mantissa = u128::try_from(stdev.mantissa()).map_err(|_| {
-        msg!("Switchboard standard deviation is negative which is against its math definition");
+        xmsg!("Switchboard standard deviation is negative which is against its math definition");
         error!(LendingError::SwitchboardV2Error)
     })?;
     let stdev_scale = stdev.scale();
@@ -131,7 +127,7 @@ fn validate_switchboard_confidence(
         .ok_or_else(|| error!(LendingError::MathOverflow))?;
 
     if stdev_x_confidence_factor_scaled >= price_mantissa {
-        msg!(
+        xmsg!(
             "Validation of confidence interval for switchboard v2 feed failed.\n\
              Price mantissa: {price_mantissa}, Price scale: {price_scale}\n\
              stdev mantissa: {stdev_mantissa}, stdev_scale: {stdev_scale}",

@@ -4,7 +4,7 @@ use solana_program::log::sol_log_compute_units;
 use crate::{
     instruction::{RefreshObligation, RefreshObligationFarmsForReserve, RefreshReserve},
     lending_market::ix_utils::{BpfInstructionLoader, InstructionLoader},
-    LendingError, Reserve, ReserveFarmKind,
+    xmsg, LendingError, Reserve, ReserveFarmKind,
 };
 
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ pub fn check_cpi_call(instruction_sysvar_account_info: &AccountInfo) -> Result<(
 
     #[cfg(not(feature = "staging"))]
     if ix_loader.is_forbidden_cpi_call()? {
-        msg!("Instruction was called via CPI!");
+        xmsg!("Instruction was called via CPI!");
         return err!(LendingError::CpiDisabled);
     }
 
@@ -52,7 +52,7 @@ pub fn check_refresh(
     obligation_address: &Pubkey,
     modes: &[ReserveFarmKind],
 ) -> Result<()> {
-    msg!("Beginning check_refresh");
+    xmsg!("Beginning check_refresh");
     sol_log_compute_units();
 
     let ix_loader = BpfInstructionLoader {
@@ -61,7 +61,7 @@ pub fn check_refresh(
 
     #[cfg(not(feature = "staging"))]
     if ix_loader.is_forbidden_cpi_call()? {
-        msg!("Instruction was called via CPI!");
+        xmsg!("Instruction was called via CPI!");
         return err!(LendingError::CpiDisabled);
     }
     let current_idx: usize = ix_loader.load_current_index().unwrap().into();
@@ -69,7 +69,7 @@ pub fn check_refresh(
         for (i, required_ix) in required_ixns.iter().enumerate() {
             let offset = match ix_type {
                 AppendedIxType::PreIxs => current_idx.checked_sub(i + 1).ok_or_else(|| {
-                    msg!(
+                    xmsg!(
                         "current_idx: {}, i: {}, required_ix {:?}",
                         current_idx,
                         i,
@@ -78,7 +78,7 @@ pub fn check_refresh(
                     error!(LendingError::IncorrectInstructionInPosition)
                 })?,
                 AppendedIxType::PostIxs => current_idx.checked_add(i + 1).ok_or_else(|| {
-                    msg!(
+                    xmsg!(
                         "current_idx: {}, i: {}, required_ix {:?}",
                         current_idx,
                         i,
@@ -101,7 +101,7 @@ pub fn check_refresh(
             let ix_discriminator_matches = ix_discriminator == required_ix.discriminator();
             if !ix_discriminator_matches {
                 for (i, ix) in required_ixns.iter().enumerate() {
-                    msg!("Required ix: {} {:?}", i, ix);
+                    xmsg!("Required ix: {} {:?}", i, ix);
                 }
             }
 
@@ -189,7 +189,7 @@ pub fn check_refresh(
     check_ixns(required_pre_ixs, AppendedIxType::PreIxs)?;
     check_ixns(required_post_ixs, AppendedIxType::PostIxs)?;
 
-    msg!("Finished check_refresh");
+    xmsg!("Finished check_refresh");
     sol_log_compute_units();
 
     Ok(())

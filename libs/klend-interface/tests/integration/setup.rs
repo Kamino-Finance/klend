@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use klend_interface::{
     discriminators::compute_discriminator, pda, FARMS_PROGRAM_ID, KLEND_PROGRAM_ID,
-    SYSTEM_PROGRAM_ID, SYSVAR_RENT_ID, TOKEN_PROGRAM_ID,
+    SYSTEM_PROGRAM_ID, SYSVAR_INSTRUCTIONS_ID, SYSVAR_RENT_ID, TOKEN_PROGRAM_ID,
 };
 use litesvm::LiteSVM;
 use solana_sdk::{
@@ -168,6 +168,7 @@ fn build_init_lending_market_ix(owner: &Pubkey, lending_market: &Pubkey) -> Inst
             AccountMeta::new_readonly(lma, false),
             AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
             AccountMeta::new_readonly(SYSVAR_RENT_ID, false),
+            AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS_ID, false),
         ],
         data,
     }
@@ -206,6 +207,7 @@ fn build_init_reserve_ix(
             AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false), // liquidity_token_program
             AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false), // collateral_token_program (always spl_token)
             AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+            AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS_ID, false),
         ],
         data,
     }
@@ -255,6 +257,7 @@ fn build_update_reserve_config_ix(
             AccountMeta::new_readonly(gc_key, false),
             AccountMeta::new_readonly(*lending_market, false),
             AccountMeta::new(*reserve, false),
+            AccountMeta::new_readonly(SYSVAR_INSTRUCTIONS_ID, false),
         ],
         data,
     }

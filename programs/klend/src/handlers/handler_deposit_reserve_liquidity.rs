@@ -17,7 +17,7 @@ use crate::{
         permissioning::{check_permissions, PermissionedOp},
         seeds, token_transfer,
     },
-    DepositLiquidityResult, LendingAction,
+    xmsg, DepositLiquidityResult, LendingAction,
 };
 
 pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> Result<()> {
@@ -68,7 +68,7 @@ pub fn process(ctx: Context<DepositReserveLiquidity>, liquidity_amount: u64) -> 
         collateral_amount,
     } = lending_operations::deposit_reserve_liquidity(reserve, &clock, liquidity_amount)?;
 
-    msg!(
+    xmsg!(
         "pnl: Depositing in reserve {} liquidity {}",
         ctx.accounts.reserve.key(),
         liquidity_amount

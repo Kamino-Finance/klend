@@ -7,8 +7,24 @@ use crate::{
     BorrowOrderConfig, LendingError, LendingMarket, Obligation, Reserve,
 };
 
-pub fn process(
+
+
+pub fn process_v1(
     ctx: Context<SetBorrowOrder>,
+    order_config: BorrowOrderConfigArgs,
+    min_expected_current_remaining_debt_amount: u64,
+) -> Result<()> {
+    process_v2(
+        ctx,
+        0,
+        order_config,
+        min_expected_current_remaining_debt_amount,
+    )
+}
+
+pub fn process_v2(
+    ctx: Context<SetBorrowOrder>,
+    order_idx: u8,
     order_config: BorrowOrderConfigArgs,
     min_expected_current_remaining_debt_amount: u64,
 ) -> Result<()> {
@@ -17,6 +33,7 @@ pub fn process(
     let reserve = &ctx.accounts.reserve.load()?;
     lending_checks::check_reserve_emergency_mode(reserve)?;
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
+    let borrow_order = obligation.get_borrow_order_mut(usize::from(order_idx))?;
     let clock = Clock::get()?;
 
    
@@ -27,7 +44,7 @@ pub fn process(
    
 
     require_gte!(
-        obligation.borrow_order.remaining_debt_amount,
+        borrow_order.remaining_debt_amount,
         min_expected_current_remaining_debt_amount,
         LendingError::ExpectationNotMet,
     );
@@ -35,7 +52,7 @@ pub fn process(
     borrow_order_operations::set_borrow_order(
         lending_market,
         reserve,
-        &mut obligation.borrow_order,
+        borrow_order,
         order_config,
         &clock,
         ctx_event_emitter!(ctx),

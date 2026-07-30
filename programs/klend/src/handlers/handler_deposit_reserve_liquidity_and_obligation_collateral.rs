@@ -18,7 +18,7 @@ use crate::{
         permissioning::{check_permissions, PermissionedOp},
         seeds, token_transfer,
     },
-    DepositLiquidityResult, LendingAction, MaxReservesAsCollateralCheck, ReserveFarmKind,
+    xmsg, DepositLiquidityResult, LendingAction, MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
 pub fn process_v1(
@@ -67,7 +67,7 @@ pub(super) fn process_impl(
     max_reserves_as_collateral_check: MaxReservesAsCollateralCheck,
     lending_market_permission_acct: Option<&AccountInfo>,
 ) -> Result<()> {
-    msg!(
+    xmsg!(
         "DepositReserveLiquidityAndObligationCollateral Reserve {} amount {}",
         accounts.reserve.key(),
         liquidity_amount
@@ -134,7 +134,7 @@ pub(super) fn process_impl(
         max_reserves_as_collateral_check,
     )?;
 
-    msg!(
+    xmsg!(
         "pnl: Deposit reserve liquidity {} and obligation collateral {}",
         liquidity_amount,
         collateral_amount

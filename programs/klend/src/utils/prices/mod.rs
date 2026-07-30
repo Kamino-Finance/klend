@@ -12,7 +12,7 @@ use self::{
     checks::get_validated_price, pyth::get_pyth_price_and_twap, scope::get_scope_price_and_twap,
     switchboard::get_switchboard_price_and_twap, types::TimestampedPriceWithTwap,
 };
-use crate::{utils::Fraction, LendingError, PriceStatusFlags, TokenInfo};
+use crate::{utils::Fraction, xmsg, LendingError, PriceStatusFlags, TokenInfo};
 
 
 const MAX_CONFIDENCE_PERCENTAGE: u64 = 2u64;
@@ -96,7 +96,7 @@ fn get_most_recent_price_and_twap(
         });
 
     most_recent_price.ok_or_else(|| {
-        msg!("No price feed available");
+        xmsg!("No price feed available");
         error!(LendingError::PriceNotValid)
     })
 }

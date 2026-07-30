@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 
 use anchor_lang::{err, Result};
-use solana_program::{clock::Clock, msg, pubkey::Pubkey};
+use solana_program::{clock::Clock, pubkey::Pubkey};
 
 use crate::{
     lending_market::utils::calculate_market_value_from_liquidity_amount,
     utils::{accounts::default_array, EventEmitter, Fraction, FractionExtra},
-    BorrowOrder, BorrowOrderCancelEvent, BorrowOrderConfig, BorrowOrderFullFillEvent,
+    xmsg, BorrowOrder, BorrowOrderCancelEvent, BorrowOrderConfig, BorrowOrderFullFillEvent,
     BorrowOrderPartialFillEvent, BorrowOrderPlaceEvent, BorrowOrderUpdateEvent,
     FixedTermBorrowRolloverConfig, LendingError, LendingMarket, Obligation, Reserve,
 };
@@ -27,7 +27,7 @@ pub fn set_borrow_order(
    
     let Some(order_config) = order_config else {
         if borrow_order == &Default::default() {
-            msg!("Ignored a no-op cancellation of the borrow order");
+            xmsg!("Ignored a no-op cancellation of the borrow order");
         } else {
             event_emitter.emit(BorrowOrderCancelEvent {
                 before: *borrow_order,
@@ -82,7 +82,7 @@ pub fn fill_borrow_order(
    
     let reserve_max_borrow_rate_bps = reserve.config.max_borrow_rate_bps();
     if reserve_max_borrow_rate_bps > borrow_order.max_borrow_rate_bps {
-        msg!(
+        xmsg!(
             "Cannot use reserve with max borrow rate of {} bps on an order requesting max {} bps",
             reserve_max_borrow_rate_bps,
             borrow_order.max_borrow_rate_bps
@@ -95,7 +95,7 @@ pub fn fill_borrow_order(
         borrow_order.get_min_debt_term_seconds(),
         reserve.config.get_debt_term_seconds(),
     ) {
-        msg!(
+        xmsg!(
             "Cannot use reserve with debt term of {:?} seconds on an order requesting min {:?} seconds",
             reserve.config.get_debt_term_seconds(),
             borrow_order.get_min_debt_term_seconds()
@@ -120,7 +120,7 @@ pub fn fill_borrow_order(
         borrow_order.get_min_debt_term_seconds(),
         seconds_until_reserve_debt_maturity,
     ) {
-        msg!(
+        xmsg!(
             "Cannot use reserve with debt maturity timestamp {:?} (i.e. in {:?} seconds) on an order requesting min {:?} seconds",
             reserve.config.get_debt_maturity_timestamp(),
             seconds_until_reserve_debt_maturity,
@@ -131,7 +131,7 @@ pub fn fill_borrow_order(
 
    
     if current_timestamp > borrow_order.fillable_until_timestamp {
-        msg!(
+        xmsg!(
             "At current timestamp {} it is no longer possible to fill an order fillable until {}",
             current_timestamp,
             borrow_order.fillable_until_timestamp
@@ -146,7 +146,7 @@ pub fn fill_borrow_order(
         let fill_value =
             calculate_market_value_from_liquidity_amount(reserve, Fraction::from_num(amount));
         if fill_value < lending_market.min_borrow_order_fill_value {
-            msg!(
+            xmsg!(
                 "Filled amount {} would have value {}, lower than the configured minimum {}",
                 amount,
                 fill_value.to_display(),
@@ -195,26 +195,29 @@ pub fn propagate_rollover_config_to_borrow(
     already_borrowed_from_same_reserve: bool,
 ) -> Result<()> {
     if !lending_market.is_obligation_borrow_rollover_configuration_enabled() {
-        msg!("Borrow order is supposed to enable auto-rollover on its borrows, but the feature is disabled on market level");
+        xmsg!("Borrow order is supposed to enable auto-rollover on its borrows, but the feature is disabled on market level");
         return err!(LendingError::BorrowRolloverConfigurationDisabled);
     }
     let (borrow, index) = obligation.find_liquidity_in_borrows_mut(reserve_address)?;
 
     if already_borrowed_from_same_reserve {
-        msg!(
+        xmsg!(
             "Filled pre-existing borrow's[{}] previous rollover config: {:?}",
             index,
             borrow.fixed_term_borrow_rollover_config
         );
-        if borrow.fixed_term_borrow_rollover_config != rollover_config {
-            msg!("Borrow order's rollover config does not match the pre-existing borrow slot's config");
+        if !borrow
+            .fixed_term_borrow_rollover_config
+            .is_compatible_with(&rollover_config)
+        {
+            xmsg!("Borrow order's rollover config does not match the pre-existing borrow slot's config");
             return err!(LendingError::ObligationBorrowRolloverConfigMismatch);
         }
         return Ok(());
     }
 
     borrow.fixed_term_borrow_rollover_config = rollover_config;
-    msg!(
+    xmsg!(
         "Borrow order propagated new rollover config: {:?}",
         borrow.fixed_term_borrow_rollover_config
     );
@@ -225,7 +228,7 @@ pub fn propagate_rollover_config_to_borrow(
 
 fn check_borrow_order_creation_enabled(lending_market: &LendingMarket) -> Result<()> {
     if !lending_market.is_borrow_order_creation_enabled() {
-        msg!("Creation of new borrow orders is disabled by the market's configuration");
+        xmsg!("Creation of new borrow orders is disabled by the market's configuration");
         return err!(LendingError::OrderCreationDisabled);
     }
     Ok(())
@@ -233,7 +236,7 @@ fn check_borrow_order_creation_enabled(lending_market: &LendingMarket) -> Result
 
 fn check_borrow_order_execution_enabled(lending_market: &LendingMarket) -> Result<()> {
     if !lending_market.is_borrow_order_execution_enabled() {
-        msg!("Execution of borrow orders is disabled by the market's configuration");
+        xmsg!("Execution of borrow orders is disabled by the market's configuration");
         return err!(LendingError::BorrowOrderExecutionDisabled);
     }
     Ok(())
@@ -257,19 +260,19 @@ fn check_order_config_valid(
 
    
     if *max_borrow_rate_bps == 0 {
-        msg!("Borrow order must specify max borrow rate");
+        xmsg!("Borrow order must specify max borrow rate");
         return err!(LendingError::InvalidOrderConfiguration);
     }
 
    
     if *remaining_debt_amount == 0 {
-        msg!("Borrow order must request non-0 debt",);
+        xmsg!("Borrow order must request non-0 debt",);
         return err!(LendingError::InvalidOrderConfiguration);
     }
 
    
     if *fillable_until_timestamp < timestamp {
-        msg!(
+        xmsg!(
             "Fillable until timestamp {} cannot be in the past (at {})",
             fillable_until_timestamp,
             timestamp
@@ -293,7 +296,7 @@ fn check_order_remaining_debt_value(
         Fraction::from_num(remaining_debt_amount),
     );
     if order_value < lending_market.min_borrow_order_fill_value {
-        msg!(
+        xmsg!(
             "Borrow order's remaining debt {} would have value {}, below the configured minimum {}",
             remaining_debt_amount,
             order_value.to_display(),
@@ -406,7 +409,7 @@ fn update_borrow_order_config(
 
 fn check_not_updated<T: PartialEq + Debug>(name: &str, current: &T, new: T) -> Result<()> {
     if new != *current {
-        msg!(
+        xmsg!(
             "Cannot update the borrow order's {} (currently {:?}, requested {:?})",
             name,
             current,

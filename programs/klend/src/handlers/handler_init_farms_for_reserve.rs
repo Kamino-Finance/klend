@@ -1,20 +1,27 @@
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 use farms::program::Farms;
 
 use crate::{
+    check_advance_nonce_ix_if_needed,
     lending_market::farms_ixs,
     state::{LendingMarket, Reserve},
     utils::seeds,
-    ReserveFarmKind,
+    xmsg, ReserveFarmKind,
 };
 
 pub fn process(ctx: Context<InitFarmsForReserve>, mode: u8) -> Result<()> {
+    check_advance_nonce_ix_if_needed!(ctx.accounts);
+
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let farm = ctx.accounts.farm_state.key();
 
     let mode: ReserveFarmKind = mode.try_into().unwrap();
 
-    msg!(
+    xmsg!(
         "InitFarmsForReserve Reserve {:?} mode {:?}",
         ctx.accounts.reserve.key(),
         mode
@@ -58,4 +65,8 @@ pub struct InitFarmsForReserve<'info> {
 
     pub rent: Sysvar<'info, Rent>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

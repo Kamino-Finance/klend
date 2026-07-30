@@ -2,12 +2,21 @@ use anchor_lang::{
     prelude::*,
     solana_program::{
         instruction::{get_stack_height, Instruction, TRANSACTION_LEVEL_STACK_HEIGHT},
+        system_program,
         sysvar::instructions::{load_current_index_checked, load_instruction_at_checked},
     },
     Result,
 };
 
-use crate::utils::{CPI_WHITELISTED_ACCOUNTS, RESTRICTED_PROGRAMS};
+use crate::{
+    state::LendingMarket,
+    utils::{CPI_WHITELISTED_ACCOUNTS, RESTRICTED_PROGRAMS},
+    LendingError,
+};
+
+
+
+const ADVANCE_NONCE_ACCOUNT_IX_DISCM: [u8; 4] = 4u32.to_le_bytes();
 
 
 pub trait InstructionLoader {
@@ -94,6 +103,22 @@ pub trait InstructionLoader {
 
         Ok(false)
     }
+
+    fn tx_includes_advance_nonce_ix(&self) -> Result<bool> {
+        let ix_iterator = IxIterator::new_at(0, self);
+
+        for ix_result in ix_iterator {
+            let ix = ix_result?;
+            if ix.program_id == system_program::ID
+                && ix.data.len() >= 4
+                && ix.data[..4] == ADVANCE_NONCE_ACCOUNT_IX_DISCM
+            {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
 }
 
 pub struct BpfInstructionLoader<'a, 'info> {
@@ -163,5 +188,30 @@ pub fn no_restricted_programs_within_tx(
 ) -> Result<bool> {
     let instruction_loader = BpfInstructionLoader::new(instruction_sysvar_account_info);
     Ok(!instruction_loader.tx_includes_restricted_programs()?)
+}
+
+pub fn check_no_advance_nonce_ix_within_tx(
+    instruction_sysvar_account_info: &AccountInfo,
+) -> Result<()> {
+    let instruction_loader = BpfInstructionLoader::new(instruction_sysvar_account_info);
+    require!(
+        !instruction_loader.tx_includes_advance_nonce_ix()?,
+        LendingError::TransactionIncludesNonceInstruction
+    );
+    Ok(())
+}
+
+
+
+
+
+pub fn check_advance_nonce_presence_if_needed(
+    market: &LendingMarket,
+    instruction_sysvar_account_info: &AccountInfo,
+) -> Result<()> {
+    if market.is_nonce_block_disabled() {
+        return Ok(());
+    }
+    check_no_advance_nonce_ix_within_tx(instruction_sysvar_account_info)
 }
 
