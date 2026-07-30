@@ -18,7 +18,7 @@ use crate::{
         constraints, seeds, token_transfer,
     },
     withdraw_ticket::{ProgressCallbackType, WithdrawTicket},
-    LendingAction, LendingError, TicketedWithdrawResult,
+    xmsg, LendingAction, LendingError, TicketedWithdrawResult,
 };
 
 pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
@@ -40,7 +40,7 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
        
        
        
-        msg!("Progressing over a cancelled ticket; closing the ticket account");
+        xmsg!("Progressing over a cancelled ticket; closing the ticket account");
         reserve.withdraw_queue.dequeue(0, true);
         drop(withdraw_ticket);
         ctx.accounts
@@ -59,7 +59,7 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
 
     let require_closing_ticket = match destination_ta_validity {
         DestinationTokenAccountValidity::AtaToBeCreated => {
-            msg!("User's destination liquidity ATA does not exist; creating it");
+            xmsg!("User's destination liquidity ATA does not exist; creating it");
            
            
             create_ata(
@@ -83,7 +83,7 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
             true
         }
         DestinationTokenAccountValidity::Invalid => {
-            msg!("User's destination liquidity account became incompatible; marking ticket as invalid and skipping over it");
+            xmsg!("User's destination liquidity account became incompatible; marking ticket as invalid and skipping over it");
             let mut withdraw_ticket = ctx.accounts.withdraw_ticket.load_mut()?;
             withdraw_ticket.invalid = 1;
             reserve
@@ -135,7 +135,7 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
         collateral_amount_to_burn,
         liquidity_amount_to_withdraw,
     } = ticketed_withdraw_result;
-    msg!(
+    xmsg!(
         "pnl: withdrawing queued liquidity {} and burning collateral {}",
         liquidity_amount_to_withdraw,
         collateral_amount_to_burn
@@ -190,18 +190,18 @@ pub fn process(ctx: Context<WithdrawQueuedLiquidity>) -> Result<bool> {
     )?;
 
     if withdraw_ticket.queued_collateral_amount == 0 {
-        msg!("Redeemed entire ticket collateral; closing the ticket account");
+        xmsg!("Redeemed entire ticket collateral; closing the ticket account");
         drop(withdraw_ticket);
         ctx.accounts
             .withdraw_ticket
             .close(ctx.accounts.withdraw_ticket_owner.to_account_info())?;
     } else {
-        msg!(
+        xmsg!(
             "Ticket's remaining queued collateral: {}",
             withdraw_ticket.queued_collateral_amount
         );
         if require_closing_ticket {
-            msg!("Cannot spend the ticket's prepaid rent for destination ATA without closing the ticket itself");
+            xmsg!("Cannot spend the ticket's prepaid rent for destination ATA without closing the ticket itself");
             return err!(LendingError::WithdrawTicketRequiresFullRedemption);
         }
     }

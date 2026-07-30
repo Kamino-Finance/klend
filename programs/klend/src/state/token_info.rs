@@ -243,6 +243,15 @@ impl ScopeConfiguration {
     pub fn has_twap(&self) -> bool {
         self.twap_chain != [u16::MAX; 4] && self.twap_chain != [0; 4]
     }
+
+
+    pub fn price_feed(&self) -> Option<Pubkey> {
+        if self.is_enabled() {
+            Some(self.price_feed)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq, Default)]
@@ -266,6 +275,24 @@ impl SwitchboardConfiguration {
     pub fn has_twap(&self) -> bool {
         self.twap_aggregator != Pubkey::default() && self.twap_aggregator != NULL_PUBKEY
     }
+
+
+    pub fn price_aggregator(&self) -> Option<Pubkey> {
+        if self.is_enabled() {
+            Some(self.price_aggregator)
+        } else {
+            None
+        }
+    }
+
+
+    pub fn twap_aggregator(&self) -> Option<Pubkey> {
+        if self.has_twap() {
+            Some(self.twap_aggregator)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq, Default)]
@@ -281,6 +308,15 @@ pub struct PythConfiguration {
 impl PythConfiguration {
     pub fn is_enabled(&self) -> bool {
         self.price != Pubkey::default() && self.price != NULL_PUBKEY
+    }
+
+
+    pub fn price(&self) -> Option<Pubkey> {
+        if self.is_enabled() {
+            Some(self.price)
+        } else {
+            None
+        }
     }
 }
 

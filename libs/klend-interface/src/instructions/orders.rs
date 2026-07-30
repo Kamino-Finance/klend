@@ -52,6 +52,7 @@ pub struct SetBorrowOrderAccounts {
     pub debt_liquidity_mint: Pubkey,
 }
 
+/// Deprecated pre-multi-BO variant (no `order_idx`); on-chain it operates on the head slot (index 0).
 pub fn set_borrow_order(
     accounts: SetBorrowOrderAccounts,
     order_config: crate::types::BorrowOrderConfigArgs,
@@ -65,6 +66,45 @@ pub fn set_borrow_order(
 
     let mut data = discriminators::SET_BORROW_ORDER.to_vec();
     Args {
+        order_config,
+        min_expected_current_remaining_debt_amount,
+    }
+    .serialize(&mut data)
+    .unwrap();
+
+    Instruction {
+        program_id: KLEND_PROGRAM_ID,
+        accounts: vec![
+            signer(accounts.owner),
+            writable(accounts.obligation),
+            readonly(accounts.lending_market),
+            readonly(accounts.reserve),
+            readonly(accounts.filled_debt_destination),
+            readonly(accounts.debt_liquidity_mint),
+            readonly(SYSVAR_INSTRUCTIONS_ID),
+            readonly(crate::pda::event_authority(&KLEND_PROGRAM_ID).0),
+            readonly(KLEND_PROGRAM_ID),
+        ],
+        data,
+    }
+}
+
+pub fn set_borrow_order_v2(
+    accounts: SetBorrowOrderAccounts,
+    order_idx: u8,
+    order_config: crate::types::BorrowOrderConfigArgs,
+    min_expected_current_remaining_debt_amount: u64,
+) -> Instruction {
+    #[derive(BorshSerialize)]
+    struct Args {
+        order_idx: u8,
+        order_config: crate::types::BorrowOrderConfigArgs,
+        min_expected_current_remaining_debt_amount: u64,
+    }
+
+    let mut data = discriminators::SET_BORROW_ORDER_V2.to_vec();
+    Args {
+        order_idx,
         order_config,
         min_expected_current_remaining_debt_amount,
     }
@@ -109,11 +149,56 @@ pub struct FillBorrowOrderAccounts {
     pub reserve_farm_state: Option<Pubkey>,
 }
 
+/// Deprecated pre-multi-BO variant (no `order_idx`); on-chain it fills the head slot (index 0).
 pub fn fill_borrow_order(
     accounts: FillBorrowOrderAccounts,
     remaining_accounts: Vec<AccountMeta>,
 ) -> Instruction {
     let data = discriminators::FILL_BORROW_ORDER.to_vec();
+
+    let mut account_metas = vec![
+        signer(accounts.payer),
+        writable(accounts.obligation),
+        readonly(accounts.lending_market),
+        readonly(accounts.lending_market_authority),
+        writable(accounts.borrow_reserve),
+        readonly(accounts.borrow_reserve_liquidity_mint),
+        writable(accounts.reserve_source_liquidity),
+        writable(accounts.borrow_reserve_liquidity_fee_receiver),
+        writable(accounts.user_destination_liquidity),
+        optional_account(&KLEND_PROGRAM_ID, accounts.referrer_token_state, true),
+        readonly(accounts.token_program),
+        readonly(SYSVAR_INSTRUCTIONS_ID),
+        // Optional farms accounts
+        optional_account(&KLEND_PROGRAM_ID, accounts.obligation_farm_user_state, true),
+        optional_account(&KLEND_PROGRAM_ID, accounts.reserve_farm_state, true),
+        readonly(FARMS_PROGRAM_ID),
+        // event_cpi accounts
+        readonly(crate::pda::event_authority(&KLEND_PROGRAM_ID).0),
+        readonly(KLEND_PROGRAM_ID),
+    ];
+
+    account_metas.extend(remaining_accounts);
+
+    Instruction {
+        program_id: KLEND_PROGRAM_ID,
+        accounts: account_metas,
+        data,
+    }
+}
+
+pub fn fill_borrow_order_v2(
+    accounts: FillBorrowOrderAccounts,
+    order_idx: u8,
+    remaining_accounts: Vec<AccountMeta>,
+) -> Instruction {
+    #[derive(BorshSerialize)]
+    struct Args {
+        order_idx: u8,
+    }
+
+    let mut data = discriminators::FILL_BORROW_ORDER_V2.to_vec();
+    Args { order_idx }.serialize(&mut data).unwrap();
 
     let mut account_metas = vec![
         signer(accounts.payer),

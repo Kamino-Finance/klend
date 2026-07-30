@@ -14,8 +14,17 @@ use crate::{
     BorrowSize, LendingError, ReferrerTokenState, ReserveFarmKind,
 };
 
-pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>) -> Result<()> {
-    process_impl(&ctx)?;
+
+
+pub fn process_v1<'info>(ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>) -> Result<()> {
+    process_v2(ctx, 0)
+}
+
+pub fn process_v2<'info>(
+    ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>,
+    order_idx: u8,
+) -> Result<()> {
+    process_impl(&ctx, usize::from(order_idx))?;
     refresh_farms!(
         ctx.accounts.borrow_accounts,
         [(
@@ -27,7 +36,10 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>) -
     Ok(())
 }
 
-fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>) -> Result<()> {
+fn process_impl<'info>(
+    ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>,
+    order_idx: usize,
+) -> Result<()> {
    
    
 
@@ -36,12 +48,22 @@ fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>)
 
    
     let obligation = accounts.obligation.load()?;
-    let order_remaining_amount = obligation.borrow_order.remaining_debt_amount;
+    let order_remaining_amount = obligation
+        .get_borrow_order(order_idx)?
+        .remaining_debt_amount;
 
    
     let already_borrowed_from_same_reserve = obligation
         .find_liquidity_index_in_borrows(accounts.borrow_reserve.key())
         .is_some();
+
+   
+    check_accounts_match_order(
+        &obligation,
+        accounts.borrow_reserve.load()?.deref(),
+        accounts.user_destination_liquidity.key(),
+        order_idx,
+    )?;
 
     drop(obligation);
 
@@ -63,12 +85,12 @@ fn process_impl<'info>(ctx: &Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>)
     let clock = &Clock::get()?;
 
    
-    let borrow_order = &mut obligation.borrow_order;
+    let borrow_order = obligation.get_borrow_order_mut(order_idx)?;
     let borrow_order_rollover_config = borrow_order.get_rollover_config_for_filled_borrow();
     borrow_order_operations::fill_borrow_order(
         lending_market.deref(),
         &borrow_reserve,
-        &mut obligation.borrow_order,
+        borrow_order,
         clock,
         fill_amount,
         ctx_event_emitter!(ctx),
@@ -137,6 +159,30 @@ impl<'info> From<FillBorrowOrderAccounts<'info>> for BorrowObligationLiquidity<'
     }
 }
 
+
+
+
+
+fn check_accounts_match_order(
+    obligation: &Obligation,
+    borrow_reserve: &Reserve,
+    user_destination_liquidity: Pubkey,
+    order_idx: usize,
+) -> Result<()> {
+    let order = obligation.get_borrow_order(order_idx)?;
+    require_keys_eq!(
+        borrow_reserve.liquidity.mint_pubkey,
+        order.debt_liquidity_mint,
+        LendingError::BorrowOrderDebtLiquidityMintMismatch
+    );
+    require_keys_eq!(
+        user_destination_liquidity,
+        order.filled_debt_destination,
+        ErrorCode::ConstraintAddress
+    );
+    Ok(())
+}
+
 #[derive(Accounts, Clone)]
 pub struct FillBorrowOrderAccounts<'info> {
     pub payer: Signer<'info>,
@@ -161,10 +207,9 @@ pub struct FillBorrowOrderAccounts<'info> {
 
 
 
-    #[account(mut,
-        has_one = lending_market,
-        constraint = borrow_reserve.load()?.liquidity.mint_pubkey == obligation.load()?.borrow_order.debt_liquidity_mint @ LendingError::BorrowOrderDebtLiquidityMintMismatch,
-    )]
+
+
+    #[account(mut, has_one = lending_market)]
     pub borrow_reserve: AccountLoader<'info, Reserve>,
 
 
@@ -191,8 +236,8 @@ pub struct FillBorrowOrderAccounts<'info> {
 
 
 
+
     #[account(mut,
-        address = obligation.load()?.borrow_order.filled_debt_destination,
         token::mint = reserve_source_liquidity.mint,
         token::authority = obligation.load()?.owner,
     )]

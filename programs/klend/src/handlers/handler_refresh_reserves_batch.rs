@@ -5,7 +5,7 @@ use crate::{
     lending_market::lending_operations,
     state::Reserve,
     utils::{prices::get_price, FatAccountLoader, PROGRAM_VERSION},
-    LendingError, LendingMarket,
+    xmsg, LendingError, LendingMarket,
 };
 
 fn maybe_price_account<'a, 'info>(
@@ -18,7 +18,7 @@ fn maybe_price_account<'a, 'info>(
             Ok(Some(price_account))
         }
     } else {
-        msg!("Missing price account");
+        xmsg!("Missing price account");
         err!(LendingError::InvalidAccountInput)
     }
 }
@@ -31,7 +31,7 @@ pub fn process(ctx: Context<RefreshReservesBatch>, skip_price_updates: bool) -> 
             break;
         };
         let Some(lending_market_acc) = remaining_accounts_it.next() else {
-            msg!("Missing lending market account");
+            xmsg!("Missing lending market account");
             return err!(LendingError::InvalidAccountInput);
         };
 
@@ -100,11 +100,9 @@ pub fn process(ctx: Context<RefreshReservesBatch>, skip_price_updates: bool) -> 
             lending_market.referral_fee_bps,
             lending_market.reserve_rewards_max_apr_bps,
         )?;
-        let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
-        lending_operations::refresh_reserve_limit_timestamps(reserve, timestamp);
 
         if !skip_price_updates {
-            msg!(
+            xmsg!(
                 "Token: {} Price: {}",
                 &reserve.config.token_info.symbol(),
                 reserve.liquidity.get_market_price().to_display()

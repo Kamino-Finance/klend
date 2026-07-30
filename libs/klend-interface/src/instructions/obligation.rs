@@ -264,6 +264,7 @@ pub fn approve_obligation_ownership_transfer(
             readonly(accounts.global_config),
             writable(accounts.obligation),
             readonly(accounts.pending_owner),
+            readonly(SYSVAR_INSTRUCTIONS_ID),
         ],
         data: discriminators::APPROVE_OBLIGATION_OWNERSHIP_TRANSFER.to_vec(),
     }

@@ -1,10 +1,10 @@
 
-pub trait IterExt: Iterator + Sized {
+pub trait IterExt: IntoIterator + Sized {
 
     fn zip_exact<R: Iterator>(
         self,
         rights: impl IntoIterator<Item = R::Item, IntoIter = R>,
-    ) -> LengthCheckingZipIterator<Self, R> {
+    ) -> LengthCheckingZipIterator<<Self as IntoIterator>::IntoIter, R> {
         zip_exact(self, rights)
     }
 
@@ -12,8 +12,17 @@ pub trait IterExt: Iterator + Sized {
     fn only_element(self) -> Option<Self::Item> {
         only_element(self)
     }
+
+
+
+
+
+
+    fn guaranteed_only_element(self) -> Self::Item {
+        only_element(self).expect("must be a single element")
+    }
 }
-impl<T: Iterator> IterExt for T {}
+impl<T: IntoIterator> IterExt for T {}
 
 
 pub fn only_element<T>(iter: impl IntoIterator<Item = T>) -> Option<T> {

@@ -158,6 +158,10 @@ pub const fn sha256_first8(msg: &[u8]) -> [u8; 8] {
 disc!(REFRESH_RESERVE, "refresh_reserve");
 disc!(REFRESH_RESERVES_BATCH, "refresh_reserves_batch");
 disc!(REFRESH_OBLIGATION, "refresh_obligation");
+disc!(
+    CALCULATE_CTOKEN_EXCHANGE_RATE,
+    "calculate_ctoken_exchange_rate"
+);
 
 // Deposit
 disc!(DEPOSIT_RESERVE_LIQUIDITY, "deposit_reserve_liquidity");
@@ -231,7 +235,9 @@ disc!(REQUEST_ELEVATION_GROUP, "request_elevation_group");
 // Orders
 disc!(SET_OBLIGATION_ORDER, "set_obligation_order");
 disc!(SET_BORROW_ORDER, "set_borrow_order");
+disc!(SET_BORROW_ORDER_V2, "set_borrow_order_v2");
 disc!(FILL_BORROW_ORDER, "fill_borrow_order");
+disc!(FILL_BORROW_ORDER_V2, "fill_borrow_order_v2");
 
 // Referrer
 disc!(INIT_REFERRER_TOKEN_STATE, "init_referrer_token_state");
@@ -303,7 +309,9 @@ pub enum KlendInstruction {
     RequestElevationGroup,
     SetObligationOrder,
     SetBorrowOrder,
+    SetBorrowOrderV2,
     FillBorrowOrder,
+    FillBorrowOrderV2,
     InitReferrerTokenState,
     InitUserMetadata,
     WithdrawReferrerFees,
@@ -386,7 +394,9 @@ pub fn identify_instruction(data: &[u8]) -> Option<KlendInstruction> {
         d if d == REQUEST_ELEVATION_GROUP => Some(KlendInstruction::RequestElevationGroup),
         d if d == SET_OBLIGATION_ORDER => Some(KlendInstruction::SetObligationOrder),
         d if d == SET_BORROW_ORDER => Some(KlendInstruction::SetBorrowOrder),
+        d if d == SET_BORROW_ORDER_V2 => Some(KlendInstruction::SetBorrowOrderV2),
         d if d == FILL_BORROW_ORDER => Some(KlendInstruction::FillBorrowOrder),
+        d if d == FILL_BORROW_ORDER_V2 => Some(KlendInstruction::FillBorrowOrderV2),
         d if d == INIT_REFERRER_TOKEN_STATE => Some(KlendInstruction::InitReferrerTokenState),
         d if d == INIT_USER_METADATA => Some(KlendInstruction::InitUserMetadata),
         d if d == WITHDRAW_REFERRER_FEES => Some(KlendInstruction::WithdrawReferrerFees),
@@ -439,6 +449,10 @@ mod tests {
         check_disc!("refresh_reserve", REFRESH_RESERVE);
         check_disc!("refresh_reserves_batch", REFRESH_RESERVES_BATCH);
         check_disc!("refresh_obligation", REFRESH_OBLIGATION);
+        check_disc!(
+            "calculate_ctoken_exchange_rate",
+            CALCULATE_CTOKEN_EXCHANGE_RATE
+        );
         check_disc!("deposit_reserve_liquidity", DEPOSIT_RESERVE_LIQUIDITY);
         check_disc!(
             "deposit_obligation_collateral_v2",
@@ -494,7 +508,9 @@ mod tests {
         check_disc!("request_elevation_group", REQUEST_ELEVATION_GROUP);
         check_disc!("set_obligation_order", SET_OBLIGATION_ORDER);
         check_disc!("set_borrow_order", SET_BORROW_ORDER);
+        check_disc!("set_borrow_order_v2", SET_BORROW_ORDER_V2);
         check_disc!("fill_borrow_order", FILL_BORROW_ORDER);
+        check_disc!("fill_borrow_order_v2", FILL_BORROW_ORDER_V2);
         check_disc!("init_referrer_token_state", INIT_REFERRER_TOKEN_STATE);
         check_disc!("init_user_metadata", INIT_USER_METADATA);
         check_disc!("withdraw_referrer_fees", WITHDRAW_REFERRER_FEES);

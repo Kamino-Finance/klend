@@ -158,6 +158,14 @@ impl WithdrawTicket {
     }
 
 
+    pub fn progress_callback_custom_account(&self, index: usize) -> Option<Pubkey> {
+        self.progress_callback_custom_accounts
+            .get(index)
+            .copied()
+            .filter(|address| address != &Pubkey::default())
+    }
+
+
     pub fn is_valid(&self) -> bool {
         self.invalid == false as u8
     }

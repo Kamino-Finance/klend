@@ -1,16 +1,26 @@
 use std::ops::{Deref, DerefMut};
 
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
 use crate::{
-    lending_market::lending_operations, utils::accounts::default_array, LendingError,
-    LendingMarket, Reserve, ReserveConfigCustomizations,
+    lending_market::{ix_utils, lending_operations},
+    utils::accounts::default_array,
+    xmsg, LendingError, LendingMarket, Reserve, ReserveConfigCustomizations,
 };
 
 pub fn process<'info>(
     ctx: Context<'_, '_, '_, 'info, CloneReserveConfig<'info>>,
     customizations: ReserveConfigCustomizationArgs,
 ) -> Result<()> {
+    ix_utils::check_advance_nonce_presence_if_needed(
+        ctx.accounts.target_lending_market.load()?.deref(),
+        &ctx.accounts.instruction_sysvar_account,
+    )?;
+
     let source_reserve = ctx.accounts.source_reserve.load()?;
     let mut target_reserve = ctx.accounts.target_reserve.load_mut()?;
 
@@ -30,7 +40,7 @@ pub struct CloneReserveConfig<'info> {
         target_lending_market.load()?.deref(),
         target_reserve.load()?.deref(),
     ) @ LendingError::InvalidSigner)]
-    signer: Signer<'info>,
+    pub signer: Signer<'info>,
 
 
 
@@ -40,14 +50,14 @@ pub struct CloneReserveConfig<'info> {
         address = target_reserve.load()?.lending_market,
         constraint = !target_lending_market.load()?.is_immutable() @ LendingError::OperationNotPermittedMarketImmutable
     )]
-    target_lending_market: AccountLoader<'info, LendingMarket>,
+    pub target_lending_market: AccountLoader<'info, LendingMarket>,
 
 
     #[account(
         constraint = !source_reserve.load()?.is_usage_blocked() @ LendingError::CloneSourceReserveDisabled,
         constraint = !source_reserve.load()?.config.is_emergency_mode() @ LendingError::ReserveEmergencyMode,
     )]
-    source_reserve: AccountLoader<'info, Reserve>,
+    pub source_reserve: AccountLoader<'info, Reserve>,
 
 
     #[account(mut,
@@ -55,7 +65,11 @@ pub struct CloneReserveConfig<'info> {
         constraint = target_reserve.load()?.liquidity.mint_pubkey == source_reserve.load()?.liquidity.mint_pubkey @ LendingError::ClonedReserveLiquidityMintMismatch,
         constraint = !target_reserve.load()?.config.is_emergency_mode() @ LendingError::ReserveEmergencyMode,
     )]
-    target_reserve: AccountLoader<'info, Reserve>,
+    pub target_reserve: AccountLoader<'info, Reserve>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }
 
 
@@ -91,7 +105,7 @@ impl TryFrom<ReserveConfigCustomizationArgs> for ReserveConfigCustomizations {
         fn gated<T: Default + PartialEq>(gate: u8, value: T) -> Result<Option<T>> {
             Ok(if gate == false as u8 {
                 if value != T::default() {
-                    msg!("Overridden value must be zeroed when not overriding");
+                    xmsg!("Overridden value must be zeroed when not overriding");
                     return err!(LendingError::InvalidConfig);
                 }
                 None

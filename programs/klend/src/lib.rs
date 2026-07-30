@@ -3,17 +3,25 @@
 
 use anchor_lang::prelude::*;
 
+
+#[macro_use]
+mod msg_ban;
+
 mod handlers;
 pub mod lending_market;
 pub mod state;
 pub mod utils;
 
+pub use handlers::handler_clone_reserve_config::ReserveConfigCustomizationArgs;
 pub use lending_market::lending_operations::utils::validate_reserve_config_integrity;
 use utils::constraints::emergency_mode_disabled;
 use withdraw_ticket::ProgressCallbackType;
 
 use crate::handlers::*;
-pub use crate::{state::*, utils::fraction};
+pub use crate::{
+    handlers::handler_calculate_ctoken_exchange_rate::ExchangeRateWithDecimals, state::*,
+    utils::fraction,
+};
 
 #[cfg(feature = "staging")]
 declare_id!("SLendK7ySfcEzyaFqy93gDnD3RtrpXJcnRwb6zFHJSh");
@@ -128,6 +136,12 @@ pub mod kamino_lending {
         skip_price_updates: bool,
     ) -> Result<()> {
         handler_refresh_reserves_batch::process(ctx, skip_price_updates)
+    }
+
+    pub fn calculate_ctoken_exchange_rate(
+        ctx: Context<CalculateCTokenExchangeRate>,
+    ) -> Result<ExchangeRateWithDecimals> {
+        handler_calculate_ctoken_exchange_rate::process(ctx)
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
@@ -429,14 +443,33 @@ pub mod kamino_lending {
         handler_set_obligation_order::process(ctx, index, order)
     }
 
+    #[deprecated(
+        since = "1.23.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn set_borrow_order(
         ctx: Context<SetBorrowOrder>,
         order_config: BorrowOrderConfigArgs,
         min_expected_current_remaining_debt_amount: u64,
     ) -> Result<()> {
-        handler_set_borrow_order::process(
+        handler_set_borrow_order::process_v1(
             ctx,
+            order_config,
+            min_expected_current_remaining_debt_amount,
+        )
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
+    pub fn set_borrow_order_v2(
+        ctx: Context<SetBorrowOrder>,
+        order_idx: u8,
+        order_config: BorrowOrderConfigArgs,
+        min_expected_current_remaining_debt_amount: u64,
+    ) -> Result<()> {
+        handler_set_borrow_order::process_v2(
+            ctx,
+            order_idx,
             order_config,
             min_expected_current_remaining_debt_amount,
         )
@@ -458,11 +491,23 @@ pub mod kamino_lending {
         handler_rollover_fixed_term_borrow::process(ctx)
     }
 
+    #[deprecated(
+        since = "1.23.0",
+        note = "Please use `_v2` variant of the handler instead"
+    )]
     #[access_control(emergency_mode_disabled(&ctx.accounts.borrow_accounts.lending_market))]
     pub fn fill_borrow_order<'info>(
         ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>,
     ) -> Result<()> {
-        handler_fill_borrow_order::process(ctx)
+        handler_fill_borrow_order::process_v1(ctx)
+    }
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.borrow_accounts.lending_market))]
+    pub fn fill_borrow_order_v2<'info>(
+        ctx: Context<'_, '_, '_, 'info, FillBorrowOrder<'info>>,
+        order_idx: u8,
+    ) -> Result<()> {
+        handler_fill_borrow_order::process_v2(ctx, order_idx)
     }
 
    
@@ -541,7 +586,6 @@ pub mod kamino_lending {
         handler_update_global_config_admin::process(ctx)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn idl_missing_types(
         _ctx: Context<UpdateReserveConfig>,
         _reserve_farm_kind: ReserveFarmKind,
@@ -804,7 +848,7 @@ pub enum LendingError {
     RepayTooSmallForFullLiquidation,
     #[msg("Liquidator provided repay amount lower than required by liquidation rules")]
     InsufficientRepayAmount,
-    #[msg("Obligation order of the given index cannot exist")]
+    #[msg("Order of the given index cannot exist")]
     OrderIndexOutOfBounds,
     #[msg("Given order configuration has wrong parameters")]
     InvalidOrderConfiguration,
@@ -938,6 +982,8 @@ pub enum LendingError {
     MissingPermissioner,
     #[msg("Reserve rewards are disabled on this market (reserve_rewards_max_apr_bps is 0)")]
     ReserveRewardsDisabled,
+    #[msg("Transaction includes a nonce instruction, which is not allowed for admin operations")]
+    TransactionIncludesNonceInstruction,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

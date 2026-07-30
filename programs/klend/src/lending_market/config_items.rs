@@ -5,7 +5,8 @@ use std::{
 
 use anchor_lang::prelude::*;
 use borsh::BorshDeserialize;
-use solana_program::msg;
+
+use crate::xmsg;
 
 
 
@@ -164,8 +165,8 @@ impl<'h, H, T, S: Setter<H, T>, G: Getter<H, T>, V: Validator<T>, R: Renderer<T>
         } = self;
         validator(&new_value)?;
         let prv = getter(target, &new_value);
-        msg!("Prv value: {} = {}", name, RenderedOption(&renderer, prv));
-        msg!("New value: {} = {}", name, Rendered(&renderer, &new_value));
+        xmsg!("Prv value: {} = {}", name, RenderedOption(&renderer, prv));
+        xmsg!("New value: {} = {}", name, Rendered(&renderer, &new_value));
         setter(target, new_value)?;
         Ok(())
     }
@@ -217,7 +218,7 @@ pub mod validations {
     pub fn check_bool<T: Into<u128> + Clone>(value: &T) -> Result<()> {
         let value = value.clone().into();
         if value > 1 {
-            msg!("A boolean flag must be 0 or 1, got {:?}", value);
+            xmsg!("A boolean flag must be 0 or 1, got {:?}", value);
             return err!(LendingError::InvalidFlag);
         }
         Ok(())
@@ -225,7 +226,7 @@ pub mod validations {
 
     pub fn check_not_zero<T: Into<u128> + Clone>(value: &T) -> Result<()> {
         if value.clone().into() == 0 {
-            msg!("Value cannot be 0");
+            xmsg!("Value cannot be 0");
             return err!(LendingError::InvalidConfig);
         }
         Ok(())
@@ -234,7 +235,7 @@ pub mod validations {
     pub fn check_not_negative<T: Into<i128> + Clone>(value: &T) -> Result<()> {
         let value = value.clone().into();
         if value < 0 {
-            msg!("Value cannot be negative, got {:?}", value);
+            xmsg!("Value cannot be negative, got {:?}", value);
             return err!(LendingError::InvalidConfig);
         }
         Ok(())
@@ -246,7 +247,7 @@ pub mod validations {
         move |value| {
             let value = value.clone().into();
             if !range.contains(&value) {
-                msg!("Value must be in range {:?}, got {:?}", range, value);
+                xmsg!("Value must be in range {:?}, got {:?}", range, value);
                 return err!(LendingError::InvalidConfig);
             }
             Ok(())
@@ -267,7 +268,7 @@ pub mod validations {
         move |value| {
             let value_t: T = value.clone().into();
             if value_t < min {
-                msg!("Value cannot be lower than {}, got {}", min, value_t);
+                xmsg!("Value cannot be lower than {}, got {}", min, value_t);
                 return err!(LendingError::InvalidConfig);
             }
             Ok(())
@@ -280,7 +281,7 @@ pub mod validations {
         move |value| {
             let value_t: T = value.clone().into();
             if value_t > max {
-                msg!("Value cannot be greater than {}, got {}", max, value_t);
+                xmsg!("Value cannot be greater than {}, got {}", max, value_t);
                 return err!(LendingError::InvalidConfig);
             }
             Ok(())
@@ -291,7 +292,7 @@ pub mod validations {
         match E::try_from(*repr) {
             Ok(_) => Ok(()),
             Err(_) => {
-                msg!(
+                xmsg!(
                     "Enum {} cannot be represented by u8 {}",
                     type_name::<E>(),
                     repr
@@ -304,7 +305,7 @@ pub mod validations {
     pub fn check_valid_permissioned_ops(bits: &u64) -> Result<()> {
         PermissionedOp::from_bits(*bits)
             .ok_or_else(|| {
-                msg!("Invalid permissioned ops bits: {:?}", bits);
+                xmsg!("Invalid permissioned ops bits: {:?}", bits);
                 error!(LendingError::InvalidConfig)
             })
             .map(|_| ())

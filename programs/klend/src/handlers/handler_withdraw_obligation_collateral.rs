@@ -12,7 +12,7 @@ use crate::{
     refresh_farms,
     state::{obligation::Obligation, LendingMarket, Reserve, WithdrawObligationCollateralAccounts},
     utils::{close_account_loader, seeds, token_transfer},
-    LtvMaxWithdrawalCheck, ReserveFarmKind,
+    xmsg, LtvMaxWithdrawalCheck, ReserveFarmKind,
 };
 
 pub fn process_v1(
@@ -86,7 +86,7 @@ fn process_impl(accounts: &WithdrawObligationCollateral, collateral_amount: u64)
             withdraw_amount,
         )?;
 
-        msg!("pnl: Withdraw obligation collateral {}", withdraw_amount);
+        xmsg!("pnl: Withdraw obligation collateral {}", withdraw_amount);
 
         obligation.is_active_deposits_empty() && obligation.is_active_borrows_empty()
     };

@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod borrow;
 pub mod compound;
+pub mod ctoken_exchange_rate;
 pub mod deposit;
 pub mod flash;
 pub mod liquidate;
@@ -15,6 +16,7 @@ pub mod withdraw_queue;
 pub use admin::*;
 pub use borrow::*;
 pub use compound::*;
+pub use ctoken_exchange_rate::*;
 pub use deposit::*;
 pub use flash::*;
 pub use liquidate::*;

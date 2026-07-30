@@ -11,7 +11,7 @@ use crate::{
     state::{LendingMarket, Reserve},
     utils::{seeds, token_transfer},
     withdraw_ticket::WithdrawTicket,
-    LendingError,
+    xmsg, LendingError,
 };
 
 
@@ -65,7 +65,7 @@ pub fn process(
         collateral_amount_to_cancel,
     )?;
 
-    msg!(
+    xmsg!(
         "pnl: Cancelling withdraw ticket and returning {} ctokens to owner, {} ctokens left in the ticket",
         amount_to_cancel, withdraw_ticket.queued_collateral_amount
     );

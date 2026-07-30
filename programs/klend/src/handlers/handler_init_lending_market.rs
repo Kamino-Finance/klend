@@ -1,11 +1,18 @@
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
 use crate::{
+    lending_market::ix_utils,
     state::{InitLendingMarketParams, LendingMarket},
     utils::seeds,
 };
 
 pub fn process(ctx: Context<InitLendingMarket>, quote_currency: [u8; 32]) -> Result<()> {
+    ix_utils::check_no_advance_nonce_ix_within_tx(&ctx.accounts.instruction_sysvar_account)?;
+
     let lending_market = &mut ctx.accounts.lending_market.load_init()?;
 
     lending_market.init(InitLendingMarketParams {
@@ -34,4 +41,8 @@ pub struct InitLendingMarket<'info> {
 
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

@@ -1,8 +1,13 @@
 use std::fmt::Debug;
 
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
 use crate::{
+    check_advance_nonce_ix_if_needed,
     fraction::FractionExtra,
     lending_market::config_items::{self, renderings, validations},
     state::{lending_market::ElevationGroup, LendingMarket, UpdateLendingMarketMode},
@@ -10,7 +15,7 @@ use crate::{
         Fraction, ELEVATION_GROUP_NONE, FULL_BPS, MAX_NUM_ELEVATION_GROUPS,
         MIN_INITIAL_DEPOSIT_AMOUNT,
     },
-    LendingError, VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE,
+    xmsg, LendingError, VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE,
 };
 
 pub fn process(
@@ -18,12 +23,14 @@ pub fn process(
     mode: u64,
     value: [u8; VALUE_BYTE_MAX_ARRAY_LEN_MARKET_UPDATE],
 ) -> Result<()> {
+    check_advance_nonce_ix_if_needed!(ctx.accounts);
+
     let mode = UpdateLendingMarketMode::try_from(mode)
         .map_err(|_| ProgramError::InvalidInstructionData)?;
 
     let market = &mut ctx.accounts.lending_market.load_mut()?;
 
-    msg!(
+    xmsg!(
         "Updating lending market {:?} with mode {:?} and value {:?}",
         ctx.accounts.lending_market.key(),
         mode,
@@ -85,7 +92,7 @@ pub fn process(
         }
         UpdateLendingMarketMode::UpdateReferralFeeBps => {
             if market.referral_fee_bps != 0 {
-                msg!("WARNING: Referral fee bps already set, unrefreshed obligations referral fees could be lost!");
+                xmsg!("WARNING: Referral fee bps already set, unrefreshed obligations referral fees could be lost!");
             }
             config_items::for_named_field!(&mut market.referral_fee_bps)
                 .validating(validations::check_valid_bps)
@@ -120,12 +127,12 @@ pub fn process(
                 .set(&value)?;
         }
         UpdateLendingMarketMode::UpdatePaddingFields => {
-            msg!("Prv reserved0 Value is {:?}", market.reserved0);
-            msg!("Prv reserved1 Value is {:?}", market.reserved1);
+            xmsg!("Prv reserved0 Value is {:?}", market.reserved0);
+            xmsg!("Prv reserved1 Value is {:?}", market.reserved1);
             market.reserved0 = [0; 8];
             market.reserved1 = [0; 8];
-            msg!("New reserved0 Value is {:?}", market.reserved0);
-            msg!("New reserved1 Value is {:?}", market.reserved1);
+            xmsg!("New reserved0 Value is {:?}", market.reserved0);
+            xmsg!("New reserved1 Value is {:?}", market.reserved1);
         }
         UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints => {
             panic!("Deprecated field")
@@ -191,7 +198,7 @@ pub fn process(
            
             if market.is_borrow_order_execution_enabled() && market.min_borrow_order_fill_value == 0
             {
-                msg!("Cannot enable borrow order execution before configuring min_borrow_order_fill_value");
+                xmsg!("Cannot enable borrow order execution before configuring min_borrow_order_fill_value");
                 return err!(LendingError::InvalidConfig);
             }
         }
@@ -220,7 +227,7 @@ pub fn process(
             if market.is_withdraw_ticket_redemption_enabled()
                 && market.min_withdraw_queued_liquidity_value == 0
             {
-                msg!("Cannot enable withdraw ticket redemption before configuring min_withdraw_queued_liquidity_value");
+                xmsg!("Cannot enable withdraw ticket redemption before configuring min_withdraw_queued_liquidity_value");
                 return err!(LendingError::InvalidConfig);
             }
         }
@@ -238,7 +245,7 @@ pub fn process(
             if market.fixed_term_rollover_window_duration_seconds > 0
                 && market.min_partial_rollover_value == 0
             {
-                msg!("Cannot enable rollover into fixed-term window before configuring min_partial_rollover_value");
+                xmsg!("Cannot enable rollover into fixed-term window before configuring min_partial_rollover_value");
                 return err!(LendingError::InvalidConfig);
             }
         }
@@ -251,7 +258,7 @@ pub fn process(
             if market.open_term_rollover_window_duration_seconds > 0
                 && market.min_partial_rollover_value == 0
             {
-                msg!("Cannot enable rollover into open-term window before configuring min_partial_rollover_value");
+                xmsg!("Cannot enable rollover into open-term window before configuring min_partial_rollover_value");
                 return err!(LendingError::InvalidConfig);
             }
         }
@@ -278,7 +285,7 @@ pub fn process(
             if market.obligation_borrow_migration_to_fixed_execution_enabled == true as u8
                 && market.min_partial_rollover_value == 0
             {
-                msg!("Cannot enable migration into fixed-term before configuring min_partial_rollover_value");
+                xmsg!("Cannot enable migration into fixed-term before configuring min_partial_rollover_value");
                 return err!(LendingError::InvalidConfig);
             }
         }
@@ -308,6 +315,11 @@ pub fn process(
         }
         UpdateLendingMarketMode::DeprecatedUpdateReserveRewardsMaxAprPct => {
             panic!("Deprecated field")
+        }
+        UpdateLendingMarketMode::UpdateDisableNonceBlock => {
+            config_items::for_named_field!(&mut market.disable_nonce_block)
+                .validating(validations::check_bool)
+                .set(&value)?;
         }
     }
 
@@ -348,7 +360,7 @@ fn validate_new_elevation_group(elevation_group: &ElevationGroup) -> Result<()> 
             * Fraction::from_bps(elevation_group.max_liquidation_bonus_bps)
         > Fraction::ONE
     {
-        msg!("Max liquidation bonus * liquidation threshold is greater than 100%, invalid");
+        xmsg!("Max liquidation bonus * liquidation threshold is greater than 100%, invalid");
         return err!(LendingError::InvalidElevationGroupConfig);
     }
 
@@ -368,6 +380,10 @@ pub struct UpdateLendingMarket<'info> {
 
     #[account(mut)]
     pub lending_market: AccountLoader<'info, LendingMarket>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }
 
 

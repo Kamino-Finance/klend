@@ -1,9 +1,6 @@
 pub mod utils {
     use std::convert::TryInto;
 
-    #[cfg(target_arch = "bpf")]
-    use anchor_lang::prelude::msg;
-
     use crate::{dbg_msg, LendingError, WithdrawalCaps};
 
     #[derive(PartialEq)]

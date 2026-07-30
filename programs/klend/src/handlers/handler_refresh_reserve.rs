@@ -5,7 +5,7 @@ use crate::{
     lending_market::lending_operations,
     state::Reserve,
     utils::{constraints, prices::get_price, PROGRAM_VERSION},
-    LendingError, LendingMarket,
+    xmsg, LendingError, LendingMarket,
 };
 
 pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
@@ -53,10 +53,8 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
         lending_market.referral_fee_bps,
         lending_market.reserve_rewards_max_apr_bps,
     )?;
-    let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
-    lending_operations::refresh_reserve_limit_timestamps(reserve, timestamp);
 
-    msg!(
+    xmsg!(
         "Token: {} Price: {}",
         &reserve.config.token_info.symbol(),
         reserve.liquidity.get_market_price().to_display()

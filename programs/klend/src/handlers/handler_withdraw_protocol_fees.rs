@@ -1,20 +1,29 @@
 
 
 
-use anchor_lang::{prelude::*, solana_program::program_option::COption, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::{
+        program_option::COption,
+        sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    },
+    Accounts,
+};
 use anchor_spl::{
     associated_token::get_associated_token_address_with_program_id,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
 
 use crate::{
-    gen_signer_seeds,
+    check_advance_nonce_ix_if_needed, gen_signer_seeds,
     state::{LendingMarket, Reserve},
     utils::{constraints, seeds, token_transfer},
-    GlobalConfig,
+    xmsg, GlobalConfig,
 };
 
 pub fn process(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
+    check_advance_nonce_ix_if_needed!(ctx.accounts);
+
     constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &ctx.accounts.reserve_liquidity_mint.to_account_info(),
         &ctx.accounts.fee_vault.to_account_info(),
@@ -27,7 +36,7 @@ pub fn process(ctx: Context<WithdrawProtocolFees>, amount: u64) -> Result<()> {
 
     let authority_signer_seeds = gen_signer_seeds!(lending_market_key, market.bump_seed as u8);
 
-    msg!("Withdrawing fees: {}", amount);
+    xmsg!("Withdrawing fees: {}", amount);
 
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),
@@ -90,6 +99,10 @@ pub struct WithdrawProtocolFees<'info> {
     pub fee_collector_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }
 
 impl Clone for crate::accounts::WithdrawProtocolFees {
@@ -103,6 +116,7 @@ impl Clone for crate::accounts::WithdrawProtocolFees {
             token_program: self.token_program,
             fee_collector_ata: self.fee_collector_ata,
             global_config: self.global_config,
+            instruction_sysvar_account: self.instruction_sysvar_account,
         }
     }
 }

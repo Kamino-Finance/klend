@@ -81,42 +81,68 @@ pub mod pda {
     }
 
     pub fn referrer_token_state(referrer: Pubkey, reserve: Pubkey) -> (Pubkey, u8) {
+        referrer_token_state_program_id(crate::ID, referrer, reserve)
+    }
+
+    pub fn referrer_token_state_program_id(
+        program_id: Pubkey,
+        referrer: Pubkey,
+        reserve: Pubkey,
+    ) -> (Pubkey, u8) {
         Pubkey::find_program_address(
             &[
                 BASE_SEED_REFERRER_TOKEN_STATE,
                 referrer.as_ref(),
                 reserve.as_ref(),
             ],
-            &crate::ID,
+            &program_id,
         )
     }
 
     pub fn event_authority() -> Pubkey {
-        let (event_authority, _) = Pubkey::find_program_address(&[EVENT_AUTHORITY], &crate::ID);
+        event_authority_program_id(crate::ID)
+    }
 
-        event_authority
+    pub fn event_authority_program_id(program_id: Pubkey) -> Pubkey {
+        Pubkey::find_program_address(&[EVENT_AUTHORITY], &program_id).0
     }
 
     pub fn withdraw_ticket(reserve: Pubkey, sequence_number: u64) -> Pubkey {
+        withdraw_ticket_program_id(crate::ID, reserve, sequence_number)
+    }
+
+    pub fn withdraw_ticket_program_id(
+        program_id: Pubkey,
+        reserve: Pubkey,
+        sequence_number: u64,
+    ) -> Pubkey {
         Pubkey::find_program_address(
             &[
                 WITHDRAW_TICKET,
                 reserve.as_ref(),
                 &sequence_number.to_le_bytes(),
             ],
-            &crate::ID,
+            &program_id,
         )
         .0
     }
 
     pub fn owner_queued_collateral_vault(reserve: Pubkey, owner: Pubkey) -> Pubkey {
+        owner_queued_collateral_vault_program_id(crate::ID, reserve, owner)
+    }
+
+    pub fn owner_queued_collateral_vault_program_id(
+        program_id: Pubkey,
+        reserve: Pubkey,
+        owner: Pubkey,
+    ) -> Pubkey {
         Pubkey::find_program_address(
             &[
                 OWNER_QUEUED_COLLATERAL_VAULT,
                 reserve.as_ref(),
                 owner.as_ref(),
             ],
-            &crate::ID,
+            &program_id,
         )
         .0
     }
@@ -130,6 +156,24 @@ pub mod pda {
             Pubkey::find_program_address(
                 &[KVAULT_BASE_AUTHORITY, vault.as_ref()],
                 &CORRESPONDING_KAMINO_VAULT_PROGRAM_ID,
+            )
+            .0
+        }
+    }
+
+
+    pub mod kfarms {
+        use super::*;
+
+
+        pub fn user_state(farm_state: Pubkey, obligation: Pubkey) -> Pubkey {
+            Pubkey::find_program_address(
+                &[
+                    farms::utils::consts::BASE_SEED_USER_STATE,
+                    farm_state.as_ref(),
+                    obligation.as_ref(),
+                ],
+                &farms::id(),
             )
             .0
         }

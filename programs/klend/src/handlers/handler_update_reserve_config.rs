@@ -1,12 +1,17 @@
 use std::ops::Deref;
 
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
 use crate::{
+    check_advance_nonce_ix_if_needed,
     lending_market::{lending_operations, utils::is_update_reserve_config_mode_global_admin_only},
     state::{LendingMarket, Reserve, UpdateConfigMode},
     utils::seeds,
-    GlobalConfig, LendingError,
+    xmsg, GlobalConfig, LendingError,
 };
 
 pub fn process(
@@ -15,18 +20,20 @@ pub fn process(
     value: &[u8],
     skip_config_integrity_validation: bool,
 ) -> Result<()> {
+    check_advance_nonce_ix_if_needed!(ctx.accounts);
+
     let reserve = &mut ctx.accounts.reserve.load_mut()?;
     let market = ctx.accounts.lending_market.load()?;
 
     let reserve_usage_was_blocked = reserve.is_usage_blocked();
 
-    msg!(
+    xmsg!(
         "Updating reserve {:?} {} config with mode {:?}",
         ctx.accounts.reserve.key(),
         reserve.config.token_info.symbol(),
         mode,
     );
-    msg!(
+    xmsg!(
         "Market {:?} {}",
         ctx.accounts.lending_market.key(),
         market.get_name()
@@ -60,7 +67,7 @@ pub fn process(
         && reserve.config.permissioned_ops != 0
         && !market.is_permissioned_market()
     {
-        msg!(
+        xmsg!(
             "WARNING: reserve permissioned_ops set to {} but market has no permissioning_authority \
              - the flag is dormant until UpdatePermissioningAuthority is called on the market",
             reserve.config.permissioned_ops
@@ -72,7 +79,7 @@ pub fn process(
             reserve.is_predeposit(market.min_initial_deposit_amount),
             LendingError::InvalidConfig
         );
-        msg!("WARNING! Skipping validation of the config");
+        xmsg!("WARNING! Skipping validation of the config");
     } else {
        
         lending_operations::utils::validate_reserve_config_integrity(
@@ -89,7 +96,7 @@ pub fn process(
             ctx.accounts.signer.key(),
             LendingError::InvalidSigner
         );
-        msg!("Reserve usage is now allowed");
+        xmsg!("Reserve usage is now allowed");
     }
 
     Ok(())
@@ -124,4 +131,8 @@ pub struct UpdateReserveConfig<'info> {
         has_one = lending_market
     )]
     reserve: AccountLoader<'info, Reserve>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }

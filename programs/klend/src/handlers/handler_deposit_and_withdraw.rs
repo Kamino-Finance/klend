@@ -70,8 +70,6 @@ pub fn process(
             lending_market.referral_fee_bps,
             lending_market.reserve_rewards_max_apr_bps,
         )?;
-        let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
-        lending_operations::refresh_reserve_limit_timestamps(&mut reserve, timestamp);
     }
 
     {
@@ -108,8 +106,6 @@ pub fn process(
             lending_market.referral_fee_bps,
             lending_market.reserve_rewards_max_apr_bps,
         )?;
-        let timestamp = u64::try_from(clock.unix_timestamp).unwrap();
-        lending_operations::refresh_reserve_limit_timestamps(&mut reserve, timestamp);
     }
 
     if !is_obligation_closed {

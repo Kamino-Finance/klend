@@ -1,6 +1,7 @@
 mod pyth;
 mod setup;
 mod test_borrow_repay;
+mod test_ctoken_exchange_rate;
 mod test_deposit;
 mod test_flash_loan;
 mod test_from_account_data;

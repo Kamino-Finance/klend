@@ -16,7 +16,7 @@ use crate::{
         permissioning::{check_permissions, PermissionedOp},
         seeds, token_transfer,
     },
-    MaxReservesAsCollateralCheck, ReserveFarmKind,
+    xmsg, MaxReservesAsCollateralCheck, ReserveFarmKind,
 };
 
 pub fn process_v1(ctx: Context<DepositObligationCollateral>, collateral_amount: u64) -> Result<()> {
@@ -98,7 +98,7 @@ fn process_impl(
         MaxReservesAsCollateralCheck::Perform,
     )?;
 
-    msg!(
+    xmsg!(
         "pnl: Depositing obligation collateral {}",
         collateral_amount
     );

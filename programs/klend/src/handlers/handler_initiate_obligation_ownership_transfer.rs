@@ -7,6 +7,7 @@ use anchor_lang::{
 use crate::{
     lending_market::{lending_checks, lending_operations},
     state::Obligation,
+    xmsg,
 };
 
 
@@ -18,9 +19,7 @@ pub fn process(ctx: Context<InitiateObligationOwnershipTransfer>, new_owner: Pub
     obligation.check_ownership_transfer_not_in_progress()?;
 
    
-    lending_operations::clear_expired_borrow_order_on_initiating_obligation_ownership_transfer(
-        obligation, clock,
-    )?;
+    lending_operations::clear_expired_borrow_orders_for_ownership_transfer(obligation, clock)?;
 
     lending_checks::obligation_ownership_transfer_precondition_checks(
         &ctx.accounts.instruction_sysvar_account,
@@ -29,7 +28,7 @@ pub fn process(ctx: Context<InitiateObligationOwnershipTransfer>, new_owner: Pub
 
     obligation.initiate_ownership_transfer(new_owner)?;
 
-    msg!(
+    xmsg!(
         "Initiated ownership transfer for obligation: {} to new owner: {}",
         ctx.accounts.obligation.key(),
         new_owner

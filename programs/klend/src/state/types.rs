@@ -268,6 +268,7 @@ impl RedeemCollateralOptions {
     }
 }
 
+#[derive(Debug)]
 pub struct TicketedWithdrawResult {
 
     pub collateral_amount_to_burn: u64,

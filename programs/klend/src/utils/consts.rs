@@ -42,6 +42,11 @@ pub const INITIAL_COLLATERAL_RATIO: u64 = 1;
 pub const INITIAL_COLLATERAL_RATE: CollateralExchangeRate = CollateralExchangeRate::ONE;
 
 
+
+
+pub const COLLATERAL_MINT_DECIMALS: u8 = 6;
+
+
 pub const LIQUIDATION_CLOSE_FACTOR: u8 = 20;
 
 

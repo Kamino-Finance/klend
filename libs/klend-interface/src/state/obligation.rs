@@ -51,12 +51,25 @@ pub struct Obligation {
     pub highest_borrow_factor_pct: u64,
     pub autodeleverage_margin_call_started_timestamp: u64,
     pub obligation_orders: [ObligationOrder; 2],
-    pub borrow_order: BorrowOrder,
+    /// First entry of the array of owner-defined, permissionlessly-executed borrow orders. The
+    /// rest of the array lives at `tail_borrow_orders` (split for on-chain layout compatibility
+    /// with previously released versions). Use `get_borrow_order()` for uniform access.
+    pub head_borrow_order: BorrowOrder,
     /// Pending owner during ownership transfer process.
     /// `Pubkey::default()` means no pending owner.
     pub pending_owner: Pubkey,
-    pub padding_3: [u64; 69],
+    /// Tail of the array of owner-defined, permissionlessly-executed borrow orders (see
+    /// `head_borrow_order`).
+    pub tail_borrow_orders: [BorrowOrder; MAX_TAIL_BORROW_ORDERS],
+    pub padding_3: [u64; 29],
 }
+
+/// Size of `Obligation::tail_borrow_orders` (note: actual max BO count is 1 more, due to legacy
+/// BO storage reasons - see `Obligation::head_borrow_order`).
+pub const MAX_TAIL_BORROW_ORDERS: usize = 2;
+
+/// Total number of borrow order slots on an obligation (the head order plus the tail array).
+pub const MAX_BORROW_ORDERS: usize = MAX_TAIL_BORROW_ORDERS + 1;
 
 const _: () = assert!(core::mem::size_of::<Obligation>() == 3336);
 
@@ -114,6 +127,20 @@ impl Obligation {
     /// (borrow-factor-adjusted debt >= allowed borrow value).
     pub fn is_borrowing_disabled(&self) -> bool {
         self.borrow_factor_adjusted_debt_value() >= self.allowed_borrow_value()
+    }
+
+    /// Gets a borrow order entry by index (which may either be active or an empty slot).
+    /// Returns `None` if `index` is out of bounds.
+    pub fn get_borrow_order(&self, index: usize) -> Option<&BorrowOrder> {
+        if index == 0 {
+            return Some(&self.head_borrow_order);
+        }
+        self.tail_borrow_orders.get(index - 1)
+    }
+
+    /// Iterates over all borrow order entries (active or empty), in their index order.
+    pub fn borrow_orders(&self) -> impl Iterator<Item = &BorrowOrder> {
+        core::iter::once(&self.head_borrow_order).chain(self.tail_borrow_orders.iter())
     }
 }
 
@@ -189,7 +216,7 @@ pub struct FixedTermBorrowRolloverConfig {
     pub auto_rollover_enabled: u8,
     pub open_term_allowed: u8,
     pub migration_to_fixed_enabled: u8,
-    pub alignment_padding: [u8; 1],
+    pub fixed_term_rollover_window_duration_days: u8,
     pub max_borrow_rate_bps: u32,
     pub min_debt_term_seconds: u64,
 }

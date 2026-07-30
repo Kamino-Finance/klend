@@ -4,7 +4,7 @@ use anchor_lang::{
     Accounts,
 };
 
-use crate::{lending_market::lending_checks, state::Obligation};
+use crate::{lending_market::lending_checks, state::Obligation, xmsg};
 
 
 
@@ -19,7 +19,7 @@ pub fn process(ctx: Context<AbortObligationOwnershipTransfer>) -> Result<()> {
 
     obligation.abort_ownership_transfer()?;
 
-    msg!(
+    xmsg!(
         "Aborted ownership transfer for obligation {}",
         ctx.accounts.obligation.key()
     );

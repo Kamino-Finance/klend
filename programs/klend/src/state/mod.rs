@@ -265,6 +265,7 @@ pub enum UpdateLendingMarketMode {
     UpdatePermissionedOps = 43,
     DeprecatedUpdateReserveRewardsMaxAprPct = 44,
     UpdateReserveRewardsMaxAprBps = 45,
+    UpdateDisableNonceBlock = 46,
 }
 
 #[cfg(feature = "serde")]

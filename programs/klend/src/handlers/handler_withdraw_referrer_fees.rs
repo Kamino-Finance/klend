@@ -10,7 +10,7 @@ use crate::{
         seeds::{self, BASE_SEED_REFERRER_TOKEN_STATE},
         token_transfer,
     },
-    ReferrerTokenState,
+    xmsg, ReferrerTokenState,
 };
 
 pub fn process(ctx: Context<WithdrawReferrerFees>) -> Result<()> {
@@ -33,7 +33,7 @@ pub fn process(ctx: Context<WithdrawReferrerFees>) -> Result<()> {
     let withdraw_amount =
         lending_operations::withdraw_referrer_fees(reserve, clock.slot, referrer_token_state)?;
 
-    msg!("Withdrawing referrer fees: {}", withdraw_amount);
+    xmsg!("Withdrawing referrer fees: {}", withdraw_amount);
 
     token_transfer::withdraw_fees_from_reserve(
         ctx.accounts.token_program.to_account_info(),

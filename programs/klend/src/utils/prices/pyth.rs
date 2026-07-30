@@ -9,7 +9,7 @@ use super::{
     types::{Price, TimestampedPriceWithTwap},
     utils, TimestampedPrice,
 };
-use crate::LendingError;
+use crate::{xmsg, LendingError};
 
 pub(super) fn get_pyth_price_and_twap(
     pyth_price_info: &AccountInfo,
@@ -79,7 +79,7 @@ pub(super) fn validate_pyth_confidence(
     let conf: u64 = pyth_price.conf;
     let scaled_conf: u64 = conf.checked_mul(oracle_confidence_factor).unwrap();
     if scaled_conf > price {
-        msg!(
+        xmsg!(
             "Confidence interval check failed on pyth account {} {} {}",
             conf,
             price,

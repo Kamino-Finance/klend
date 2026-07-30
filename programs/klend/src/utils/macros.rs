@@ -39,6 +39,21 @@ macro_rules! check_cpi {
     }};
 }
 
+
+
+
+
+#[macro_export]
+macro_rules! check_advance_nonce_ix_if_needed {
+    ($accounts:expr $(,)?) => {{
+        let _market = $accounts.lending_market.load()?;
+        $crate::lending_market::ix_utils::check_advance_nonce_presence_if_needed(
+            &_market,
+            &$accounts.instruction_sysvar_account,
+        )?;
+    }};
+}
+
 #[macro_export]
 macro_rules! check_refresh_ixs {
     ($ctx_accounts:expr, $reserve:expr, $mode:expr $(,)?) => {{
@@ -100,7 +115,6 @@ macro_rules! refresh_farms {
     }};
 }
 
-#[cfg(target_arch = "bpf")]
 #[macro_export]
 macro_rules! dbg_msg {
    
@@ -108,40 +122,20 @@ macro_rules! dbg_msg {
    
    
     () => {
-        msg!("[{}:{}]", file!(), line!())
+        $crate::xmsg!("[{}:{}]", file!(), line!())
+    };
+   
+   
+   
+    ($fmt:literal $(, $arg:expr)+ $(,)?) => {
+        $crate::xmsg!("[{}:{}] {}", file!(), line!(), format_args!($fmt $(, $arg)+))
     };
     ($val:expr $(,)?) => {
        
        
         match $val {
             tmp => {
-                msg!("[{}:{}] {} = {:#?}",
-                    file!(), line!(), stringify!($val), &tmp);
-                tmp
-            }
-        }
-    };
-    ($($val:expr),+ $(,)?) => {
-        ($($crate::dbg_msg!($val)),+,)
-    };
-}
-
-#[cfg(not(target_arch = "bpf"))]
-#[macro_export]
-macro_rules! dbg_msg {
-   
-   
-   
-   
-    () => {
-        println!("[{}:{}]", file!(), line!())
-    };
-    ($val:expr $(,)?) => {
-       
-       
-        match $val {
-            tmp => {
-                println!("[{}:{}] {} = {:#?}",
+                $crate::xmsg!("[{}:{}] {} = {:#?}",
                     file!(), line!(), stringify!($val), &tmp);
                 tmp
             }

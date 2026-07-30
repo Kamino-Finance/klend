@@ -77,6 +77,30 @@ impl<T> JustRef<T> for &Arc<T> {
     }
 }
 
+impl<T> JustRef<T> for &mut T {
+    fn just_ref(&self) -> &T {
+        self
+    }
+}
+
+
+pub trait JustMut<T>: JustRef<T> {
+
+    fn just_mut(&mut self) -> &mut T;
+}
+
+impl<T> JustMut<T> for &mut T {
+    fn just_mut(&mut self) -> &mut T {
+        self
+    }
+}
+
+impl<T> JustMut<T> for T {
+    fn just_mut(&mut self) -> &mut T {
+        self
+    }
+}
+
 pub fn borsh_deserialize<T: borsh::BorshDeserialize>(mut data: &[u8]) -> T {
     T::deserialize(&mut data).expect("Borsh deserialization failed")
 }

@@ -1,8 +1,14 @@
-use anchor_lang::{prelude::*, Accounts};
+use anchor_lang::{
+    prelude::*,
+    solana_program::sysvar::{instructions::Instructions as SysInstructions, SysvarId},
+    Accounts,
+};
 
-use crate::{state::GlobalConfig, utils::seeds};
+use crate::{lending_market::ix_utils, state::GlobalConfig, utils::seeds};
 
 pub fn process(ctx: Context<UpdateGlobalConfigAdmin>) -> Result<()> {
+    ix_utils::check_no_advance_nonce_ix_within_tx(&ctx.accounts.instruction_sysvar_account)?;
+
     let global_config = &mut ctx.accounts.global_config.load_mut()?;
 
     global_config.apply_pending_admin()?;
@@ -18,4 +24,8 @@ pub struct UpdateGlobalConfigAdmin<'info> {
         bump,
         has_one = pending_admin)]
     pub global_config: AccountLoader<'info, GlobalConfig>,
+
+    /// CHECK: Sysvar Instruction allowing introspection, fixed address
+    #[account(address = SysInstructions::id())]
+    pub instruction_sysvar_account: AccountInfo<'info>,
 }
