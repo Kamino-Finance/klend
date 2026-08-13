@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub fn process(ctx: Context<InitObligation>, args: InitObligationArgs) -> Result<()> {
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
 
     check_obligation_seeds(
         args.tag,
@@ -24,7 +24,7 @@ pub fn process(ctx: Context<InitObligation>, args: InitObligationArgs) -> Result
     let owner_user_metadata = &ctx.accounts.owner_user_metadata.load()?;
 
     obligation.init(crate::state::obligation::InitObligationParams {
-        current_slot: clock.slot,
+        clock,
         lending_market: ctx.accounts.lending_market.key(),
         owner: ctx.accounts.obligation_owner.key(),
         deposits: [ObligationCollateral::default(); 8],

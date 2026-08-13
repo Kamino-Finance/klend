@@ -74,7 +74,7 @@ pub(super) fn validate_pyth_confidence(
 ) -> Result<()> {
     let price = u64::try_from(pyth_price.price).unwrap();
     if price == 0 {
-        return err!(LendingError::PriceIsZero);
+        return Ok(());
     }
     let conf: u64 = pyth_price.conf;
     let scaled_conf: u64 = conf.checked_mul(oracle_confidence_factor).unwrap();
@@ -104,6 +104,7 @@ impl From<PythPrice> for TimestampedPrice {
         TimestampedPrice {
             price_load,
             timestamp,
+            is_known_to_be_zero: value == 0,
         }
     }
 }

@@ -4,7 +4,7 @@ use anchor_lang::{prelude::*, solana_program::clock::Slot, Result};
 use bitflags::bitflags;
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::LendingError;
+use crate::{utils::accounts::default_array, LendingError};
 
 
 pub const STALE_AFTER_SLOTS_ELAPSED: u64 = 1;
@@ -60,23 +60,32 @@ pub struct LastUpdate {
 
     price_status: u8,
 
-    placeholder: [u8; 6],
+    alignment_padding: [u8; 2],
+
+
+
+
+    timestamp: u32,
 }
 
 impl Default for LastUpdate {
     fn default() -> Self {
-        Self::new(0)
+        Self::new(&Clock::default())
     }
 }
 
 impl LastUpdate {
 
-    pub fn new(slot: Slot) -> Self {
+    pub fn new(clock: &Clock) -> Self {
         Self {
-            slot,
+            slot: clock.slot,
             stale: true as u8,
             price_status: PriceStatusFlags::empty().0,
-            placeholder: [0; 6],
+            alignment_padding: default_array(),
+            timestamp: clock
+                .unix_timestamp
+                .try_into()
+                .expect("time too far into the future"),
         }
     }
 
@@ -89,9 +98,13 @@ impl LastUpdate {
     }
 
 
-    pub fn update_slot(&mut self, slot: Slot, price_status: impl Into<Option<PriceStatusFlags>>) {
+    pub fn update(&mut self, clock: &Clock, price_status: impl Into<Option<PriceStatusFlags>>) {
         let price_status: Option<PriceStatusFlags> = price_status.into();
-        self.slot = slot;
+        self.slot = clock.slot;
+        self.timestamp = clock
+            .unix_timestamp
+            .try_into()
+            .expect("time too far into the future");
         self.stale = false as u8;
         if let Some(price_status) = price_status {
             self.price_status = price_status.bits();
@@ -120,6 +133,11 @@ impl LastUpdate {
     pub fn get_slot(&self) -> Slot {
         self.slot
     }
+
+
+    pub fn get_timestamp(&self) -> u64 {
+        u64::from(self.timestamp)
+    }
 }
 
 impl PartialEq for LastUpdate {
@@ -133,6 +151,8 @@ impl PartialOrd for LastUpdate {
         self.slot.partial_cmp(&other.slot)
     }
 }
+
+
 
 
 

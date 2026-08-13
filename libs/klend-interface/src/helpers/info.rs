@@ -25,6 +25,9 @@ pub struct ReserveInfo {
     pub switchboard_twap_oracle: Option<Pubkey>,
     /// Scope prices account, if configured.
     pub scope_prices: Option<Pubkey>,
+    /// The reserve's `config.protocol_take_rate_pct`; a zero-take-rate reserve accrues no
+    /// interest-share referral fees, which affects the `refresh_obligation` account ordering.
+    pub protocol_take_rate_pct: u8,
 }
 
 /// Obligation metadata needed for building refresh and main instructions.
@@ -87,6 +90,7 @@ impl ReserveInfo {
                     .twap_aggregator,
             ),
             scope_prices: non_default(reserve.config.token_info.scope_configuration.price_feed),
+            protocol_take_rate_pct: reserve.config.protocol_take_rate_pct,
         }
     }
 }

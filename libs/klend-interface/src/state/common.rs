@@ -10,7 +10,13 @@ pub struct LastUpdate {
     pub stale: u8,
     /// Price status flags (bitfield).
     pub price_status: u8,
-    pub placeholder: [u8; 6],
+
+    pub alignment_padding: [u8; 2],
+
+    /// Wall-clock timestamp (seconds) of the last update.
+    ///
+    /// Note: `u32` is used here only because of space constraints; it overflows in year 2106.
+    pub timestamp: u32,
 }
 
 /// 256-bit fraction stored as 4 × u64 limbs.

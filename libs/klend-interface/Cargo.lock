@@ -1985,7 +1985,7 @@ dependencies = [
 
 [[package]]
 name = "klend-interface"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bitflags",
  "borsh 0.10.4",

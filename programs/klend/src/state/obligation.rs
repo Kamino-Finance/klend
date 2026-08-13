@@ -5,7 +5,7 @@ use std::{
     ops::RangeInclusive,
 };
 
-use anchor_lang::{account, err, prelude::*, solana_program::clock::Slot, Result};
+use anchor_lang::{account, err, prelude::*, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -17,7 +17,7 @@ use crate::{
     obligation_order_operations::{ConditionType, OpportunityType},
     state::{LastUpdate, LtvMaxWithdrawalCheck, Reserve},
     utils::{
-        accounts::default_array, secs, BigFraction, Fraction, FractionExtra, IterExt,
+        accounts::default_array, BigFraction, Fraction, FractionExtra, IterExt,
         ELEVATION_GROUP_NONE, OBLIGATION_SIZE, SECONDS_PER_DAY, U256,
     },
     xmsg, BigFractionBytes, LendingError, ReserveConfig,
@@ -235,7 +235,7 @@ impl Obligation {
     pub fn init(&mut self, params: InitObligationParams) {
         *self = Self::default();
         self.tag = params.tag;
-        self.last_update = LastUpdate::new(params.current_slot);
+        self.last_update = LastUpdate::new(&params.clock);
         self.lending_market = params.lending_market;
         self.owner = params.owner;
         self.deposits = params.deposits;
@@ -749,7 +749,7 @@ impl Obligation {
 
 pub struct InitObligationParams {
 
-    pub current_slot: Slot,
+    pub clock: Clock,
 
     pub lending_market: Pubkey,
 
@@ -986,10 +986,9 @@ impl ObligationLiquidity {
         time_period: Fraction,
         reserve: &Reserve,
     ) -> Result<Fraction> {
-        let future_slot =
-            secs::estimate_slot_after_period(reserve.last_update.get_slot(), time_period)?;
+        let projected_duration = reserve.projected_accrual_duration(time_period)?;
         let future_cumulative_borrow_rate_bsf =
-            reserve.calculate_future_cumulative_borrow_rate(future_slot)?;
+            reserve.calculate_future_cumulative_borrow_rate(projected_duration)?;
 
         let amount_with_interest =
             Fraction::from_bits(Self::calculate_amount_with_accrued_interest(

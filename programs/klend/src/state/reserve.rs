@@ -6,7 +6,6 @@ use std::{
 use anchor_lang::{
     account, err,
     prelude::{Pubkey, *},
-    solana_program::clock::Slot,
     Result,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -27,8 +26,9 @@ use crate::{
     state::{DepositLiquidityResult, LastUpdate, TokenInfo},
     utils::{
         accounts::default_array, borrow_rate_curve::BorrowRateCurve, permissioning::PermissionedOp,
-        ten_pow, BigFraction, Fraction, FRACTION_ONE_SCALED, FULL_BPS, INITIAL_COLLATERAL_RATE,
-        PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE, SLOTS_PER_YEAR, U256,
+        secs::checked_secs_to_slots, ten_pow, BigFraction, Fraction, FRACTION_ONE_SCALED, FULL_BPS,
+        INITIAL_COLLATERAL_RATE, PROGRAM_VERSION, RESERVE_CONFIG_SIZE, RESERVE_SIZE,
+        SECONDS_PER_YEAR, SLOTS_PER_YEAR, U256,
     },
     xmsg, BorrowSize, CalculateBorrowResult, CalculateRepayResult, LendingError, LendingResult,
     ReferrerTokenState,
@@ -147,12 +147,105 @@ pub enum ReserveFarmKind {
     Debt = 1,
 }
 
+
+
+
+#[derive(
+    AnchorSerialize,
+    AnchorDeserialize,
+    TryFromPrimitive,
+    IntoPrimitive,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Debug,
+    strum::Display,
+    strum::EnumIter,
+)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[repr(u8)]
+pub enum InterestRateBasis {
+
+
+    Legacy = 0,
+
+
+    TrueApr = 1,
+}
+
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AccrualDuration {
+    pub elapsed_units: u64,
+    pub units_per_year: u64,
+}
+
+impl AccrualDuration {
+
+    pub fn slots(elapsed_slots: u64) -> Self {
+        Self {
+            elapsed_units: elapsed_slots,
+            units_per_year: SLOTS_PER_YEAR,
+        }
+    }
+
+
+
+    pub fn seconds(elapsed_seconds: u64) -> Self {
+        Self {
+            elapsed_units: elapsed_seconds,
+            units_per_year: SECONDS_PER_YEAR,
+        }
+    }
+
+
+    pub fn since(
+        basis: InterestRateBasis,
+        last_update: &LastUpdate,
+        clock: &Clock,
+    ) -> Result<Self> {
+        Ok(match basis {
+            InterestRateBasis::Legacy => Self::slots(last_update.slots_elapsed(clock.slot)?),
+            InterestRateBasis::TrueApr => {
+                let last_accrual_timestamp = last_update.get_timestamp();
+                let elapsed_seconds = if last_accrual_timestamp == 0 {
+                   
+                   
+                   
+                   
+
+                   
+                   
+                   
+
+                   
+                   
+                   
+                   
+                    0
+                } else {
+                    u64::try_from(clock.unix_timestamp)
+                        .expect("negative timestamp")
+                        .saturating_sub(last_accrual_timestamp)
+                };
+                Self::seconds(elapsed_seconds)
+            }
+        })
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.elapsed_units == 0
+    }
+}
+
 impl Reserve {
 
     pub fn init(&mut self, params: InitReserveParams) {
         *self = Self::default();
         self.version = PROGRAM_VERSION as u64;
-        self.last_update = LastUpdate::new(params.current_slot);
+        self.last_update = LastUpdate::new(&params.clock);
         self.lending_market = params.lending_market;
         self.liquidity = *params.liquidity;
         self.collateral = *params.collateral;
@@ -552,23 +645,22 @@ impl Reserve {
     }
 
 
-    pub fn accrue_interest(&mut self, current_slot: Slot, referral_fee_bps: u16) -> Result<()> {
-        let slots_elapsed = self.last_update.slots_elapsed(current_slot)?;
-        if slots_elapsed > 0 {
-            let current_borrow_rate = self.current_borrow_rate()?;
-            let protocol_take_rate = Fraction::from_percent(self.config.protocol_take_rate_pct);
-            let referral_rate = Fraction::from_bps(referral_fee_bps);
-            let host_fixed_interest_rate =
-                Fraction::from_bps(self.config.host_fixed_interest_rate_bps);
-
-            self.liquidity.compound_interest(
-                current_borrow_rate,
-                host_fixed_interest_rate,
-                slots_elapsed,
-                protocol_take_rate,
-                referral_rate,
-            )?;
+    pub fn accrue_interest(
+        &mut self,
+        duration: AccrualDuration,
+        referral_fee_bps: u16,
+    ) -> Result<()> {
+        if duration.is_zero() {
+            return Ok(());
         }
+
+        self.liquidity.compound_interest(
+            self.current_borrow_rate()?,
+            self.config.host_fixed_interest_rate(),
+            duration,
+            self.config.protocol_take_rate(),
+            Fraction::from_bps(referral_fee_bps),
+        )?;
 
         Ok(())
     }
@@ -583,19 +675,27 @@ impl Reserve {
 
 
 
-    pub fn distribute_rewards(&mut self, current_slot: Slot, max_apr_bps: u16) -> Result<u64> {
-        let slots_elapsed = self.last_update.slots_elapsed(current_slot)?;
-        if slots_elapsed == 0
+
+    pub fn distribute_rewards(
+        &mut self,
+        duration: AccrualDuration,
+        max_apr_bps: u16,
+    ) -> Result<u64> {
+        let AccrualDuration {
+            elapsed_units,
+            units_per_year,
+        } = duration;
+        if elapsed_units == 0
             || max_apr_bps == 0
-            || self.config.rewards_amount_per_slot == 0
+            || self.config.rewards_amount_per_accrual_unit == 0
             || self.liquidity.rewards_amount_available == 0
             || self.collateral.mint_total_supply == 0
         {
             return Ok(0);
         }
 
-        let raw_distribution: u128 =
-            (self.config.rewards_amount_per_slot as u128).saturating_mul(slots_elapsed as u128);
+        let raw_distribution: u128 = (self.config.rewards_amount_per_accrual_unit as u128)
+            .saturating_mul(elapsed_units as u128);
 
        
        
@@ -607,8 +707,8 @@ impl Reserve {
         let total_supply_u128: u128 = self.liquidity.total_supply().to_floor();
         let apr_cap_numerator = total_supply_u128
             .saturating_mul(u128::from(max_apr_bps))
-            .saturating_mul(u128::from(slots_elapsed));
-        let apr_cap_denominator = u128::from(FULL_BPS) * u128::from(SLOTS_PER_YEAR);
+            .saturating_mul(u128::from(elapsed_units));
+        let apr_cap_denominator = u128::from(FULL_BPS) * u128::from(units_per_year);
         let apr_cap_u128 = apr_cap_numerator / apr_cap_denominator;
 
         let to_distribute_u128 = raw_distribution
@@ -633,8 +733,8 @@ impl Reserve {
             .ok_or_else(|| error!(LendingError::MathOverflow))?;
 
         xmsg!(
-            "Reserve rewards distributed: slots={} amount={} remaining={}",
-            slots_elapsed,
+            "Reserve rewards distributed: units={} amount={} remaining={}",
+            elapsed_units,
             to_distribute,
             self.liquidity.rewards_amount_available,
         );
@@ -668,19 +768,35 @@ impl Reserve {
 
 
 
+    pub fn projected_accrual_duration(&self, time_period: Fraction) -> Result<AccrualDuration> {
+        Ok(match self.config.get_interest_rate_basis() {
+            InterestRateBasis::Legacy => {
+                AccrualDuration::slots(checked_secs_to_slots(time_period)?)
+            }
+            InterestRateBasis::TrueApr => AccrualDuration::seconds(
+                time_period
+                    .try_to_ceil()
+                    .ok_or_else(|| error!(LendingError::MathOverflow))?,
+            ),
+        })
+    }
 
 
 
-    pub fn calculate_future_cumulative_borrow_rate(&self, future_slot: u64) -> Result<BigFraction> {
-        let slots_elapsed = self.last_update.slots_elapsed(future_slot)?;
-        let current_borrow_rate = self.current_borrow_rate()?;
-        let host_fixed_interest_rate = Fraction::from_bps(self.config.host_fixed_interest_rate_bps);
+
+
+
+
+    pub fn calculate_future_cumulative_borrow_rate(
+        &self,
+        duration: AccrualDuration,
+    ) -> Result<BigFraction> {
         let previous_cumulative_borrow_rate =
             BigFraction::from(self.liquidity.cumulative_borrow_rate_bsf);
 
         let compounded_interest_rate = approximate_compounded_interest(
-            current_borrow_rate + host_fixed_interest_rate,
-            slots_elapsed,
+            self.current_borrow_rate()? + self.config.host_fixed_interest_rate(),
+            duration,
         );
 
         Ok(previous_cumulative_borrow_rate * BigFraction::from(compounded_interest_rate))
@@ -943,7 +1059,7 @@ impl Reserve {
 
 pub struct InitReserveParams {
 
-    pub current_slot: Slot,
+    pub clock: Clock,
 
     pub lending_market: Pubkey,
 
@@ -1001,6 +1117,7 @@ pub struct ReserveLiquidity {
     pub absolute_referral_rate_sf: u128,
 
     pub token_program: Pubkey,
+
 
 
 
@@ -1227,7 +1344,7 @@ impl ReserveLiquidity {
         &mut self,
         current_borrow_rate: Fraction,
         host_fixed_interest_rate: Fraction,
-        slots_elapsed: u64,
+        duration: AccrualDuration,
         protocol_take_rate: Fraction,
         referral_rate: Fraction,
     ) -> LendingResult<()> {
@@ -1239,11 +1356,11 @@ impl ReserveLiquidity {
        
         let compounded_interest_rate = approximate_compounded_interest(
             current_borrow_rate + host_fixed_interest_rate,
-            slots_elapsed,
+            duration,
         );
        
         let compounded_fixed_rate =
-            approximate_compounded_interest(host_fixed_interest_rate, slots_elapsed);
+            approximate_compounded_interest(host_fixed_interest_rate, duration);
 
         let new_cumulative_borrow_rate: BigFraction =
             previous_cumulative_borrow_rate * BigFraction::from(compounded_interest_rate);
@@ -1599,9 +1716,16 @@ pub struct ReserveConfig {
     pub emergency_mode: u8,
 
 
+
+
+
+
+    pub interest_rate_basis: u8,
+
+
     #[cfg_attr(feature = "serde", serde(skip_serializing, default))]
     #[derivative(Debug = "ignore")]
-    pub reserved_1: [u8; 4],
+    pub reserved_1: [u8; 3],
 
 
     pub protocol_order_execution_fee_pct: u8,
@@ -1706,7 +1830,9 @@ pub struct ReserveConfig {
 
 
 
-    pub rewards_amount_per_slot: u64,
+
+
+    pub rewards_amount_per_accrual_unit: u64,
 
 
 
@@ -1716,6 +1842,11 @@ pub struct ReserveConfig {
 }
 
 impl ReserveConfig {
+
+    pub fn get_interest_rate_basis(&self) -> InterestRateBasis {
+        InterestRateBasis::try_from(self.interest_rate_basis).expect("invalid interest rate basis")
+    }
+
 
     pub fn get_borrow_factor(&self) -> Fraction {
         max(
@@ -1795,6 +1926,14 @@ impl ReserveConfig {
         ))
     }
 
+    pub fn protocol_take_rate(&self) -> Fraction {
+        Fraction::from_percent(self.protocol_take_rate_pct)
+    }
+
+    pub fn host_fixed_interest_rate(&self) -> Fraction {
+        Fraction::from_bps(self.host_fixed_interest_rate_bps)
+    }
+
 
     pub fn from_customized(
         source: &ReserveConfig,
@@ -1808,7 +1947,8 @@ impl ReserveConfig {
             min_deleveraging_bonus_bps,
             block_ctoken_usage,
             emergency_mode,
-            reserved_1: _,
+            interest_rate_basis,
+            reserved_1: _,      
             protocol_order_execution_fee_pct,
             protocol_take_rate_pct,
             protocol_liquidation_fee_pct,
@@ -1838,8 +1978,8 @@ impl ReserveConfig {
             debt_maturity_timestamp,
             debt_term_seconds,
             early_repay_remaining_interest_pct,
-            rewards_amount_per_slot: _,
-            permissioned_ops: _,       
+            rewards_amount_per_accrual_unit: _,
+            permissioned_ops: _,
         } = source;
 
        
@@ -1856,6 +1996,7 @@ impl ReserveConfig {
             min_deleveraging_bonus_bps,
             block_ctoken_usage,
             emergency_mode,
+            interest_rate_basis,
             reserved_1: default_array(),
             protocol_order_execution_fee_pct,
             protocol_take_rate_pct,
@@ -1888,8 +2029,8 @@ impl ReserveConfig {
             debt_maturity_timestamp,
             debt_term_seconds: overridden_debt_term_seconds.unwrap_or(debt_term_seconds),
             early_repay_remaining_interest_pct,
-            rewards_amount_per_slot: 0,
-            permissioned_ops: 0,       
+            rewards_amount_per_accrual_unit: 0,
+            permissioned_ops: 0,
         }
     }
 }
@@ -2221,10 +2362,14 @@ pub enum FeeCalculation {
 
 
 
-pub fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fraction {
-    let base = rate / u128::from(SLOTS_PER_YEAR);
+pub fn approximate_compounded_interest(rate: Fraction, duration: AccrualDuration) -> Fraction {
+    let AccrualDuration {
+        elapsed_units,
+        units_per_year,
+    } = duration;
+    let base = rate / u128::from(units_per_year);
 
-    match elapsed_slots {
+    match elapsed_units {
         0 => return Fraction::ONE,
         1 => return Fraction::ONE + base,
         2 => return (Fraction::ONE + base) * (Fraction::ONE + base),
@@ -2236,7 +2381,7 @@ pub fn approximate_compounded_interest(rate: Fraction, elapsed_slots: u64) -> Fr
         _ => (),
     }
 
-    let exp: u128 = elapsed_slots.into();
+    let exp: u128 = elapsed_units.into();
    
     let exp_minus_one = exp.wrapping_sub(1);
     let exp_minus_two = exp.wrapping_sub(2);

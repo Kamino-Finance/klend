@@ -48,7 +48,7 @@ pub fn liquidate(
     let repay_pdas = ReservePdas::derive(&KLEND_PROGRAM_ID, &repay_reserve.address);
     let withdraw_pdas = ReservePdas::derive(&KLEND_PROGRAM_ID, &withdraw_reserve.address);
 
-    let remaining = build_refresh_obligation_remaining_accounts(obligation);
+    let remaining = build_refresh_obligation_remaining_accounts(obligation, obligation_reserves);
 
     let mut ixs = build_refresh_all_obligation_reserves(
         obligation,
@@ -60,6 +60,7 @@ pub fn liquidate(
     ixs.push(build_refresh_obligation(
         &repay_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(liquidate_obligation_and_redeem_reserve_collateral_v2(
         LiquidateObligationAndRedeemReserveCollateralV2Accounts {

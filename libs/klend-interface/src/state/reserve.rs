@@ -181,7 +181,8 @@ pub struct ReserveConfig {
     pub early_repay_remaining_interest_pct: u8,
     /// Whether the reserve is in emergency mode.
     pub emergency_mode: u8,
-    pub reserved_1: [u8; 4],
+    pub interest_rate_basis: u8,
+    pub reserved_1: [u8; 3],
     pub protocol_order_execution_fee_pct: u8,
     pub protocol_take_rate_pct: u8,
     pub protocol_liquidation_fee_pct: u8,
@@ -210,8 +211,9 @@ pub struct ReserveConfig {
     pub deleveraging_bonus_increase_bps_per_day: u64,
     pub debt_maturity_timestamp: u64,
     pub debt_term_seconds: u64,
-    /// Rewards token amount distributed per slot to depositors
-    pub rewards_amount_per_slot: u64,
+    /// Rewards token amount distributed per accrual unit (slot or second, per the reserve's
+    /// interest rate basis) to depositors
+    pub rewards_amount_per_accrual_unit: u64,
     pub permissioned_ops: u64,
 }
 

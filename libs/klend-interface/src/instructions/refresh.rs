@@ -67,6 +67,12 @@ pub struct RefreshObligationAccounts {
     pub obligation: Pubkey,
 }
 
+/// `remaining_accounts` must contain: the deposit reserves (in deposit order), the borrow
+/// reserves (in borrow order), and - only when the obligation has a referrer - exactly one
+/// referrer token state per borrow. The program consumes one token state per borrow accruing
+/// referral fees (i.e. whose reserve takes protocol fees, when the market's referral fee is on),
+/// in borrow order, from the front of that final group; the remaining entries only pad the
+/// expected account count. Prefer [`crate::helpers::refresh_obligation`], which builds this list.
 pub fn refresh_obligation(
     accounts: RefreshObligationAccounts,
     remaining_accounts: Vec<AccountMeta>,

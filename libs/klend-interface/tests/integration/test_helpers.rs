@@ -17,6 +17,7 @@ fn test_identify_instruction() {
         switchboard_price_oracle: None,
         switchboard_twap_oracle: None,
         scope_prices: None,
+        protocol_take_rate_pct: 10,
     };
 
     let ixs = klend_interface::helpers::deposit(
@@ -57,6 +58,7 @@ fn test_refresh_all_for_obligation_deduplicates() {
         switchboard_price_oracle: None,
         switchboard_twap_oracle: None,
         scope_prices: None,
+        protocol_take_rate_pct: 10,
     };
     let reserve_info_b = ReserveInfo {
         address: reserve_b,
@@ -67,6 +69,7 @@ fn test_refresh_all_for_obligation_deduplicates() {
         switchboard_price_oracle: None,
         switchboard_twap_oracle: None,
         scope_prices: None,
+        protocol_take_rate_pct: 10,
     };
 
     // Obligation with reserve_a as both deposit and borrow (overlap)
@@ -122,6 +125,7 @@ fn test_refresh_reserves_batch_helper() {
             switchboard_price_oracle: None,
             switchboard_twap_oracle: None,
             scope_prices: None,
+            protocol_take_rate_pct: 10,
         },
         ReserveInfo {
             address: Pubkey::new_unique(),
@@ -132,6 +136,7 @@ fn test_refresh_reserves_batch_helper() {
             switchboard_price_oracle: Some(Pubkey::new_unique()),
             switchboard_twap_oracle: None,
             scope_prices: None,
+            protocol_take_rate_pct: 10,
         },
     ];
 
@@ -161,6 +166,7 @@ fn test_borrow_multi_reserve_instruction_count() {
         switchboard_price_oracle: None,
         switchboard_twap_oracle: None,
         scope_prices: None,
+        protocol_take_rate_pct: 10,
     };
     let reserve_info_b = ReserveInfo {
         address: reserve_b,
@@ -171,6 +177,7 @@ fn test_borrow_multi_reserve_instruction_count() {
         switchboard_price_oracle: None,
         switchboard_twap_oracle: None,
         scope_prices: None,
+        protocol_take_rate_pct: 10,
     };
 
     // Obligation with deposit in A, borrow from B
@@ -226,6 +233,7 @@ fn test_flash_loan_helper() {
         switchboard_price_oracle: None,
         switchboard_twap_oracle: None,
         scope_prices: None,
+        protocol_take_rate_pct: 10,
     };
 
     let (borrow_ix, repay_ix) = klend_interface::helpers::flash_loan(
