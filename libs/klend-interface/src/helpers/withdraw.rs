@@ -48,6 +48,7 @@ pub fn withdraw(
     ixs.push(build_refresh_obligation(
         &withdraw_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(
         withdraw_obligation_collateral_and_redeem_reserve_collateral_v2(
@@ -103,6 +104,7 @@ pub fn withdraw_collateral(
     ixs.push(build_refresh_obligation(
         &withdraw_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(withdraw_obligation_collateral_v2(
         WithdrawObligationCollateralV2Accounts {

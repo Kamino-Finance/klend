@@ -76,6 +76,7 @@ pub fn deposit_to_obligation(
     ixs.push(build_refresh_obligation(
         &reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(deposit_reserve_liquidity_and_obligation_collateral_v2(
         DepositReserveLiquidityAndObligationCollateralV2Accounts {

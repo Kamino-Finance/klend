@@ -23,10 +23,3 @@ pub fn checked_secs_to_slots(secs: Fraction) -> Result<u64> {
         .try_to_ceil::<u64>()
         .ok_or(LendingError::MathOverflow.into())
 }
-
-pub fn estimate_slot_after_period(current_slot: u64, secs: Fraction) -> Result<u64> {
-    let elapsed_slot_estimate = checked_secs_to_slots(secs)?;
-    current_slot
-        .checked_add(elapsed_slot_estimate)
-        .ok_or(LendingError::MathOverflow.into())
-}

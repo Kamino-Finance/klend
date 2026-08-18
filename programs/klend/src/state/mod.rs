@@ -152,8 +152,9 @@ pub enum UpdateConfigMode {
     UpdateDebtTermSeconds = 55,
     UpdateEarlyRepayRemainingInterestPct = 56,
     UpdateReserveEmergencyMode = 57,
-    UpdateRewardsAmountPerSlot = 58,
+    UpdateRewardsAmountPerAccrualUnit = 58,
     UpdateReservePermissionedOps = 59,
+    UpdateInterestRateBasis = 60,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Eq, Clone, Debug)]

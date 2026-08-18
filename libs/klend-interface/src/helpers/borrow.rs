@@ -51,6 +51,7 @@ pub fn borrow(
     ixs.push(build_refresh_obligation(
         &borrow_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(borrow_obligation_liquidity_v2(
         BorrowObligationLiquidityV2Accounts {
@@ -110,6 +111,7 @@ pub fn rollover_fixed_term_borrow(
     ixs.push(build_refresh_obligation(
         &source_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
 
     ixs.push(rollover_ix(RolloverFixedTermBorrowAccounts {

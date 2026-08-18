@@ -24,7 +24,10 @@ use crate::{
         withdrawal_cap_operations::utils::{add_to_withdrawal_accum, sub_from_withdrawal_accum},
     },
     liquidation_operations, obligation_order_operations,
-    state::{CalculateBorrowResult, CalculateLiquidationResult, CalculateRepayResult, Reserve},
+    state::{
+        AccrualDuration, CalculateBorrowResult, CalculateLiquidationResult, CalculateRepayResult,
+        InterestRateBasis, Reserve,
+    },
     utils::{
         accounts::is_default_array, consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction,
         Fraction, GetPriceResult, IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
@@ -47,13 +50,18 @@ pub fn refresh_reserve(
     referral_fee_bps: u16,
     reserve_rewards_max_apr_bps: u16,
 ) -> Result<()> {
-    let slot = clock.slot;
+   
+    let duration = AccrualDuration::since(
+        reserve.config.get_interest_rate_basis(),
+        &reserve.last_update,
+        clock,
+    )?;
 
    
-    reserve.accrue_interest(slot, referral_fee_bps)?;
+    reserve.accrue_interest(duration, referral_fee_bps)?;
 
    
-    reserve.distribute_rewards(slot, reserve_rewards_max_apr_bps)?;
+    reserve.distribute_rewards(duration, reserve_rewards_max_apr_bps)?;
 
    
     let price_status = if reserve.config.is_emergency_mode() {
@@ -81,7 +89,7 @@ pub fn refresh_reserve(
     };
 
    
-    reserve.last_update.update_slot(slot, price_status);
+    reserve.last_update.update(clock, price_status);
 
    
     reserve.config.reserved_1 = Default::default();
@@ -1791,13 +1799,19 @@ where
             num_of_obsolete_reserves += 1;
         }
 
+        let referrer_fee_accrual_duration = AccrualDuration::since(
+            borrow_reserve.config.get_interest_rate_basis(),
+            &obligation.last_update,
+            clock,
+        )?;
+
         accumulate_referrer_fees(
             program_id,
             borrow_reserve_info_key,
             borrow_reserve,
             &obligation.referrer,
             lending_market.referral_fee_bps,
-            obligation.last_update.slots_elapsed(clock.slot)?,
+            referrer_fee_accrual_duration,
             borrowed_amount_f,
             previous_borrowed_amount_f,
             obligation_has_referrer,
@@ -1946,7 +1960,9 @@ where
     obligation.clear_expired_borrow_orders(timestamp);
 
     let prices_state = deposits_prices_state.intersection(borrows_prices_state);
-    obligation.last_update.update_slot(slot, Some(prices_state));
+
+   
+    obligation.last_update.update(clock, Some(prices_state));
 
     Ok(())
 }
@@ -2486,7 +2502,7 @@ pub fn accumulate_referrer_fees<'info, T>(
     borrow_reserve: &mut Reserve,
     obligation_referrer: &Pubkey,
     lending_market_referral_fee_bps: u16,
-    slots_elapsed: u64,
+    duration: AccrualDuration,
     borrowed_amount_f: Fraction,
     previous_borrowed_amount_f: Fraction,
     obligation_has_referrer: bool,
@@ -2509,10 +2525,8 @@ where
     }
 
    
-    let fixed_rate = approximate_compounded_interest(
-        Fraction::from_bps(borrow_reserve.config.host_fixed_interest_rate_bps),
-        slots_elapsed,
-    );
+    let fixed_rate =
+        approximate_compounded_interest(borrow_reserve.config.host_fixed_interest_rate(), duration);
     let net_new_debt = borrowed_amount_f - previous_borrowed_amount_f;
     let net_new_fixed_debt = previous_borrowed_amount_f * fixed_rate - previous_borrowed_amount_f;
     if net_new_fixed_debt > net_new_debt {
@@ -2893,8 +2907,8 @@ pub fn update_reserve_config(
                 .validating(validations::check_bool)
                 .set(value)?;
         }
-        UpdateConfigMode::UpdateRewardsAmountPerSlot => {
-            config_items::for_named_field!(&mut reserve.config.rewards_amount_per_slot)
+        UpdateConfigMode::UpdateRewardsAmountPerAccrualUnit => {
+            config_items::for_named_field!(&mut reserve.config.rewards_amount_per_accrual_unit)
                 .set(value)?;
         }
         UpdateConfigMode::UpdateReservePermissionedOps => {
@@ -2902,6 +2916,17 @@ pub fn update_reserve_config(
                 .validating(validations::check_valid_permissioned_ops)
                 .rendering(renderings::as_permissioned_ops_bitflags)
                 .set(value)?;
+        }
+        UpdateConfigMode::UpdateInterestRateBasis => {
+            config_items::for_named_field!(&mut reserve.config.interest_rate_basis)
+                .representing_u8_enum::<InterestRateBasis>()
+                .set(value)?;
+
+           
+            if reserve.config.get_interest_rate_basis() == InterestRateBasis::Legacy {
+                xmsg!("Cannot set a legacy interest rate basis");
+                return err!(LendingError::InvalidConfig);
+            }
         }
         UpdateConfigMode::DeprecatedUpdateFeesReferralFeeBps
         | UpdateConfigMode::DeprecatedUpdateMultiplierSideBoost
@@ -2923,6 +2948,13 @@ pub fn clone_reserve_config(
     target_reserve: &mut Reserve,
     customizations: ReserveConfigCustomizations,
 ) -> Result<()> {
+   
+   
+    if source_reserve.config.get_interest_rate_basis() == InterestRateBasis::Legacy {
+        xmsg!("Cannot clone from a reserve using legacy interest rate basis");
+        return err!(LendingError::InvalidConfig);
+    }
+
     target_reserve.config = ReserveConfig::from_customized(&source_reserve.config, customizations);
 
     if source_reserve.lending_market != target_reserve.lending_market
@@ -4251,8 +4283,9 @@ pub mod utils {
             | UpdateConfigMode::UpdateReserveEmergencyMode
             | UpdateConfigMode::UpdateProposerAuthorityLock
             | UpdateConfigMode::UpdateEarlyRepayRemainingInterestPct
-            | UpdateConfigMode::UpdateRewardsAmountPerSlot
-            | UpdateConfigMode::UpdateReservePermissionedOps => false,
+            | UpdateConfigMode::UpdateRewardsAmountPerAccrualUnit
+            | UpdateConfigMode::UpdateReservePermissionedOps
+            | UpdateConfigMode::UpdateInterestRateBasis => false,
         }
     }
 
@@ -4525,12 +4558,12 @@ pub mod utils {
        
        
        
-        if config.rewards_amount_per_slot > 0 && !market.is_reserve_rewards_enabled() {
+        if config.rewards_amount_per_accrual_unit > 0 && !market.is_reserve_rewards_enabled() {
             xmsg!(
-                "WARNING: rewards_amount_per_slot={} is set but the market has reserve rewards \
+                "WARNING: rewards_amount_per_accrual_unit={} is set but the market has reserve rewards \
                  disabled (reserve_rewards_max_apr_bps == 0); RPS will be ignored on refresh \
                  until rewards are enabled at the market level",
-                config.rewards_amount_per_slot,
+                config.rewards_amount_per_accrual_unit,
             );
         }
 

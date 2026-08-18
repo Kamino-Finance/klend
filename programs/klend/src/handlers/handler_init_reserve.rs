@@ -21,13 +21,13 @@ use crate::{
         LendingMarket, Reserve, ReserveConfig,
     },
     utils::{account_ops, constraints, seeds, spltoken, token_transfer, COLLATERAL_MINT_DECIMALS},
-    LendingError, ReserveStatus,
+    InterestRateBasis, LendingError, ReserveStatus,
 };
 
 pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Result<()> {
     check_advance_nonce_ix_if_needed!(ctx.accounts);
 
-    let clock = &Clock::get()?;
+    let clock = Clock::get()?;
     let reserve = &mut ctx.accounts.reserve.load_init()?;
     let market = &ctx.accounts.lending_market.load()?;
     let reserve_key = ctx.accounts.reserve.key();
@@ -82,7 +82,7 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
     };
 
     reserve.init(InitReserveParams {
-        current_slot: clock.slot,
+        clock,
         lending_market: ctx.accounts.lending_market.key(),
         liquidity: Box::new(ReserveLiquidity::new(NewReserveLiquidityParams {
             mint_pubkey: ctx.accounts.reserve_liquidity_mint.key(),
@@ -100,6 +100,7 @@ pub fn process<'info>(ctx: Context<'_, '_, '_, 'info, InitReserve<'info>>) -> Re
         })),
         config: Box::new(ReserveConfig {
             status: ReserveStatus::Hidden.into(),
+            interest_rate_basis: InterestRateBasis::TrueApr.into(),
             ..Default::default()
         }),
     });

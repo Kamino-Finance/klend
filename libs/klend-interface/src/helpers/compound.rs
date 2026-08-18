@@ -54,6 +54,7 @@ pub fn deposit_and_withdraw(
     ixs.push(build_refresh_obligation(
         &deposit_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(crate::instructions::compound::deposit_and_withdraw(
         crate::instructions::compound::DepositAndWithdrawAccounts {

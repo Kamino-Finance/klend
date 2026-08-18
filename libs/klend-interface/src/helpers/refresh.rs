@@ -18,9 +18,20 @@ pub fn refresh_reserve(reserve: &ReserveInfo) -> Instruction {
 /// remaining accounts (deposit reserves, borrow reserves, referrer token
 /// states) derived from the obligation info.
 ///
+/// `obligation_reserves` should contain [`ReserveInfo`] for every borrow
+/// reserve on the obligation: for a referred obligation, the referrer token
+/// states of the borrows accruing referral fees (i.e. whose reserve takes
+/// protocol fees) must precede the others, and the reserve infos are what
+/// tells them apart. Borrow reserves not found in `obligation_reserves` are
+/// assumed to take protocol fees.
+///
 /// Returns: `refresh_obligation`
-pub fn refresh_obligation(lending_market: &Pubkey, obligation: &ObligationInfo) -> Instruction {
-    build_refresh_obligation(lending_market, obligation)
+pub fn refresh_obligation(
+    lending_market: &Pubkey,
+    obligation: &ObligationInfo,
+    obligation_reserves: &[ReserveInfo],
+) -> Instruction {
+    build_refresh_obligation(lending_market, obligation, obligation_reserves)
 }
 
 /// Build a `refresh_reserves_batch` instruction from a slice of reserve infos.
@@ -83,6 +94,7 @@ pub fn refresh_all_for_obligation(
     // Collect unique reserves (deposits + borrows may overlap)
     let mut seen =
         Vec::with_capacity(obligation.deposit_reserves.len() + obligation.borrow_reserves.len());
+    let mut infos = Vec::with_capacity(seen.capacity());
     let mut ixs = Vec::new();
 
     for r in obligation
@@ -94,10 +106,11 @@ pub fn refresh_all_for_obligation(
             seen.push(*r);
             let info = reserve_infos(r).ok_or(RefreshError::ReserveNotFound(*r))?;
             ixs.push(build_refresh_reserve(&info));
+            infos.push(info);
         }
     }
 
-    ixs.push(build_refresh_obligation(lending_market, obligation));
+    ixs.push(build_refresh_obligation(lending_market, obligation, &infos));
     Ok(ixs)
 }
 

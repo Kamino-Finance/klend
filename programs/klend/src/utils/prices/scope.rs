@@ -100,6 +100,7 @@ fn get_price_usd(
         return Ok(TimestampedPrice {
             price_load,
             timestamp: price.1,
+            is_known_to_be_zero: price.0.value == 0,
         });
     }
 
@@ -110,6 +111,13 @@ fn get_price_usd(
         .map(|x| x.1)
         .min()
         .unwrap();
+
+   
+    let is_known_to_be_zero = price_chain_raw
+        .iter()
+        .take(chain_len)
+        .flatten()
+        .any(|x| x.0.value == 0);
 
     let init_price: Price<U256> = Price {
         value: U256::from(1_u64),
@@ -142,6 +150,7 @@ fn get_price_usd(
     Ok(TimestampedPrice {
         price_load,
         timestamp: oldest_timestamp,
+        is_known_to_be_zero,
     })
 }
 

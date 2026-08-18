@@ -44,8 +44,18 @@ pub fn get_price(
         clock,
     )?;
 
-    Ok(get_validated_price(price, token_info, clock.unix_timestamp))
+    match price {
+        Some(price) => Ok(get_validated_price(price, token_info, clock.unix_timestamp)),
+       
+       
+        None => {
+            xmsg!("All price feeds are zeroed");
+            Ok(None)
+        }
+    }
 }
+
+
 
 
 
@@ -56,7 +66,7 @@ fn get_most_recent_price_and_twap(
     switchboard_price_twap_info: Option<&AccountInfo>,
     scope_prices_info: Option<&AccountInfo>,
     clock: &Clock,
-) -> Result<TimestampedPriceWithTwap> {
+) -> Result<Option<TimestampedPriceWithTwap>> {
     let pyth_price = if token_info.pyth_configuration.is_enabled() {
         pyth_price_account_info.and_then(|a| get_pyth_price_and_twap(a).ok())
     } else {
@@ -84,20 +94,33 @@ fn get_most_recent_price_and_twap(
         None
     };
 
-    let most_recent_price = [pyth_price, switchboard_price, scope_price]
+    let feeds = [pyth_price, switchboard_price, scope_price];
+
+    if feeds.iter().all(Option::is_none) {
+        xmsg!("No price feed available");
+        return err!(LendingError::PriceNotValid);
+    }
+
+    Ok(feeds
         .into_iter()
         .flatten()
+        .filter(|feed| !is_spot_or_twap_zeroed(feed, token_info))
         .reduce(|current, candidate| {
             if candidate.price.timestamp > current.price.timestamp {
                 candidate
             } else {
                 current
             }
-        });
+        }))
+}
 
-    most_recent_price.ok_or_else(|| {
-        xmsg!("No price feed available");
-        error!(LendingError::PriceNotValid)
-    })
+
+fn is_spot_or_twap_zeroed(feed: &TimestampedPriceWithTwap, token_info: &TokenInfo) -> bool {
+    feed.price.is_known_to_be_zero
+        || (token_info.is_twap_enabled()
+            && feed
+                .twap
+                .as_ref()
+                .map_or(false, |twap| twap.is_known_to_be_zero))
 }
 

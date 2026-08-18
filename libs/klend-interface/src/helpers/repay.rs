@@ -46,6 +46,7 @@ pub fn repay(
     ixs.push(build_refresh_obligation(
         &repay_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(repay_obligation_liquidity_v2(
         RepayObligationLiquidityV2Accounts {
@@ -109,6 +110,7 @@ pub fn repay_and_withdraw(
     ixs.push(build_refresh_obligation(
         &repay_reserve.lending_market,
         obligation,
+        obligation_reserves,
     ));
     ixs.push(repay_and_withdraw_and_redeem(
         RepayAndWithdrawAndRedeemAccounts {

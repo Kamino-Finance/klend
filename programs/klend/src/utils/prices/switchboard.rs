@@ -53,12 +53,12 @@ fn get_switchboard_price(
         .value()
         .ok_or(error!(LendingError::SwitchboardV2Error))?;
 
-    if price_switchboard_desc.mantissa() <= 0 {
-        xmsg!("Switchboard oracle price is zero or negative which is not allowed");
-        return err!(LendingError::PriceIsZero);
+    if price_switchboard_desc.mantissa() < 0 {
+        xmsg!("Switchboard oracle price is negative which is not allowed");
+        return err!(LendingError::PriceNotValid);
     }
     let price_switchboard_desc_mantissa = u128::try_from(price_switchboard_desc.mantissa())
-        .expect("a `<= 0` check above guarantees this");
+        .expect("a `< 0` check above guarantees this");
     let price_switchboard_desc_scale = price_switchboard_desc.scale();
 
     let stdev = feed
@@ -72,13 +72,15 @@ fn get_switchboard_price(
     let stdev_scale = stdev.scale();
 
     let price_load = Box::new(move || {
-        validate_switchboard_confidence(
-            price_switchboard_desc_mantissa,
-            price_switchboard_desc_scale,
-            stdev_mantissa,
-            stdev_scale,
-            CONFIDENCE_FACTOR,
-        )?;
+        if price_switchboard_desc_mantissa > 0 {
+            validate_switchboard_confidence(
+                price_switchboard_desc_mantissa,
+                price_switchboard_desc_scale,
+                stdev_mantissa,
+                stdev_scale,
+                CONFIDENCE_FACTOR,
+            )?;
+        }
 
         let base_price = super::Price {
             value: price_switchboard_desc_mantissa,
@@ -91,6 +93,7 @@ fn get_switchboard_price(
     Ok(TimestampedPrice {
         price_load,
         timestamp,
+        is_known_to_be_zero: price_switchboard_desc_mantissa == 0,
     })
 }
 

@@ -1,6 +1,9 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{err, prelude::*};
 
-use crate::utils::{prices::utils::ten_pow, Fraction, U256};
+use crate::{
+    utils::{prices::utils::ten_pow, Fraction, U256},
+    xmsg, LendingError,
+};
 
 
 
@@ -87,6 +90,23 @@ where
 pub(super) struct TimestampedPrice {
     pub price_load: Box<dyn FnOnce() -> Result<Fraction>>,
     pub timestamp: u64,
+
+
+
+
+
+    pub is_known_to_be_zero: bool,
+}
+
+impl TimestampedPrice {
+    pub fn load_non_zero(self) -> Result<Fraction> {
+        let price = (self.price_load)()?;
+        if price == Fraction::ZERO {
+            xmsg!("Price is zero");
+            return err!(LendingError::PriceIsZero);
+        }
+        Ok(price)
+    }
 }
 
 pub(super) struct TimestampedPriceWithTwap {

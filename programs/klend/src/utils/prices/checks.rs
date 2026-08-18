@@ -25,7 +25,8 @@ pub(super) fn get_validated_price(
     let mut price_status = PriceStatusFlags::empty();
     let price_label = token_info.symbol();
 
-    let price_dec = match (price.price_load)() {
+    let price_timestamp = price.timestamp;
+    let price_dec = match price.load_non_zero() {
         Ok(price_dec) => {
             price_status.set(PriceStatusFlags::PRICE_LOADED, true);
             price_dec
@@ -38,7 +39,7 @@ pub(super) fn get_validated_price(
 
    
     match check_price_age(
-        price.timestamp,
+        price_timestamp,
         token_info.max_age_price_seconds,
         unix_timestamp,
     ) {
@@ -64,7 +65,8 @@ pub(super) fn get_validated_price(
             }
 
            
-            match (twap.price_load)()
+            match twap
+                .load_non_zero()
                 .and_then(|twap_dec| check_twap_in_tolerance(price_dec, twap_dec, token_info))
             {
                 Ok(()) => {
@@ -96,7 +98,7 @@ pub(super) fn get_validated_price(
 
     Some(GetPriceResult {
         price: price_dec,
-        timestamp: price.timestamp,
+        timestamp: price_timestamp,
         status: price_status,
     })
 }

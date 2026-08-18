@@ -40,7 +40,11 @@ pub fn request_elevation_group(
     }
 
     let mut ixs = build_refresh_all_obligation_reserves(obligation, obligation_reserves, &[]);
-    ixs.push(build_refresh_obligation(&lending_market, obligation));
+    ixs.push(build_refresh_obligation(
+        &lending_market,
+        obligation,
+        obligation_reserves,
+    ));
     ixs.push(crate::instructions::obligation::request_elevation_group(
         crate::instructions::obligation::RequestElevationGroupAccounts {
             owner,

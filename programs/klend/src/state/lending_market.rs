@@ -232,6 +232,8 @@ pub struct LendingMarket {
 
 
 
+
+
     pub reserve_rewards_max_apr_bps: u16,
 
 
