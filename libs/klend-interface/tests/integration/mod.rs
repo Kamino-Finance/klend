@@ -10,4 +10,5 @@ mod test_init;
 mod test_multi_reserve;
 mod test_obligation_context;
 mod test_refresh_batch;
+mod test_update_obligation_config;
 mod test_withdraw;
