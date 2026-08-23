@@ -72,4 +72,32 @@ pub enum UpdateObligationConfigMode {
     FixedTermRolloverMinDebtTermSeconds = 2,
     FixedTermRolloverOpenTermAllowed = 3,
     MigrationToFixedEnabled = 4,
+    FixedTermRolloverWindowDurationDays = 5,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Borsh encodes an enum by its declaration index, so a variant inserted out of
+    /// order (or omitted) silently shifts the wire value of everything after it. The
+    /// klend program discriminants these must match live in `UpdateObligationConfigMode`
+    /// in `state/obligation.rs`.
+    #[test]
+    fn update_obligation_config_mode_discriminants() {
+        use UpdateObligationConfigMode::*;
+        let expected = [
+            (FixedTermRolloverEnabled, 0u8),
+            (FixedTermRolloverMaxBorrowRateBps, 1),
+            (FixedTermRolloverMinDebtTermSeconds, 2),
+            (FixedTermRolloverOpenTermAllowed, 3),
+            (MigrationToFixedEnabled, 4),
+            (FixedTermRolloverWindowDurationDays, 5),
+        ];
+        for (mode, discriminant) in expected {
+            let mut encoded = Vec::new();
+            mode.serialize(&mut encoded).unwrap();
+            assert_eq!(encoded, vec![discriminant], "wrong encoding for {mode:?}");
+        }
+    }
 }
