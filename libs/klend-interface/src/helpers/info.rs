@@ -1,6 +1,8 @@
-use solana_pubkey::Pubkey;
+use solana_pubkey::{pubkey, Pubkey};
 
 use crate::state::AccountDataError;
+
+const NULL_PUBKEY: Pubkey = pubkey!("nu11111111111111111111111111111111111111111");
 
 /// On-chain reserve data that cannot be derived from PDAs.
 ///
@@ -54,6 +56,10 @@ pub(super) fn non_default(key: Pubkey) -> Option<Pubkey> {
     }
 }
 
+fn configured_oracle(key: Pubkey) -> Option<Pubkey> {
+    (key != Pubkey::default() && key != NULL_PUBKEY).then_some(key)
+}
+
 impl ReserveInfo {
     /// Build a `ReserveInfo` directly from raw on-chain account data bytes.
     ///
@@ -74,22 +80,24 @@ impl ReserveInfo {
             lending_market: reserve.lending_market,
             liquidity_mint: reserve.liquidity.mint_pubkey,
             liquidity_token_program: reserve.liquidity.token_program,
-            pyth_oracle: non_default(reserve.config.token_info.pyth_configuration.price),
-            switchboard_price_oracle: non_default(
+            pyth_oracle: configured_oracle(reserve.config.token_info.pyth_configuration.price),
+            switchboard_price_oracle: configured_oracle(
                 reserve
                     .config
                     .token_info
                     .switchboard_configuration
                     .price_aggregator,
             ),
-            switchboard_twap_oracle: non_default(
+            switchboard_twap_oracle: configured_oracle(
                 reserve
                     .config
                     .token_info
                     .switchboard_configuration
                     .twap_aggregator,
             ),
-            scope_prices: non_default(reserve.config.token_info.scope_configuration.price_feed),
+            scope_prices: configured_oracle(
+                reserve.config.token_info.scope_configuration.price_feed,
+            ),
             protocol_take_rate_pct: reserve.config.protocol_take_rate_pct,
         }
     }
