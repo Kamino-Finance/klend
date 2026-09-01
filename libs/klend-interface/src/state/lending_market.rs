@@ -64,7 +64,8 @@ pub struct LendingMarket {
     pub term_based_full_liquidation_duration_secs: u64,
     pub permissioning_authority: Pubkey,
     pub permissioned_ops: u64,
-    pub padding1: [u64; 153],
+    pub min_obligation_order_execution_value: u64,
+    pub padding1: [u64; 152],
 }
 
 const _: () = assert!(core::mem::size_of::<LendingMarket>() == 4656);
