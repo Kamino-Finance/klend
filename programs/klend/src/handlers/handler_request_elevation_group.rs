@@ -2,55 +2,20 @@ use anchor_lang::prelude::*;
 
 use crate::{
     lending_market::{lending_checks, lending_operations},
-    utils::FatAccountLoader,
-    LendingError, LendingMarket, Obligation, ReferrerTokenState, Reserve,
+    utils::accounts::ObligationRemainingAccounts,
+    LendingMarket, Obligation,
 };
 
 pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> Result<()> {
     let obligation = &mut ctx.accounts.obligation.load_mut()?;
     let lending_market = ctx.accounts.lending_market.load()?;
     let clock = Clock::get()?;
-    let deposit_count = obligation.active_deposits_count();
-    let borrow_count = obligation.active_borrows_count();
-    let reserves_count = borrow_count + deposit_count;
-
-    let expected_remaining_accounts = if obligation.has_referrer() {
-        reserves_count + borrow_count
-    } else {
-        reserves_count
-    };
-
-    if ctx.remaining_accounts.iter().len() != expected_remaining_accounts {
-        return err!(LendingError::InvalidAccountInput);
-    }
+    let other_accounts = ObligationRemainingAccounts::parse(obligation, ctx.remaining_accounts)?;
 
    
-    for account_info in ctx.remaining_accounts.iter().take(reserves_count) {
-        let reserve_loader = FatAccountLoader::<Reserve>::try_from(account_info)?;
-        let reserve = reserve_loader.load()?;
-        lending_checks::check_reserve_emergency_mode(&reserve)?;
+    for reserve in other_accounts.all_reserves() {
+        lending_checks::check_reserve_emergency_mode(&*reserve.load()?)?;
     }
-
-    let deposit_reserves_iter = ctx
-        .remaining_accounts
-        .iter()
-        .take(deposit_count)
-        .map(|account_info| FatAccountLoader::<Reserve>::try_from(account_info).unwrap());
-
-    let borrow_reserves_iter = ctx
-        .remaining_accounts
-        .iter()
-        .skip(deposit_count)
-        .take(borrow_count)
-        .map(|account_info| FatAccountLoader::<Reserve>::try_from(account_info).unwrap());
-
-    let referrer_token_states_iter =
-        ctx.remaining_accounts
-            .iter()
-            .skip(reserves_count)
-            .map(|account_info| {
-                FatAccountLoader::<ReferrerTokenState>::try_from(account_info).unwrap()
-            });
 
     lending_operations::request_elevation_group(
         &crate::ID,
@@ -58,9 +23,9 @@ pub fn process(ctx: Context<RequestElevationGroup>, new_elevation_group: u8) -> 
         &lending_market,
         &clock,
         new_elevation_group,
-        deposit_reserves_iter,
-        borrow_reserves_iter,
-        referrer_token_states_iter,
+        other_accounts.deposit_reserves(),
+        other_accounts.borrow_reserves(),
+        other_accounts.referrer_token_states(),
     )?;
 
     Ok(())

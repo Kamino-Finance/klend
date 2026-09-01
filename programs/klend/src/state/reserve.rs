@@ -1328,9 +1328,18 @@ impl ReserveLiquidity {
 
 
 
+
+
     pub fn market_value_to_liquidity_amount(&self, market_value: Fraction) -> Fraction {
+        self.try_market_value_to_liquidity_amount(market_value)
+            .unwrap()
+    }
+
+
+
+    pub fn try_market_value_to_liquidity_amount(&self, market_value: Fraction) -> Option<Fraction> {
         let mint_factor_sf = u128::from(self.mint_factor()) * FRACTION_ONE_SCALED;
-        market_value.full_mul_int_ratio(mint_factor_sf, self.market_price_sf)
+        market_value.try_full_mul_int_ratio(mint_factor_sf, self.market_price_sf)
     }
 
 
@@ -1935,6 +1944,11 @@ impl ReserveConfig {
     }
 
 
+    pub fn protocol_order_execution_fee_rate(&self) -> Fraction {
+        Fraction::from_percent(self.protocol_order_execution_fee_pct)
+    }
+
+
     pub fn from_customized(
         source: &ReserveConfig,
         customizations: ReserveConfigCustomizations,
@@ -2240,6 +2254,11 @@ mod serde_reserve_fees {
 }
 
 impl ReserveFees {
+
+    pub fn origination_fee_rate(&self) -> Fraction {
+        Fraction::from_bits(self.origination_fee_sf.into())
+    }
+
 
     pub fn calculate_borrow_fees(
         &self,

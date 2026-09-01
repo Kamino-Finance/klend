@@ -267,6 +267,7 @@ pub enum UpdateLendingMarketMode {
     DeprecatedUpdateReserveRewardsMaxAprPct = 44,
     UpdateReserveRewardsMaxAprBps = 45,
     UpdateDisableNonceBlock = 46,
+    UpdateMinObligationOrderExecutionValue = 47,
 }
 
 #[cfg(feature = "serde")]
@@ -280,6 +281,7 @@ pub mod serde_iter {
     const PRIORITIZED_UPDATE_MODES: &[UpdateLendingMarketMode] = &[
         UpdateLendingMarketMode::UpdateMinWithdrawQueuedLiquidityValue,
         UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue,
+        UpdateLendingMarketMode::UpdateMinObligationOrderExecutionValue,
         UpdateLendingMarketMode::UpdateMinPartialRolloverValue,
     ];
 

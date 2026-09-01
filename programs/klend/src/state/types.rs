@@ -70,6 +70,15 @@ pub struct CalculateRepayResult {
 }
 
 
+#[derive(Debug)]
+pub struct RepayObligationLiquidityResult {
+
+    pub repay_amount: u64,
+
+    pub early_repay_penalty: u64,
+}
+
+
 
 
 
@@ -117,7 +126,6 @@ pub struct CalculateLiquidationResult {
 pub enum LiquidationReason {
 
 
-
     LtvExceeded,
 
 
@@ -125,13 +133,6 @@ pub enum LiquidationReason {
 
 
     MarketWideDeleveraging,
-
-
-
-
-
-
-    ObligationOrder(usize),
 
 
     ReserveDebtMaturityReached,
@@ -162,6 +163,38 @@ pub struct LiquidateObligationResult {
 }
 
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RepayAndWithdrawRedeemResult {
+
+    pub repay_amount: u64,
+
+    pub early_repay_penalty: u64,
+
+    pub withdraw_obligation_amount: u64,
+
+    pub withdraw_liquidity_amount: u64,
+
+    pub obligation_closed: bool,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DepositAndBorrowResult {
+
+    pub receive_amount: u64,
+
+    pub origination_fee: u64,
+
+
+    pub referrer_fee: u64,
+
+    pub deposit_liquidity_amount: u64,
+
+
+    pub deposit_collateral_amount: u64,
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiquidateAndRedeemResult {
 
@@ -174,6 +207,66 @@ pub struct LiquidateAndRedeemResult {
     pub total_withdraw_liquidity_amount: Option<(u64, u64)>,
 
     pub liquidation_reason: LiquidationReason,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExecuteObligationOrderResult {
+    Deleverage(ExecuteDeleverageOrderResult),
+    LeverUp(ExecuteLeverUpOrderResult),
+}
+
+impl ExecuteObligationOrderResult {
+
+
+    pub fn executor_given_liquidity(&self) -> u64 {
+        match self {
+            Self::Deleverage(result) => result.repay_amount + result.early_repay_penalty,
+            Self::LeverUp(result) => result.deposit_liquidity_amount,
+        }
+    }
+
+
+
+    pub fn executor_received_liquidity(&self) -> u64 {
+        match self {
+            Self::Deleverage(result) => result.withdraw_liquidity_amount - result.protocol_fee,
+            Self::LeverUp(result) => result.borrow_liquidity_amount - result.protocol_fee,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecuteDeleverageOrderResult {
+
+    pub repay_amount: u64,
+
+    pub early_repay_penalty: u64,
+
+
+    pub withdraw_collateral_amount: u64,
+
+    pub withdraw_liquidity_amount: u64,
+
+    pub protocol_fee: u64,
+
+    pub obligation_closed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecuteLeverUpOrderResult {
+
+    pub borrow_liquidity_amount: u64,
+
+    pub origination_fee: u64,
+
+    pub deposit_liquidity_amount: u64,
+
+
+    pub deposit_collateral_amount: u64,
+
+
+    pub protocol_fee: u64,
 }
 
 pub struct LiquidationCheckInputs<'l> {
@@ -241,31 +334,10 @@ impl RedeemCollateralOptions {
     };
 
 
-
-    pub const FOR_PROTOCOL_ENFORCED_LIQUIDATION: Self = Self {
+    pub const FOR_LIQUIDATION: Self = Self {
         add_amount_to_withdrawal_caps: false,
         use_withdraw_queue: true,
     };
-
-
-
-    pub const FOR_USER_REQUESTED_LIQUIDATION: Self = Self {
-        add_amount_to_withdrawal_caps: true,
-        use_withdraw_queue: false,
-    };
-
-    pub fn resolve(liquidation_reason: LiquidationReason) -> Self {
-        match liquidation_reason {
-            LiquidationReason::LtvExceeded
-            | LiquidationReason::IndividualDeleveraging
-            | LiquidationReason::MarketWideDeleveraging
-            | LiquidationReason::ReserveDebtMaturityReached
-            | LiquidationReason::ObligationBorrowDebtTermReached(_) => {
-                Self::FOR_PROTOCOL_ENFORCED_LIQUIDATION
-            }
-            LiquidationReason::ObligationOrder(_) => Self::FOR_USER_REQUESTED_LIQUIDATION,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -283,11 +355,12 @@ pub enum LendingAction {
 }
 
 impl LendingAction {
-    pub fn subtractive_signed(net_subtracted: i64) -> Self {
-        if net_subtracted >= 0 {
-            Self::Subtractive(net_subtracted as u64)
+
+    pub fn net_of(added: u64, subtracted: u64) -> Self {
+        if added >= subtracted {
+            Self::Additive(added - subtracted)
         } else {
-            Self::Additive(net_subtracted.unsigned_abs())
+            Self::Subtractive(subtracted - added)
         }
     }
 }

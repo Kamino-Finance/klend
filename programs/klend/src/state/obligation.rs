@@ -14,11 +14,13 @@ use strum::EnumIter;
 use strum::EnumString;
 
 use crate::{
-    obligation_order_operations::{ConditionType, OpportunityType},
+    obligation_order_operations::{
+        ConditionType, OpportunityType, OrderCondition, OrderOpportunity, OrderSize,
+    },
     state::{LastUpdate, LtvMaxWithdrawalCheck, Reserve},
     utils::{
-        accounts::default_array, BigFraction, Fraction, FractionExtra, IterExt,
-        ELEVATION_GROUP_NONE, OBLIGATION_SIZE, SECONDS_PER_DAY, U256,
+        accounts::default_array, BigFraction, Fraction, FractionExtra, ELEVATION_GROUP_NONE,
+        OBLIGATION_SIZE, SECONDS_PER_DAY, U256,
     },
     xmsg, BigFractionBytes, LendingError, ReserveConfig,
 };
@@ -249,6 +251,10 @@ impl Obligation {
             / Fraction::from_bits(self.deposited_value_sf)
     }
 
+    pub fn deposited_value(&self) -> Fraction {
+        Fraction::from_bits(self.deposited_value_sf)
+    }
+
     pub fn no_bf_loan_to_value(&self) -> Fraction {
         Fraction::from_bits(self.borrowed_assets_market_value_sf)
             / Fraction::from_bits(self.deposited_value_sf)
@@ -340,16 +346,8 @@ impl Obligation {
         &self,
         deposit_reserve: Pubkey,
     ) -> Result<&ObligationCollateral> {
-        if self.is_active_deposits_empty() {
-            xmsg!("Obligation has no deposits");
-            return err!(LendingError::ObligationDepositsEmpty);
-        }
-        let collateral = self
-            .deposits
-            .iter()
-            .find(|collateral| collateral.deposit_reserve == deposit_reserve)
-            .ok_or(LendingError::InvalidObligationCollateral)?;
-        Ok(collateral)
+        let collateral_index = self.position_of_collateral_in_deposits(deposit_reserve)?;
+        Ok(&self.deposits[collateral_index])
     }
 
 
@@ -357,21 +355,20 @@ impl Obligation {
     pub fn find_or_add_collateral_to_deposits(
         &mut self,
         deposit_reserve: Pubkey,
-    ) -> Result<(&mut ObligationCollateral, bool)> {
-        if let Some(collateral_index) = self
-            .deposits
-            .iter_mut()
-            .position(|collateral| collateral.deposit_reserve == deposit_reserve)
+    ) -> Result<(&mut ObligationCollateral, SlotAssignment)> {
+        let (index, is_new) = if let Some(collateral_index) =
+            self.find_collateral_index_in_deposits(deposit_reserve)
         {
-            Ok((&mut self.deposits[collateral_index], false))
+            (collateral_index, false)
         } else if let Some(collateral_index) = self.deposits.iter().position(|c| !c.is_active()) {
             let collateral = &mut self.deposits[collateral_index];
             *collateral = ObligationCollateral::new(deposit_reserve);
-            Ok((collateral, true))
+            (collateral_index, true)
         } else {
             xmsg!("Obligation has no empty deposits");
-            err!(LendingError::ObligationReserveLimit)
-        }
+            return err!(LendingError::ObligationReserveLimit);
+        };
+        Ok((&mut self.deposits[index], SlotAssignment { index, is_new }))
     }
 
     pub fn position_of_collateral_in_deposits(&self, deposit_reserve: Pubkey) -> Result<usize> {
@@ -379,10 +376,14 @@ impl Obligation {
             xmsg!("Obligation has no deposits");
             return err!(LendingError::ObligationDepositsEmpty);
         }
+        self.find_collateral_index_in_deposits(deposit_reserve)
+            .ok_or(error!(LendingError::InvalidObligationCollateral))
+    }
+
+    pub fn find_collateral_index_in_deposits(&self, deposit_reserve: Pubkey) -> Option<usize> {
         self.deposits
             .iter()
             .position(|collateral| collateral.deposit_reserve == deposit_reserve)
-            .ok_or(error!(LendingError::InvalidObligationCollateral))
     }
 
 
@@ -527,6 +528,13 @@ impl Obligation {
     }
 
 
+    pub fn active_obligation_orders(&self) -> impl Iterator<Item = &ObligationOrder> {
+        self.obligation_orders
+            .iter()
+            .filter(|order| order.is_active())
+    }
+
+
 
     pub fn clear_expired_borrow_orders(&mut self, timestamp: u64) {
         for borrow_order in
@@ -580,6 +588,10 @@ impl Obligation {
         Some(self.referrer).filter(|referrer| referrer != &Pubkey::default())
     }
 
+    pub fn elevation_group(&self) -> Option<u8> {
+        Some(self.elevation_group).filter(|group| *group != ELEVATION_GROUP_NONE)
+    }
+
     pub fn update_has_debt(&mut self) {
         self.has_debt = u8::from(!self.is_active_borrows_empty());
     }
@@ -622,24 +634,6 @@ impl Obligation {
 
     pub fn has_obsolete_reserves(&self) -> bool {
         self.num_of_obsolete_borrow_reserves > 0 || self.num_of_obsolete_deposit_reserves > 0
-    }
-
-
-
-
-
-
-    pub fn single_debt(&self) -> Option<&ObligationLiquidity> {
-        self.active_borrows().only_element()
-    }
-
-
-
-
-
-
-    pub fn single_collateral(&self) -> Option<&ObligationCollateral> {
-        self.active_deposits().only_element()
     }
 
 
@@ -823,6 +817,11 @@ impl ObligationCollateral {
 
     pub fn is_active(&self) -> bool {
         self.deposit_reserve != Pubkey::default()
+    }
+
+
+    pub fn market_value(&self) -> Fraction {
+        Fraction::from_bits(self.market_value_sf)
     }
 }
 
@@ -1063,8 +1062,23 @@ impl ObligationLiquidity {
         repay_amount: Fraction,
         current_timestamp: u64,
     ) -> Result<u64> {
+        if repay_amount > self.borrowed_amount() {
+            panic!("caller must cap repay_amount to borrowed_amount");
+        }
+        let penalty =
+            repay_amount * self.calculate_early_repay_penalty_rate(reserve, current_timestamp)?;
+        Ok(penalty.to_ceil())
+    }
+
+
+
+    pub fn calculate_early_repay_penalty_rate(
+        &self,
+        reserve: &Reserve,
+        current_timestamp: u64,
+    ) -> Result<Fraction> {
         let Some(debt_term_seconds) = reserve.config.get_debt_term_seconds() else {
-            return Ok(0);
+            return Ok(Fraction::ZERO);
         };
 
         if self.last_borrowed_at_timestamp == 0 {
@@ -1072,27 +1086,22 @@ impl ObligationLiquidity {
                 "Debt reserve has a debt term of {} seconds, but an Obligation did not track its last borrow timestamp; ignoring it",
                 debt_term_seconds,
             );
-            return Ok(0);
+            return Ok(Fraction::ZERO);
         }
 
-       
         if self.borrowed_amount_sf == 0 {
-            return Ok(0);
-        }
-
-        if repay_amount > self.borrowed_amount() {
-            panic!("caller must cap repay_amount to borrowed_amount");
+            return Ok(Fraction::ZERO);
         }
 
         let seconds_since_last_borrowed =
             current_timestamp.saturating_sub(self.last_borrowed_at_timestamp);
         if seconds_since_last_borrowed >= debt_term_seconds {
-            return Ok(0);
+            return Ok(Fraction::ZERO);
         }
 
         let remaining_secs = debt_term_seconds - seconds_since_last_borrowed;
-        let remaining_interest = self.calculate_interest_for_period(
-            repay_amount,
+        let remaining_interest_rate = self.calculate_interest_for_period(
+            Fraction::ONE,
             Fraction::from_num(remaining_secs),
             reserve,
         )?;
@@ -1101,7 +1110,7 @@ impl ObligationLiquidity {
             .config
             .get_early_repay_penalty_remaining_interest_pct();
 
-        Ok((remaining_interest * penalty_pct).to_ceil::<u64>())
+        Ok(remaining_interest_rate * penalty_pct)
     }
 }
 
@@ -1218,18 +1227,27 @@ impl FixedTermBorrowRolloverConfig {
     }
 
 
+    pub fn reserve_constraint(&self) -> DebtReserveConstraint {
+        DebtReserveConstraint {
+            max_borrow_rate_bps: self.max_borrow_rate_bps,
+            min_debt_term_seconds: self.min_debt_term_seconds,
+        }
+    }
+
+
 
     pub fn resolve_rollover_mode(
         &self,
         source_reserve_config: &ReserveConfig,
         target_reserve_config: &ReserveConfig,
+        timestamp: u64,
     ) -> Result<RolloverMode> {
         if source_reserve_config.get_debt_term_seconds().is_some() {
            
-            self.resolve_rollover_from_fixed_term_mode(target_reserve_config)
+            self.resolve_rollover_from_fixed_term_mode(target_reserve_config, timestamp)
         } else {
            
-            self.check_migration_to_fixed_term_possible(target_reserve_config)?;
+            self.check_migration_to_fixed_term_possible(target_reserve_config, timestamp)?;
             Ok(RolloverMode::FromOpenToFixedTerm)
         }
     }
@@ -1238,6 +1256,7 @@ impl FixedTermBorrowRolloverConfig {
     fn resolve_rollover_from_fixed_term_mode(
         &self,
         target_reserve_config: &ReserveConfig,
+        timestamp: u64,
     ) -> Result<RolloverMode> {
        
         if !self.is_auto_rollover_enabled() {
@@ -1245,49 +1264,28 @@ impl FixedTermBorrowRolloverConfig {
         }
 
        
-        let Some(target_debt_term_seconds) = target_reserve_config.get_debt_term_seconds() else {
+        if target_reserve_config.get_debt_term_seconds().is_none() {
             return if self.open_term_allowed == false as u8 {
                
                 xmsg!("Owner did not allow rollover into open-term reserve");
                 err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch)
             } else {
                
+                self.reserve_constraint()
+                    .check_maturity_satisfying(target_reserve_config, timestamp)?;
                 Ok(RolloverMode::FromFixedToOpenTerm)
                
                
                
                
                
+               
             };
-        };
-
-       
-       
-        let target_borrow_rate_bps = target_reserve_config.max_borrow_rate_bps();
-        if target_borrow_rate_bps > self.max_borrow_rate_bps {
-            xmsg!(
-                "Target reserve borrow rate ({} bps) is higher than the maximum allowed {} bps",
-                target_borrow_rate_bps,
-                self.max_borrow_rate_bps
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
         }
 
        
-        if self.min_debt_term_seconds == 0 {
-            xmsg!("Owner's min_debt_term_seconds is 0 (open-term only), but target is fixed-term");
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
-
-       
-        if target_debt_term_seconds < self.min_debt_term_seconds {
-            xmsg!(
-                "Target reserve debt term ({} seconds) is lower than the minimum allowed {} seconds",
-                target_debt_term_seconds,
-                self.min_debt_term_seconds
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
+        self.reserve_constraint()
+            .check_satisfying(target_reserve_config, timestamp)?;
 
         Ok(RolloverMode::FromFixedToFixedTerm)
     }
@@ -1296,6 +1294,7 @@ impl FixedTermBorrowRolloverConfig {
     fn check_migration_to_fixed_term_possible(
         &self,
         target_reserve_config: &ReserveConfig,
+        now: u64,
     ) -> Result<()> {
        
         if !self.is_migration_to_fixed_enabled() {
@@ -1304,39 +1303,14 @@ impl FixedTermBorrowRolloverConfig {
         }
 
        
-        let Some(target_debt_term_seconds) = target_reserve_config.get_debt_term_seconds() else {
+        if target_reserve_config.get_debt_term_seconds().is_none() {
             xmsg!("Migration target must be a fixed-term reserve");
             return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        };
-
-       
-        let target_borrow_rate_bps = target_reserve_config.max_borrow_rate_bps();
-        if target_borrow_rate_bps > self.max_borrow_rate_bps {
-            xmsg!(
-                "Target reserve borrow rate ({} bps) is higher than the maximum allowed {} bps",
-                target_borrow_rate_bps,
-                self.max_borrow_rate_bps
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
         }
 
        
-       
-       
-        if self.min_debt_term_seconds == 0 {
-            xmsg!("Owner's min_debt_term_seconds is 0 (open-term only), but migration target is fixed-term");
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
-
-       
-        if target_debt_term_seconds < self.min_debt_term_seconds {
-            xmsg!(
-                "Target reserve debt term ({} seconds) is lower than the minimum allowed {} seconds",
-                target_debt_term_seconds,
-                self.min_debt_term_seconds
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
+        self.reserve_constraint()
+            .check_satisfying(target_reserve_config, now)?;
 
         Ok(())
     }
@@ -1481,7 +1455,9 @@ pub struct ObligationOrder {
 
 
 
+
     pub min_execution_bonus_bps: u16,
+
 
 
 
@@ -1513,13 +1489,45 @@ pub struct ObligationOrder {
     pub opportunity_type: u8,
 
 
+    pub padding1: [u8; 2],
 
 
-    pub padding1: [u8; 10],
 
 
 
-    pub padding2: [u128; 5],
+    pub max_borrow_rate_bps: u32,
+
+
+
+
+
+
+
+
+
+
+
+
+
+    pub min_debt_term_seconds: u32,
+
+
+
+
+
+
+    pub debt_mint_address: Pubkey,
+
+
+
+
+
+
+    pub collateral_mint_address: Pubkey,
+
+
+
+    pub padding2: [u128; 1],
 }
 
 impl ObligationOrder {
@@ -1545,6 +1553,90 @@ impl ObligationOrder {
 
 
 
+    pub fn condition(&self) -> OrderCondition {
+        let threshold = self.condition_threshold();
+        match self.condition_type() {
+            ConditionType::Never => OrderCondition::Never,
+            ConditionType::UserLtvAbove => OrderCondition::UserLtvAbove(threshold),
+            ConditionType::UserLtvBelow => OrderCondition::UserLtvBelow(threshold),
+            ConditionType::DebtCollPriceRatioAbove => {
+                OrderCondition::DebtCollPriceRatioAbove(threshold)
+            }
+            ConditionType::DebtCollPriceRatioBelow => {
+                OrderCondition::DebtCollPriceRatioBelow(threshold)
+            }
+            ConditionType::Always => OrderCondition::Always,
+            ConditionType::LiquidationLtvCloserThan => {
+                OrderCondition::LiquidationLtvCloserThan(threshold)
+            }
+        }
+    }
+
+
+
+    pub fn opportunity(&self) -> OrderOpportunity {
+        let parameter = self.opportunity_parameter();
+        match self.opportunity_type() {
+            OpportunityType::DeleverageDebtAmount => {
+                OrderOpportunity::Deleverage(OrderSize::DebtAmount(parameter))
+            }
+            OpportunityType::LeverUpDebtAmount => {
+                OrderOpportunity::LeverUp(OrderSize::DebtAmount(parameter))
+            }
+            OpportunityType::DeleverageToTargetLtv => {
+                OrderOpportunity::Deleverage(OrderSize::ToTargetLtv(parameter))
+            }
+            OpportunityType::LeverUpToTargetLtv => {
+                OrderOpportunity::LeverUp(OrderSize::ToTargetLtv(parameter))
+            }
+        }
+    }
+
+
+
+
+
+
+
+    pub fn check_expected_opportunity_type(
+        &self,
+        expected_opportunity_type: OpportunityType,
+    ) -> Result<()> {
+        if self.opportunity_type() != expected_opportunity_type {
+            xmsg!(
+                "Order's opportunity type {:?} does not match the expected {:?}",
+                self.opportunity_type(),
+                expected_opportunity_type
+            );
+            return err!(LendingError::ObligationOrderOpportunityTypeMismatch);
+        }
+        Ok(())
+    }
+
+
+    pub fn check_reserve_requirements(
+        &self,
+        debt_reserve: &Reserve,
+        collateral_reserve: &Reserve,
+        timestamp: u64,
+    ) -> Result<()> {
+       
+        if !Self::reserve_mint_accepted(self.collateral_mint_address, collateral_reserve) {
+            return err!(LendingError::ObligationOrderCollateralMintMismatch);
+        }
+       
+        if !Self::reserve_mint_accepted(self.debt_mint_address, debt_reserve) {
+            return err!(LendingError::ObligationOrderDebtMintMismatch);
+        }
+       
+        if let Some(reserve_constraint) = self.reserve_constraint() {
+            reserve_constraint.check_satisfying(&debt_reserve.config, timestamp)?;
+        }
+        Ok(())
+    }
+
+
+
 
 
 
@@ -1566,48 +1658,47 @@ impl ObligationOrder {
     }
 
 
-    pub fn consume(&mut self, debt_repay_amount: u64) {
+
+
+
+
+    pub fn consume(&mut self, debt_amount: u64) -> Option<Fraction> {
+        self.consume_fraction(Fraction::from_num(debt_amount))
+    }
+
+
+
+
+
+    pub fn consume_fully(&mut self) -> Option<Fraction> {
+        self.consume_fraction(Fraction::MAX)
+    }
+
+    fn consume_fraction(&mut self, debt_amount: Fraction) -> Option<Fraction> {
         match self.opportunity_type() {
-            OpportunityType::DeleverageSingleDebtAmount => {
-                self.use_deleverage_single_debt_amount_opportunity(debt_repay_amount);
+            OpportunityType::DeleverageDebtAmount => {
+                Some(self.use_debt_amount_opportunity("repay", debt_amount))
             }
-            OpportunityType::DeleverageAllDebt => {
-                xmsg!("An opportunity to liquidate all debt was used by liquidator repaying amount {} (order unaffected)", debt_repay_amount);
+            OpportunityType::LeverUpDebtAmount => {
+                Some(self.use_debt_amount_opportunity("borrow", debt_amount))
+            }
+            OpportunityType::DeleverageToTargetLtv | OpportunityType::LeverUpToTargetLtv => {
+                xmsg!("A target-LTV opportunity was used by executor with debt amount {} (order unaffected)", debt_amount);
+                None
             }
         }
     }
 
 
-    pub fn condition_to_display(&self) -> impl Display {
-        match self.condition_type() {
-            ConditionType::Never => "<inactive>".to_string(),
-            ConditionType::UserLtvAbove => format!("LTV > {}", self.condition_threshold()),
-            ConditionType::UserLtvBelow => format!("LTV < {}", self.condition_threshold()),
-            ConditionType::DebtCollPriceRatioAbove => format!(
-                "ratio of (debt token price / collateral token price) > {}",
-                self.condition_threshold()
-            ),
-            ConditionType::DebtCollPriceRatioBelow => format!(
-                "ratio of (debt token price / collateral token price) < {}",
-                self.condition_threshold()
-            ),
-            ConditionType::Always => "<unconditional>".to_string(),
-            ConditionType::LiquidationLtvCloserThan => format!(
-                "LTV closer than {} to liquidation",
-                self.condition_threshold()
-            ),
-        }
-    }
 
-
-    pub fn opportunity_to_display(&self) -> impl Display {
-        match self.opportunity_type() {
-            OpportunityType::DeleverageSingleDebtAmount => format!(
-                "repay amount {} of single debt",
-                self.opportunity_parameter()
-            ),
-            OpportunityType::DeleverageAllDebt => "repay all debt".to_string(),
+    fn reserve_constraint(&self) -> Option<DebtReserveConstraint> {
+        if self.max_borrow_rate_bps == 0 {
+            return None;
         }
+        Some(DebtReserveConstraint {
+            max_borrow_rate_bps: self.max_borrow_rate_bps,
+            min_debt_term_seconds: u64::from(self.min_debt_term_seconds),
+        })
     }
 
 
@@ -1617,19 +1708,38 @@ impl ObligationOrder {
 
 
 
-    fn use_deleverage_single_debt_amount_opportunity(&mut self, debt_repay_amount: u64) {
-        let liquidatable_debt_amount = self.opportunity_parameter();
-        let updated_liquidatable_debt_amount =
-            liquidatable_debt_amount.saturating_sub(Fraction::from_num(debt_repay_amount));
 
-        if updated_liquidatable_debt_amount.is_zero() {
-            xmsg!("An opportunity to liquidate {} of single debt was fully used by liquidator repaying amount {} (order cleared)", liquidatable_debt_amount, debt_repay_amount);
+
+
+    fn use_debt_amount_opportunity(
+        &mut self,
+        description: &str,
+        debt_amount: Fraction,
+    ) -> Fraction {
+        let size = self.opportunity_parameter();
+        let updated_size = size.saturating_sub(debt_amount);
+
+        if updated_size.is_zero() {
+            xmsg!(
+                "An opportunity to {} {} of debt token {} was fully used by executor - order cleared",
+                description,
+                size.to_display(),
+                self.debt_mint_address
+            );
             *self = ObligationOrder::default();
-            return;
+        } else {
+            xmsg!(
+                "An opportunity to {} {} of debt token {} was partially used by executor (amount {}) - {} left on the order",
+                description,
+                size.to_display(),
+                self.debt_mint_address,
+                debt_amount.to_display(),
+                updated_size
+            );
+            self.opportunity_parameter_sf = updated_size.to_bits();
         }
 
-        xmsg!("An opportunity to liquidate {} of single debt was partially used by liquidator repaying amount {} ({} left on the order)", liquidatable_debt_amount, debt_repay_amount, updated_liquidatable_debt_amount);
-        self.opportunity_parameter_sf = updated_liquidatable_debt_amount.to_bits();
+        updated_size
     }
 
 
@@ -1637,7 +1747,18 @@ impl ObligationOrder {
     pub fn is_active(&self) -> bool {
         self.condition_type != 0
     }
+
+
+    fn reserve_mint_accepted(chosen_mint: Pubkey, reserve: &Reserve) -> bool {
+        chosen_mint == Pubkey::default() || chosen_mint == reserve.liquidity.mint_pubkey
+    }
 }
+
+
+
+
+
+
 
 
 
@@ -1723,11 +1844,11 @@ pub struct BorrowOrder {
 
 impl BorrowOrder {
 
-    pub fn get_min_debt_term_seconds(&self) -> Option<u64> {
-        if self.min_debt_term_seconds == 0 {
-            return None;
+    pub fn reserve_constraint(&self) -> DebtReserveConstraint {
+        DebtReserveConstraint {
+            max_borrow_rate_bps: self.max_borrow_rate_bps,
+            min_debt_term_seconds: self.min_debt_term_seconds,
         }
-        Some(self.min_debt_term_seconds)
     }
 
 
@@ -1774,5 +1895,91 @@ pub struct BorrowOrderConfig {
     pub min_debt_term_seconds: u64,
     pub fillable_until_timestamp: u64,
     pub enable_auto_rollover_on_filled_borrows: u8,
+}
+
+pub struct SlotAssignment {
+    pub index: usize,
+    pub is_new: bool,
+}
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct DebtReserveConstraint {
+    pub max_borrow_rate_bps: u32,
+    pub min_debt_term_seconds: u64,
+}
+
+impl DebtReserveConstraint {
+
+    pub fn check_satisfying(&self, reserve_config: &ReserveConfig, timestamp: u64) -> Result<()> {
+       
+        let reserve_max_rate = reserve_config.max_borrow_rate_bps();
+        if reserve_max_rate > self.max_borrow_rate_bps {
+            xmsg!(
+                "Reserve max borrow rate {} bps exceeds the owner's accepted maximum {} bps",
+                reserve_max_rate,
+                self.max_borrow_rate_bps,
+            );
+            return err!(LendingError::DebtReserveMaxBorrowRateExceeded);
+        }
+
+       
+        let min_debt_term_seconds = self.min_debt_term_seconds();
+        let reserve_debt_term_seconds = reserve_config.get_debt_term_seconds();
+        if !is_term_satisfied(min_debt_term_seconds, reserve_debt_term_seconds) {
+            xmsg!(
+                "Reserve debt term of {:?} seconds does not satisfy the owner's minimum {:?}",
+                reserve_debt_term_seconds,
+                min_debt_term_seconds,
+            );
+            return err!(LendingError::DebtReserveMinDebtTermInsufficient);
+        }
+
+       
+        self.check_maturity_satisfying(reserve_config, timestamp)?;
+
+        Ok(())
+    }
+
+
+
+    pub fn check_maturity_satisfying(
+        &self,
+        reserve_config: &ReserveConfig,
+        timestamp: u64,
+    ) -> Result<()> {
+        let min_debt_term_seconds = self.min_debt_term_seconds();
+        let seconds_until_maturity = reserve_config
+            .get_debt_maturity_timestamp()
+            .map(|maturity_timstamp| maturity_timstamp.saturating_sub(timestamp));
+        if !is_term_satisfied(min_debt_term_seconds, seconds_until_maturity) {
+            xmsg!(
+                "Reserve debt maturity timestamp leaves only {:?} seconds, which does not satisfy the owner's minimum {:?}",
+                seconds_until_maturity,
+                min_debt_term_seconds,
+            );
+            return err!(LendingError::DebtReserveMinDebtTermInsufficient);
+        }
+
+        Ok(())
+    }
+
+    fn min_debt_term_seconds(&self) -> Option<u64> {
+        if self.min_debt_term_seconds == 0 {
+            return None;
+        }
+        Some(self.min_debt_term_seconds)
+    }
+}
+
+
+
+fn is_term_satisfied(min_requested_seconds: Option<u64>, max_offered_seconds: Option<u64>) -> bool {
+    match (min_requested_seconds, max_offered_seconds) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(_), None) => true,
+        (Some(min_requested), Some(max_offered)) => min_requested <= max_offered,
+    }
 }
 

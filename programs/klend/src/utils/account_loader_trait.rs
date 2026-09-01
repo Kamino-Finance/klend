@@ -33,6 +33,7 @@ impl<'info, T: ZeroCopy + Owner> AnyAccountLoader<'info, T> for AccountLoader<'i
 
 
 
+#[derive(Clone)]
 pub struct FatAccountLoader<'info, T: ZeroCopy + Owner> {
     acc_info: AccountInfo<'info>,
     phantom: PhantomData<&'info T>,
@@ -212,5 +213,49 @@ impl<'info, T: ZeroCopy + Owner> ToAccountInfos<'info> for FatAccountLoader<'inf
 impl<'info, T: ZeroCopy + Owner> Key for FatAccountLoader<'info, T> {
     fn key(&self) -> Pubkey {
         *self.acc_info.key
+    }
+}
+
+
+impl<'info, T, A: AnyAccountLoader<'info, T>> AnyAccountLoader<'info, T> for &A {
+    fn get_mut(&self) -> Result<RefMut<T>> {
+        (**self).get_mut()
+    }
+    fn get(&self) -> Result<Ref<T>> {
+        (**self).get()
+    }
+    fn get_pubkey(&self) -> Pubkey {
+        (**self).get_pubkey()
+    }
+}
+
+
+pub enum EitherAccountLoader<A, B> {
+    Left(A),
+    Right(B),
+}
+
+impl<'info, T, A, B> AnyAccountLoader<'info, T> for EitherAccountLoader<A, B>
+where
+    A: AnyAccountLoader<'info, T>,
+    B: AnyAccountLoader<'info, T>,
+{
+    fn get_mut(&self) -> Result<RefMut<T>> {
+        match self {
+            EitherAccountLoader::Left(a) => a.get_mut(),
+            EitherAccountLoader::Right(b) => b.get_mut(),
+        }
+    }
+    fn get(&self) -> Result<Ref<T>> {
+        match self {
+            EitherAccountLoader::Left(a) => a.get(),
+            EitherAccountLoader::Right(b) => b.get(),
+        }
+    }
+    fn get_pubkey(&self) -> Pubkey {
+        match self {
+            EitherAccountLoader::Left(a) => a.get_pubkey(),
+            EitherAccountLoader::Right(b) => b.get_pubkey(),
+        }
     }
 }
