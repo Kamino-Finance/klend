@@ -75,10 +75,25 @@ pub trait FractionExtra {
     fn from_bps<Src: ToFixed>(bps: Src) -> Self;
     fn checked_pow(&self, power: u32) -> Option<Self>
     where
-        Self: std::marker::Sized;
+        Self: Sized;
 
     fn mul_int_ratio(&self, numerator: impl Into<u128>, denominator: impl Into<u128>) -> Self;
-    fn full_mul_int_ratio(&self, numerator: impl Into<U256>, denominator: impl Into<U256>) -> Self;
+    fn full_mul_int_ratio(&self, numerator: impl Into<U256>, denominator: impl Into<U256>) -> Self
+    where
+        Self: Sized,
+    {
+        self.try_full_mul_int_ratio(numerator, denominator)
+            .expect("Denominator is not big enough, the result doesn't fit in a Fraction.")
+    }
+
+    fn try_full_mul_int_ratio(
+        &self,
+        numerator: impl Into<U256>,
+        denominator: impl Into<U256>,
+    ) -> Option<Self>
+    where
+        Self: Sized;
+
     fn full_mul_int_ratio_ceil(
         &self,
         numerator: impl Into<U256>,
@@ -141,16 +156,16 @@ impl FractionExtra for Fraction {
         *self * numerator / denominator
     }
 
-    #[inline]
-    fn full_mul_int_ratio(&self, numerator: impl Into<U256>, denominator: impl Into<U256>) -> Self {
+    fn try_full_mul_int_ratio(
+        &self,
+        numerator: impl Into<U256>,
+        denominator: impl Into<U256>,
+    ) -> Option<Self> {
         let numerator = numerator.into();
         let denominator = denominator.into();
         let big_sf = U256::from(self.to_bits());
         let big_sf_res = big_sf * numerator / denominator;
-        let sf_res: u128 = big_sf_res
-            .try_into()
-            .expect("Denominator is not big enough, the result doesn't fit in a Fraction.");
-        Fraction::from_bits(sf_res)
+        big_sf_res.try_into().ok().map(Fraction::from_bits)
     }
 
     #[inline]

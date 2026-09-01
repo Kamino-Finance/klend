@@ -6,7 +6,6 @@ use anchor_lang::{
 use anchor_spl::{
     token,
     token::Token,
-    token_interface,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
 
@@ -27,7 +26,7 @@ use crate::{
 pub fn process_v1(
     ctx: Context<LiquidateObligationAndRedeemReserveCollateral>,
     liquidity_amount: u64,
-    min_acceptable_received_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
     max_allowed_ltv_override_percent: u64,
 ) -> Result<()> {
     check_refresh_ixs!(
@@ -41,7 +40,7 @@ pub fn process_v1(
         ctx.accounts,
         ctx.remaining_accounts,
         liquidity_amount,
-        min_acceptable_received_liquidity_amount,
+        min_received_liquidity_amount,
         max_allowed_ltv_override_percent,
     )
 }
@@ -49,14 +48,14 @@ pub fn process_v1(
 pub fn process_v2(
     ctx: Context<LiquidateObligationAndRedeemReserveCollateralV2>,
     liquidity_amount: u64,
-    min_acceptable_received_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
     max_allowed_ltv_override_percent: u64,
 ) -> Result<()> {
     process_impl(
         &ctx.accounts.liquidation_accounts,
         ctx.remaining_accounts,
         liquidity_amount,
-        min_acceptable_received_liquidity_amount,
+        min_received_liquidity_amount,
         max_allowed_ltv_override_percent,
     )?;
     refresh_farms!(
@@ -81,7 +80,7 @@ fn process_impl(
     accounts: &LiquidateObligationAndRedeemReserveCollateral,
     remaining_accounts: &[AccountInfo],
     liquidity_amount: u64,
-    min_acceptable_received_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
     max_allowed_ltv_override_percent: u64,
 ) -> Result<()> {
     xmsg!(
@@ -163,7 +162,7 @@ fn process_impl(
         obligation,
         clock,
         liquidity_amount,
-        min_acceptable_received_liquidity_amount,
+        min_received_liquidity_amount,
         max_allowed_ltv_override_pct_opt,
         remaining_accounts.iter().map(|a| {
             FatAccountLoader::try_from(a).expect("Remaining account is not a valid deposit reserve")
@@ -209,24 +208,20 @@ fn process_impl(
         )?;
 
        
-        token_interface::transfer_checked(
-            CpiContext::new(
-                accounts.withdraw_liquidity_token_program.to_account_info(),
-                token_interface::TransferChecked {
-                    from: accounts.user_destination_liquidity.to_account_info(),
-                    to: accounts
-                        .withdraw_reserve_liquidity_fee_receiver
-                        .to_account_info(),
-                    authority: accounts.liquidator.to_account_info(),
-                    mint: accounts.withdraw_reserve_liquidity_mint.to_account_info(),
-                },
-            ),
+        token_transfer::reserve_fee_transfer(
+            accounts.withdraw_liquidity_token_program.to_account_info(),
+            accounts.withdraw_reserve_liquidity_mint.to_account_info(),
+            accounts.user_destination_liquidity.to_account_info(),
+            accounts
+                .withdraw_reserve_liquidity_fee_receiver
+                .to_account_info(),
+            accounts.liquidator.to_account_info(),
             protocol_fee,
             accounts.withdraw_reserve_liquidity_mint.decimals,
         )?;
         let withdraw_reserve = &accounts.withdraw_reserve.load()?;
 
-        let net_withdrawal_amount = if accounts
+        let withdraw_action = if accounts
             .withdraw_reserve_liquidity_supply
             .to_account_info()
             .key
@@ -235,9 +230,9 @@ fn process_impl(
                 .to_account_info()
                 .key
         {
-            withdraw_liquidity_amount as i64 - repay_amount as i64
+            LendingAction::net_of(repay_amount, withdraw_liquidity_amount)
         } else {
-            withdraw_liquidity_amount as i64
+            LendingAction::Subtractive(withdraw_liquidity_amount)
         };
 
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
@@ -246,7 +241,7 @@ fn process_impl(
             withdraw_reserve.total_available_liquidity_amount(),
             initial_withdraw_reserve_token_balance,
             initial_withdraw_reserve_available_amount,
-            LendingAction::subtractive_signed(net_withdrawal_amount),
+            withdraw_action,
         )?;
     }
     let repay_reserve = &accounts.repay_reserve.load()?;

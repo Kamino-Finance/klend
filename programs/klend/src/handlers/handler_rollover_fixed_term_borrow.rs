@@ -1,5 +1,5 @@
 use anchor_lang::{prelude::*, Accounts};
-use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     fraction::Fraction,
@@ -49,7 +49,7 @@ fn process_impl(accounts: &RolloverAccounts) -> Result<bool> {
     let clock = &Clock::get()?;
 
    
-    let source_reserve_before = capture_reserve_accounting_and_balance(
+    let source_reserve_before = lending_checks::capture_reserve_accounting_and_balance(
         source_borrow_reserve,
         &accounts.source_borrow_reserve_liquidity,
     )?;
@@ -72,7 +72,7 @@ fn process_impl(accounts: &RolloverAccounts) -> Result<bool> {
        
 
        
-        let source_reserve_after = capture_reserve_accounting_and_balance(
+        let source_reserve_after = lending_checks::capture_reserve_accounting_and_balance(
             source_borrow_reserve,
             &accounts.source_borrow_reserve_liquidity,
         )?;
@@ -97,7 +97,7 @@ fn process_impl(accounts: &RolloverAccounts) -> Result<bool> {
     let target_borrow_reserve = &mut accounts.target_borrow_reserve.load_mut()?;
 
    
-    let target_reserve_before = capture_reserve_accounting_and_balance(
+    let target_reserve_before = lending_checks::capture_reserve_accounting_and_balance(
         target_borrow_reserve,
         &accounts.target_borrow_reserve_liquidity,
     )?;
@@ -134,11 +134,11 @@ fn process_impl(accounts: &RolloverAccounts) -> Result<bool> {
     )?;
 
    
-    let source_reserve_after = capture_reserve_accounting_and_balance(
+    let source_reserve_after = lending_checks::capture_reserve_accounting_and_balance(
         source_borrow_reserve,
         &accounts.source_borrow_reserve_liquidity,
     )?;
-    let target_reserve_after = capture_reserve_accounting_and_balance(
+    let target_reserve_after = lending_checks::capture_reserve_accounting_and_balance(
         target_borrow_reserve,
         &accounts.target_borrow_reserve_liquidity,
     )?;
@@ -164,19 +164,6 @@ fn process_impl(accounts: &RolloverAccounts) -> Result<bool> {
     )?;
 
     Ok(true)
-}
-
-fn capture_reserve_accounting_and_balance(
-    reserve: &Reserve,
-    reserve_liquidity_vault: &InterfaceAccount<TokenAccount>,
-) -> Result<lending_checks::ReserveAccountingAndBalance> {
-    Ok(lending_checks::ReserveAccountingAndBalance {
-        total_available_liquidity_amount: reserve.total_available_liquidity_amount(),
-        borrowed_amount: reserve.liquidity.total_borrow(),
-        vault_balance: token_interface::accessor::amount(
-            &reserve_liquidity_vault.to_account_info(),
-        )?,
-    })
 }
 
 fn capture_obligation_borrows_accounting(

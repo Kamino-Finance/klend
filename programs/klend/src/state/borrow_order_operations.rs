@@ -80,54 +80,10 @@ pub fn fill_borrow_order(
     check_borrow_order_execution_enabled(lending_market)?;
 
    
-    let reserve_max_borrow_rate_bps = reserve.config.max_borrow_rate_bps();
-    if reserve_max_borrow_rate_bps > borrow_order.max_borrow_rate_bps {
-        xmsg!(
-            "Cannot use reserve with max borrow rate of {} bps on an order requesting max {} bps",
-            reserve_max_borrow_rate_bps,
-            borrow_order.max_borrow_rate_bps
-        );
-        return err!(LendingError::BorrowOrderMaxBorrowRateExceeded);
-    }
-
-   
-    if !is_term_satisfied(
-        borrow_order.get_min_debt_term_seconds(),
-        reserve.config.get_debt_term_seconds(),
-    ) {
-        xmsg!(
-            "Cannot use reserve with debt term of {:?} seconds on an order requesting min {:?} seconds",
-            reserve.config.get_debt_term_seconds(),
-            borrow_order.get_min_debt_term_seconds()
-        );
-        return err!(LendingError::BorrowOrderMinDebtTermInsufficient);
-    }
-
-    let current_timestamp: u64 = clock.unix_timestamp.try_into().expect("negative timestamp");
-   
-   
-   
-    let seconds_until_reserve_debt_maturity =
-        reserve
-            .config
-            .get_debt_maturity_timestamp()
-            .map(|reserve_debt_maturity_timestamp| {
-                reserve_debt_maturity_timestamp.saturating_sub(current_timestamp)
-            });
-
-   
-    if !is_term_satisfied(
-        borrow_order.get_min_debt_term_seconds(),
-        seconds_until_reserve_debt_maturity,
-    ) {
-        xmsg!(
-            "Cannot use reserve with debt maturity timestamp {:?} (i.e. in {:?} seconds) on an order requesting min {:?} seconds",
-            reserve.config.get_debt_maturity_timestamp(),
-            seconds_until_reserve_debt_maturity,
-            borrow_order.get_min_debt_term_seconds(),
-        );
-        return err!(LendingError::BorrowOrderMinDebtTermInsufficient);
-    }
+    let current_timestamp = clock.unix_timestamp.try_into().expect("negative timestamp");
+    borrow_order
+        .reserve_constraint()
+        .check_satisfying(&reserve.config, current_timestamp)?;
 
    
     if current_timestamp > borrow_order.fillable_until_timestamp {
@@ -418,16 +374,5 @@ fn check_not_updated<T: PartialEq + Debug>(name: &str, current: &T, new: T) -> R
         return err!(LendingError::NonUpdatableOrderConfiguration);
     }
     Ok(())
-}
-
-
-
-fn is_term_satisfied(min_requested_seconds: Option<u64>, max_offered_seconds: Option<u64>) -> bool {
-    match (min_requested_seconds, max_offered_seconds) {
-        (None, None) => true,
-        (None, Some(_)) => false,
-        (Some(_), None) => true,
-        (Some(min_requested), Some(max_offered)) => min_requested <= max_offered,
-    }
 }
 

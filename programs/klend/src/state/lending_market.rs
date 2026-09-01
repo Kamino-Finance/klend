@@ -15,7 +15,8 @@ use crate::{
         CLOSE_TO_INSOLVENCY_RISKY_LTV, DEFAULT_MIN_DEPOSIT_AMOUNT, ELEVATION_GROUP_NONE,
         GLOBAL_ALLOWED_BORROW_VALUE, LENDING_MARKET_SIZE, LIQUIDATION_CLOSE_FACTOR,
         LIQUIDATION_CLOSE_VALUE, MAX_LIQUIDATABLE_VALUE_AT_ONCE, MIN_BORROW_ORDER_FILL_VALUE,
-        MIN_NET_VALUE_IN_OBLIGATION, MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE, PROGRAM_VERSION,
+        MIN_NET_VALUE_IN_OBLIGATION, MIN_OBLIGATION_ORDER_EXECUTION_VALUE,
+        MIN_WITHDRAW_QUEUED_LIQUIDITY_VALUE, PROGRAM_VERSION,
     },
     LendingError, RolloverMode,
 };
@@ -144,7 +145,6 @@ pub struct LendingMarket {
 
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub obligation_order_creation_enabled: u8,
-
 
 
 
@@ -297,12 +297,19 @@ pub struct LendingMarket {
     #[cfg_attr(feature = "serde", serde(with = "bitflags_str", default))]
     pub permissioned_ops: u64,
 
+
+
+
+   
+   
+    pub min_obligation_order_execution_value: u64,
+
     #[cfg_attr(
         feature = "serde",
         serde(skip_deserializing, skip_serializing, default = "default_array")
     )]
     #[derivative(Debug = "ignore")]
-    pub padding1: [u64; 153],
+    pub padding1: [u64; 152],
 }
 
 impl Default for LendingMarket {
@@ -357,6 +364,7 @@ impl Default for LendingMarket {
             min_partial_rollover_value: 0,
             permissioning_authority: Pubkey::default(),
             permissioned_ops: 0,
+            min_obligation_order_execution_value: MIN_OBLIGATION_ORDER_EXECUTION_VALUE,
             reserve_rewards_max_apr_bps: 0,
             padding1: default_array(),
         }

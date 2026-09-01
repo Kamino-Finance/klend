@@ -1,14 +1,16 @@
 use anchor_lang::{
     accounts::account_loader::AccountLoader,
     err, error,
-    prelude::{AccountInfo, Context, Pubkey},
+    prelude::{AccountInfo, Context, InterfaceAccount, Pubkey},
     require, require_eq, require_gt, require_gte, Key, Result, ToAccountInfo,
 };
+use anchor_spl::token_interface::{self, TokenAccount};
 
 use crate::{
     fraction::Fraction,
     handlers::*,
     lending_market::ix_utils,
+    obligation_order_operations::OpportunityType,
     state::{
         DepositObligationCollateralAccounts, RedeemReserveCollateralAccounts,
         WithdrawObligationCollateralAccounts,
@@ -18,8 +20,8 @@ use crate::{
         constraints, consts::COMPUTE_BUDGET_PROGRAM_ID, seeds::BASE_SEED_REFERRER_TOKEN_STATE,
         FatAccountLoader, PROGRAM_VERSION,
     },
-    xmsg, FixedTermRolloverResult, LendingAction, LendingError, Obligation, ReferrerTokenState,
-    Reserve, ReserveStatus,
+    xmsg, ExecuteObligationOrderResult, FixedTermRolloverResult, LendingAction, LendingError,
+    Obligation, ReferrerTokenState, Reserve, ReserveStatus,
 };
 
 pub fn check_reserve_emergency_mode(reserve: &Reserve) -> Result<()> {
@@ -31,16 +33,27 @@ pub fn check_reserve_emergency_mode(reserve: &Reserve) -> Result<()> {
 }
 
 pub fn check_reserve_status_and_version(reserve: &Reserve) -> Result<()> {
+    check_reserve_status(reserve)?;
+    check_reserve_version(reserve)?;
+    Ok(())
+}
+
+pub fn check_reserve_status(reserve: &Reserve) -> Result<()> {
     if reserve.config.status() == ReserveStatus::Obsolete {
-        xmsg!("Reserve is not active");
+        xmsg!("Reserve is obsolete");
         return err!(LendingError::ReserveObsolete);
     }
+    Ok(())
+}
 
+
+
+
+pub fn check_reserve_version(reserve: &Reserve) -> Result<()> {
     if reserve.version != PROGRAM_VERSION as u64 {
         xmsg!("Reserve version does not match the program version");
         return err!(LendingError::ReserveDeprecated);
     }
-
     Ok(())
 }
 
@@ -86,6 +99,67 @@ pub fn rollover_fixed_term_borrow_checks(accounts: &RolloverAccounts) -> Result<
     Ok(())
 }
 
+pub fn execute_obligation_order_checks(
+    accounts: &ExecuteObligationOrderAccounts,
+    opportunity_type: OpportunityType,
+) -> Result<()> {
+    let debt_reserve = &accounts.debt_reserve.load()?;
+    let collateral_reserve = &accounts.collateral_reserve.load()?;
+
+    if debt_reserve.liquidity.supply_vault == accounts.executor_debt_liquidity_ta.key() {
+        xmsg!("Debt reserve liquidity supply cannot be used as the executor debt account");
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if collateral_reserve.liquidity.supply_vault == accounts.executor_debt_liquidity_ta.key() {
+        xmsg!("Collateral reserve liquidity supply cannot be used as the executor debt account");
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if collateral_reserve.collateral.supply_vault == accounts.executor_collateral_ctoken_ta.key() {
+        xmsg!("Collateral reserve cToken supply cannot be used as the executor cToken account");
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if collateral_reserve.liquidity.supply_vault == accounts.executor_collateral_liquidity_ta.key()
+    {
+        xmsg!(
+            "Collateral reserve liquidity supply cannot be used as the executor liquidity destination"
+        );
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if accounts.debt_reserve.key() == accounts.collateral_reserve.key() {
+        xmsg!("Cannot execute order against the same debt and collateral reserve");
+        return err!(LendingError::InvalidAccountInput);
+    }
+
+   
+    check_reserve_version(debt_reserve)?;
+    check_reserve_version(collateral_reserve)?;
+
+   
+    match opportunity_type {
+        OpportunityType::LeverUpToTargetLtv | OpportunityType::LeverUpDebtAmount => {
+            check_reserve_status(debt_reserve)?;
+            check_reserve_status(collateral_reserve)?;
+        }
+        OpportunityType::DeleverageDebtAmount | OpportunityType::DeleverageToTargetLtv => {
+           
+        }
+    }
+
+    check_reserve_emergency_mode(debt_reserve)?;
+    check_reserve_emergency_mode(collateral_reserve)?;
+
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
+        &accounts.debt_reserve_liquidity_mint.to_account_info(),
+        &accounts.executor_debt_liquidity_ta.to_account_info(),
+    )?;
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
+        &accounts.collateral_reserve_liquidity_mint.to_account_info(),
+        &accounts.executor_collateral_liquidity_ta.to_account_info(),
+    )?;
+
+    Ok(())
+}
+
 pub fn enqueue_to_withdraw_checks(accounts: &EnqueueToWithdraw) -> Result<()> {
     let withdraw_reserve = &accounts.reserve.load()?;
 
@@ -119,10 +193,7 @@ pub fn withdraw_queued_liquidity_checks(accounts: &WithdrawQueuedLiquidity) -> R
 
     check_reserve_emergency_mode(withdraw_reserve)?;
 
-    if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(withdraw_reserve)?;
 
    
 
@@ -134,10 +205,7 @@ pub fn recover_invalid_ticket_collateral_checks(
 ) -> Result<()> {
     let withdraw_reserve = &accounts.reserve.load()?;
 
-    if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(withdraw_reserve)?;
 
     check_reserve_emergency_mode(withdraw_reserve)?;
 
@@ -231,10 +299,7 @@ pub fn liquidate_obligation_checks(
 
     check_reserve_emergency_mode(&repay_reserve)?;
 
-    if repay_reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Withdraw reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(&repay_reserve)?;
 
     if withdraw_reserve.liquidity.supply_vault == accounts.user_source_liquidity.key() {
         xmsg!("Withdraw reserve liquidity supply cannot be used as the source liquidity provided");
@@ -247,10 +312,7 @@ pub fn liquidate_obligation_checks(
 
     check_reserve_emergency_mode(&withdraw_reserve)?;
 
-    if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Withdraw reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(&withdraw_reserve)?;
 
     constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &accounts.repay_reserve_liquidity_mint.to_account_info(),
@@ -280,10 +342,7 @@ pub fn redeem_reserve_collateral_checks(accounts: &RedeemReserveCollateralAccoun
 
     check_reserve_emergency_mode(reserve)?;
 
-    if reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(reserve)?;
 
     constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
@@ -300,10 +359,7 @@ pub fn withdraw_obligation_collateral_and_redeem_reserve_collateral_checks(
 
     check_reserve_emergency_mode(&withdraw_reserve)?;
 
-    if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(&withdraw_reserve)?;
 
     if withdraw_reserve.liquidity.supply_vault == accounts.user_destination_liquidity.key() {
         xmsg!("Reserve liquidity supply cannot be used as the destination liquidity provided");
@@ -328,10 +384,7 @@ pub fn repay_obligation_liquidity_checks(accounts: &RepayObligationLiquidity) ->
 
     check_reserve_emergency_mode(&repay_reserve)?;
 
-    if repay_reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(&repay_reserve)?;
 
     constraints::token_2022::check_only_supported_liquidity_token_extensions(
         &accounts.reserve_liquidity_mint.to_account_info(),
@@ -348,10 +401,7 @@ pub fn withdraw_obligation_collateral_checks(
 
     check_reserve_emergency_mode(&withdraw_reserve)?;
 
-    if withdraw_reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(&withdraw_reserve)?;
    
     if withdraw_reserve.collateral.supply_vault == accounts.user_destination_collateral.key() {
         xmsg!("Withdraw reserve collateral supply cannot be used as the destination collateral provided");
@@ -379,15 +429,7 @@ pub fn flash_borrow_reserve_liquidity_checks(
         return err!(LendingError::InvalidAccountInput);
     }
 
-    if reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
-
-    if reserve.config.status() == ReserveStatus::Obsolete {
-        xmsg!("Reserve is obsolete");
-        return err!(LendingError::ReserveObsolete);
-    }
+    check_reserve_status_and_version(&reserve)?;
 
     if reserve.config.fees.flash_loan_fee_sf == u64::MAX {
         xmsg!("Flash loans are disabled for this reserve");
@@ -657,10 +699,7 @@ pub fn post_ticket_collateral_recovery_owner_queued_collateral_vault_balance_che
 pub fn cancel_withdraw_ticket_checks(accounts: &CancelWithdrawTicket) -> Result<()> {
     let reserve = &accounts.reserve.load()?;
 
-    if reserve.version != PROGRAM_VERSION as u64 {
-        xmsg!("Reserve version does not match the program version");
-        return err!(LendingError::ReserveDeprecated);
-    }
+    check_reserve_version(reserve)?;
 
     check_reserve_emergency_mode(reserve)?;
 
@@ -702,9 +741,26 @@ pub fn post_cancel_withdraw_ticket_balance_checks(
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ReserveAccountingAndBalance {
+
     pub total_available_liquidity_amount: u64,
+
     pub borrowed_amount: Fraction,
+
     pub vault_balance: u64,
+}
+
+
+pub fn capture_reserve_accounting_and_balance(
+    reserve: &Reserve,
+    reserve_liquidity_vault: &InterfaceAccount<TokenAccount>,
+) -> Result<ReserveAccountingAndBalance> {
+    Ok(ReserveAccountingAndBalance {
+        total_available_liquidity_amount: reserve.total_available_liquidity_amount(),
+        borrowed_amount: reserve.liquidity.total_borrow(),
+        vault_balance: token_interface::accessor::amount(
+            &reserve_liquidity_vault.to_account_info(),
+        )?,
+    })
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -842,6 +898,35 @@ pub fn post_liquidate_repay_amount_check(max_repay: u64, actual_repay: u64) -> R
     Ok(())
 }
 
+pub fn execute_obligation_order_slippage_check(
+    execution_result: &ExecuteObligationOrderResult,
+    max_given_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
+) -> Result<()> {
+    let given_liquidity_amount = execution_result.executor_given_liquidity();
+    let received_liquidity_amount = execution_result.executor_received_liquidity();
+
+    if given_liquidity_amount > max_given_liquidity_amount {
+        xmsg!(
+            "Order executor's maximum given liquidity {} exceeded: {}",
+            max_given_liquidity_amount,
+            given_liquidity_amount,
+        );
+        return err!(LendingError::OrderExecutionSlippageExceeded);
+    }
+
+    if received_liquidity_amount < min_received_liquidity_amount {
+        xmsg!(
+            "Order executor's minimum received liquidity {} not met: {}",
+            min_received_liquidity_amount,
+            received_liquidity_amount,
+        );
+        return err!(LendingError::OrderExecutionSlippageExceeded);
+    }
+
+    Ok(())
+}
+
 pub fn validate_referrer_token_state(
     program_id: &Pubkey,
     referrer_token_state: &ReferrerTokenState,
@@ -922,15 +1007,25 @@ pub fn obligation_ownership_transfer_precondition_checks(
     obligation: &Obligation,
 ) -> Result<()> {
     obligation_ownership_transfer_execution_context_checks(instruction_sysvar_account)?;
-    obligation_has_no_active_borrow_orders_check(obligation)?;
+    obligation_has_no_active_orders_check(obligation)?;
 
     Ok(())
 }
 
-pub fn obligation_has_no_active_borrow_orders_check(obligation: &Obligation) -> Result<()> {
+
+
+
+
+
+
+pub fn obligation_has_no_active_orders_check(obligation: &Obligation) -> Result<()> {
     require!(
         obligation.active_borrow_orders().next().is_none(),
         LendingError::ObligationHasActiveBorrowOrders,
+    );
+    require!(
+        obligation.active_obligation_orders().next().is_none(),
+        LendingError::ObligationHasActiveObligationOrders,
     );
     Ok(())
 }

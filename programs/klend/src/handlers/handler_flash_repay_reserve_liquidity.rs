@@ -73,7 +73,7 @@ pub fn process(
     )?;
 
     if reserve_origination_fee > 0 {
-        token_transfer::pay_borrowing_fees_transfer(
+        token_transfer::reserve_fee_transfer(
             ctx.accounts.token_program.to_account_info(),
             ctx.accounts.reserve_liquidity_mint.to_account_info(),
             ctx.accounts.user_source_liquidity.to_account_info(),

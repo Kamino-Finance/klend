@@ -23,7 +23,7 @@ pub fn process(ctx: Context<ApproveObligationOwnershipTransfer>) -> Result<()> {
 
     lending_operations::clear_expired_borrow_orders_for_ownership_transfer(obligation, clock)?;
     obligation.check_ownership_transfer_in_initiated_state()?;
-    lending_checks::obligation_has_no_active_borrow_orders_check(obligation)?;
+    lending_checks::obligation_has_no_active_orders_check(obligation)?;
 
     obligation.approve_ownership_transfer()?;
 

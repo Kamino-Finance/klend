@@ -267,8 +267,8 @@ pub mod kamino_lending {
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.repay_accounts.lending_market))]
-    pub fn repay_and_withdraw_and_redeem(
-        ctx: Context<RepayAndWithdraw>,
+    pub fn repay_and_withdraw_and_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, RepayAndWithdraw<'info>>,
         repay_amount: u64,
         withdraw_collateral_amount: u64,
     ) -> Result<()> {
@@ -350,13 +350,13 @@ pub mod kamino_lending {
     pub fn liquidate_obligation_and_redeem_reserve_collateral(
         ctx: Context<LiquidateObligationAndRedeemReserveCollateral>,
         liquidity_amount: u64,
-        min_acceptable_received_liquidity_amount: u64,
+        min_received_liquidity_amount: u64,
         max_allowed_ltv_override_percent: u64,
     ) -> Result<()> {
         handler_liquidate_obligation_and_redeem_reserve_collateral::process_v1(
             ctx,
             liquidity_amount,
-            min_acceptable_received_liquidity_amount,
+            min_received_liquidity_amount,
             max_allowed_ltv_override_percent,
         )
     }
@@ -365,14 +365,71 @@ pub mod kamino_lending {
     pub fn liquidate_obligation_and_redeem_reserve_collateral_v2(
         ctx: Context<LiquidateObligationAndRedeemReserveCollateralV2>,
         liquidity_amount: u64,
-        min_acceptable_received_liquidity_amount: u64,
+        min_received_liquidity_amount: u64,
         max_allowed_ltv_override_percent: u64,
     ) -> Result<()> {
         handler_liquidate_obligation_and_redeem_reserve_collateral::process_v2(
             ctx,
             liquidity_amount,
-            min_acceptable_received_liquidity_amount,
+            min_received_liquidity_amount,
             max_allowed_ltv_override_percent,
+        )
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.order_execution_accounts.lending_market))]
+    pub fn execute_obligation_order<'info>(
+        ctx: Context<'_, '_, '_, 'info, ExecuteObligationOrder<'info>>,
+        order_index: u8,
+        expected_opportunity_type: u8,
+        max_given_liquidity_amount: u64,
+        min_received_liquidity_amount: u64,
+    ) -> Result<()> {
+        handler_execute_obligation_order::process(
+            ctx,
+            order_index,
+            expected_opportunity_type,
+            max_given_liquidity_amount,
+            min_received_liquidity_amount,
         )
     }
 
@@ -439,8 +496,14 @@ pub mod kamino_lending {
         ctx: Context<SetObligationOrder>,
         index: u8,
         order: ObligationOrder,
+        min_expected_current_opportunity_parameter_sf: u128,
     ) -> Result<()> {
-        handler_set_obligation_order::process(ctx, index, order)
+        handler_set_obligation_order::process(
+            ctx,
+            index,
+            order,
+            min_expected_current_opportunity_parameter_sf,
+        )
     }
 
     #[deprecated(
@@ -874,10 +937,10 @@ pub enum LendingError {
     TransactionIncludesRestrictedPrograms,
     #[msg("There is no borrow order requesting debt in the given asset")]
     BorrowOrderDebtLiquidityMintMismatch,
-    #[msg("Reserve used for fill exceeds the maximum borrow rate specified by the order")]
-    BorrowOrderMaxBorrowRateExceeded,
-    #[msg("Reserve used for fill defines a debt term shorter than specified by the order")]
-    BorrowOrderMinDebtTermInsufficient,
+    #[msg("Debt reserve's max borrow rate exceeds the owner's accepted maximum")]
+    DebtReserveMaxBorrowRateExceeded,
+    #[msg("Debt reserve's debt term is shorter than the owner's accepted minimum")]
+    DebtReserveMinDebtTermInsufficient,
     #[msg("Borrow order can no longer be filled")]
     BorrowOrderFillTimeLimitExceeded,
     #[msg("Cannot borrow from a reserve that reached its debt maturity timestamp")]
@@ -984,6 +1047,26 @@ pub enum LendingError {
     ReserveRewardsDisabled,
     #[msg("Transaction includes a nonce instruction, which is not allowed for admin operations")]
     TransactionIncludesNonceInstruction,
+    #[msg("Execution of obligation orders is disabled")]
+    ObligationOrderExecutionDisabled,
+    #[msg("Obligation order at the given index is inactive or its condition is not currently met")]
+    ObligationOrderConditionNotMet,
+    #[msg("Order execution breaches the executor's slippage bounds: liquidity given exceeds the max, or received is below the min")]
+    OrderExecutionSlippageExceeded,
+    #[msg("The given debt reserve's mint does not match the order's debt mint")]
+    ObligationOrderDebtMintMismatch,
+    #[msg("Executed obligation order amount has value below the market-configured minimum")]
+    ObligationOrderExecutionValueTooSmall,
+    #[msg(
+        "Obligation order's remaining amount would have value below the market-configured minimum"
+    )]
+    ObligationOrderRemainingValueTooSmall,
+    #[msg("The given collateral reserve's mint does not match the order's collateral mint")]
+    ObligationOrderCollateralMintMismatch,
+    #[msg("The order's opportunity type does not match the one expected by the executor")]
+    ObligationOrderOpportunityTypeMismatch,
+    #[msg("Obligation has active obligation orders")]
+    ObligationHasActiveObligationOrders,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;

@@ -1,4 +1,8 @@
-use anchor_lang::{prelude::error, require, require_eq, Key, Result, ToAccountInfo};
+use std::slice::SliceIndex;
+
+use anchor_lang::{
+    err, prelude::error, require, require_eq, Key, Owner, Result, ToAccountInfo, ZeroCopy,
+};
 use anchor_spl::associated_token::get_associated_token_address_with_program_id;
 use solana_program::{
     account_info::AccountInfo, instruction::AccountMeta, program, pubkey::Pubkey,
@@ -6,7 +10,10 @@ use solana_program::{
 };
 use spl_associated_token_account::instruction::create_associated_token_account;
 
-use crate::LendingError;
+use crate::{
+    state::obligation::Obligation, utils::FatAccountLoader, xmsg, LendingError, ReferrerTokenState,
+    Reserve,
+};
 
 #[allow(clippy::derivable_impls)]
 impl Default for crate::accounts::OptionalObligationFarmsAccounts {
@@ -140,4 +147,84 @@ pub fn create_pda_account<'info>(
         signers_seeds,
     )
     .map_err(Into::into)
+}
+
+
+
+
+
+
+
+pub struct ObligationRemainingAccounts<'a, 'info> {
+    deposit_count: usize,
+    borrow_count: usize,
+    remaining_accounts: &'a [AccountInfo<'info>],
+}
+
+impl<'a, 'info> ObligationRemainingAccounts<'a, 'info> {
+    pub fn parse(obligation: &Obligation, remaining: &'a [AccountInfo<'info>]) -> Result<Self> {
+        let deposit_count = obligation.active_deposits_count();
+        let borrow_count = obligation.active_borrows_count();
+        let reserves_count = deposit_count + borrow_count;
+        let expected = if obligation.has_referrer() {
+            reserves_count + borrow_count
+        } else {
+            reserves_count
+        };
+        if remaining.len() != expected {
+            xmsg!(
+                "expected_remaining_accounts={}, actual_remaining_accounts={} obligation.has_referrer()={} reserves_count={} borrow_count={}",
+                expected,
+                remaining.len(),
+                obligation.has_referrer(),
+                reserves_count,
+                borrow_count,
+            );
+            return err!(LendingError::InvalidAccountInput);
+        }
+        Ok(Self {
+            deposit_count,
+            borrow_count,
+            remaining_accounts: remaining,
+        })
+    }
+
+    pub fn deposit_reserves(
+        &self,
+    ) -> impl Iterator<Item = FatAccountLoader<'info, Reserve>> + Clone + 'a {
+        self.slice(..self.deposit_count)
+    }
+
+    pub fn borrow_reserves(
+        &self,
+    ) -> impl Iterator<Item = FatAccountLoader<'info, Reserve>> + Clone + 'a {
+        self.slice(self.deposit_count..self.deposit_count + self.borrow_count)
+    }
+
+    pub fn all_reserves(
+        &self,
+    ) -> impl Iterator<Item = FatAccountLoader<'info, Reserve>> + Clone + 'a {
+        self.slice(..self.deposit_count + self.borrow_count)
+    }
+
+    pub fn referrer_token_states(
+        &self,
+    ) -> impl Iterator<Item = FatAccountLoader<'info, ReferrerTokenState>> + Clone + 'a {
+        self.slice(self.deposit_count + self.borrow_count..)
+    }
+
+    fn slice<T: ZeroCopy + Owner>(
+        &self,
+        range: impl SliceIndex<[AccountInfo<'info>], Output = [AccountInfo<'info>]>,
+    ) -> impl Iterator<Item = FatAccountLoader<'info, T>> + Clone + 'a {
+        self.remaining_accounts[range].iter().map(|account| {
+            FatAccountLoader::<T>::try_from(account).unwrap_or_else(|err| {
+                panic!(
+                    "Remaining account is not a valid {}: {:?}",
+                    std::any::type_name::<T>(),
+                    err
+                )
+            })
+        })
+    }
 }
