@@ -224,8 +224,8 @@ define_lending_errors! {
     CannotUseSameReserve = 133 => "Cannot call ix with same reserve",
     TransactionIncludesRestrictedPrograms = 134 => "Transaction includes restricted programs",
     BorrowOrderDebtLiquidityMintMismatch = 135 => "There is no borrow order requesting debt in the given asset",
-    BorrowOrderMaxBorrowRateExceeded = 136 => "Reserve used for fill exceeds the maximum borrow rate specified by the order",
-    BorrowOrderMinDebtTermInsufficient = 137 => "Reserve used for fill defines a debt term shorter than specified by the order",
+    DebtReserveMaxBorrowRateExceeded = 136 => "Debt reserve's max borrow rate exceeds the owner's accepted maximum",
+    DebtReserveMinDebtTermInsufficient = 137 => "Debt reserve's debt term is shorter than the owner's accepted minimum",
     BorrowOrderFillTimeLimitExceeded = 138 => "Borrow order can no longer be filled",
     ReserveDebtMaturityReached = 139 => "Cannot borrow from a reserve that reached its debt maturity timestamp",
     NonUpdatableOrderConfiguration = 140 => "Some piece of the order's configuration cannot be updated (the order should be cancelled and placed again)",
@@ -274,6 +274,15 @@ define_lending_errors! {
     MissingPermissioner = 183 => "Required permissioning account is missing",
     ReserveRewardsDisabled = 184 => "Reserve rewards are disabled on this market (reserve_rewards_max_apr_bps is 0)",
     TransactionIncludesNonceInstruction = 185 => "Transaction includes a nonce instruction, which is not allowed for admin operations",
+    ObligationOrderExecutionDisabled = 186 => "Execution of obligation orders is disabled",
+    ObligationOrderConditionNotMet = 187 => "Obligation order at the given index is inactive or its condition is not currently met",
+    OrderExecutionSlippageExceeded = 188 => "Order execution breaches the executor's slippage bounds: liquidity given exceeds the max, or received is below the min",
+    ObligationOrderDebtMintMismatch = 189 => "The given debt reserve's mint does not match the order's debt mint",
+    ObligationOrderExecutionValueTooSmall = 190 => "Executed obligation order amount has value below the market-configured minimum",
+    ObligationOrderRemainingValueTooSmall = 191 => "Obligation order's remaining amount would have value below the market-configured minimum",
+    ObligationOrderCollateralMintMismatch = 192 => "The given collateral reserve's mint does not match the order's collateral mint",
+    ObligationOrderOpportunityTypeMismatch = 193 => "The order's opportunity type does not match the one expected by the executor",
+    ObligationHasActiveObligationOrders = 194 => "Obligation has active obligation orders",
 }
 
 impl std::error::Error for LendingError {}
@@ -330,7 +339,43 @@ mod tests {
             LendingError::from_error_code(6185),
             Some(LendingError::TransactionIncludesNonceInstruction)
         );
-        assert_eq!(LendingError::from_error_code(6186), None);
+        assert_eq!(
+            LendingError::from_error_code(6186),
+            Some(LendingError::ObligationOrderExecutionDisabled)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6187),
+            Some(LendingError::ObligationOrderConditionNotMet)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6188),
+            Some(LendingError::OrderExecutionSlippageExceeded)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6189),
+            Some(LendingError::ObligationOrderDebtMintMismatch)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6190),
+            Some(LendingError::ObligationOrderExecutionValueTooSmall)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6191),
+            Some(LendingError::ObligationOrderRemainingValueTooSmall)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6192),
+            Some(LendingError::ObligationOrderCollateralMintMismatch)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6193),
+            Some(LendingError::ObligationOrderOpportunityTypeMismatch)
+        );
+        assert_eq!(
+            LendingError::from_error_code(6194),
+            Some(LendingError::ObligationHasActiveObligationOrders)
+        );
+        assert_eq!(LendingError::from_error_code(6195), None);
     }
 
     #[test]
