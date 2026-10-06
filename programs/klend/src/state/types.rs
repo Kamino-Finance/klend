@@ -70,6 +70,15 @@ pub struct CalculateRepayResult {
 }
 
 
+#[derive(Debug)]
+pub struct RepayObligationLiquidityResult {
+
+    pub repay_amount: u64,
+
+    pub early_repay_penalty: u64,
+}
+
+
 
 
 
@@ -159,6 +168,21 @@ pub struct LiquidateObligationResult {
 
 
     pub liquidation_reason: LiquidationReason,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RepayAndWithdrawRedeemResult {
+
+    pub repay_amount: u64,
+
+    pub early_repay_penalty: u64,
+
+    pub withdraw_obligation_amount: u64,
+
+    pub withdraw_liquidity_amount: u64,
+
+    pub obligation_closed: bool,
 }
 
 
@@ -283,11 +307,12 @@ pub enum LendingAction {
 }
 
 impl LendingAction {
-    pub fn subtractive_signed(net_subtracted: i64) -> Self {
-        if net_subtracted >= 0 {
-            Self::Subtractive(net_subtracted as u64)
+
+    pub fn net_of(added: u64, subtracted: u64) -> Self {
+        if added >= subtracted {
+            Self::Additive(added - subtracted)
         } else {
-            Self::Additive(net_subtracted.unsigned_abs())
+            Self::Subtractive(subtracted - added)
         }
     }
 }

@@ -340,16 +340,8 @@ impl Obligation {
         &self,
         deposit_reserve: Pubkey,
     ) -> Result<&ObligationCollateral> {
-        if self.is_active_deposits_empty() {
-            xmsg!("Obligation has no deposits");
-            return err!(LendingError::ObligationDepositsEmpty);
-        }
-        let collateral = self
-            .deposits
-            .iter()
-            .find(|collateral| collateral.deposit_reserve == deposit_reserve)
-            .ok_or(LendingError::InvalidObligationCollateral)?;
-        Ok(collateral)
+        let collateral_index = self.position_of_collateral_in_deposits(deposit_reserve)?;
+        Ok(&self.deposits[collateral_index])
     }
 
 
@@ -379,10 +371,14 @@ impl Obligation {
             xmsg!("Obligation has no deposits");
             return err!(LendingError::ObligationDepositsEmpty);
         }
+        self.find_collateral_index_in_deposits(deposit_reserve)
+            .ok_or(error!(LendingError::InvalidObligationCollateral))
+    }
+
+    pub fn find_collateral_index_in_deposits(&self, deposit_reserve: Pubkey) -> Option<usize> {
         self.deposits
             .iter()
             .position(|collateral| collateral.deposit_reserve == deposit_reserve)
-            .ok_or(error!(LendingError::InvalidObligationCollateral))
     }
 
 
