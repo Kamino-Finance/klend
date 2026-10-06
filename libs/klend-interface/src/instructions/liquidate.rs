@@ -41,20 +41,20 @@ pub struct LiquidateObligationAndRedeemReserveCollateralV2Accounts {
 pub fn liquidate_obligation_and_redeem_reserve_collateral_v2(
     accounts: LiquidateObligationAndRedeemReserveCollateralV2Accounts,
     liquidity_amount: u64,
-    min_acceptable_received_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
     max_allowed_ltv_override_percent: u64,
     remaining_accounts: Vec<AccountMeta>,
 ) -> Instruction {
     #[derive(BorshSerialize)]
     struct Args {
         liquidity_amount: u64,
-        min_acceptable_received_liquidity_amount: u64,
+        min_received_liquidity_amount: u64,
         max_allowed_ltv_override_percent: u64,
     }
 
     let args = Args {
         liquidity_amount,
-        min_acceptable_received_liquidity_amount,
+        min_received_liquidity_amount,
         max_allowed_ltv_override_percent,
     };
     let mut data = discriminators::LIQUIDATE_OBLIGATION_AND_REDEEM_RESERVE_COLLATERAL_V2.to_vec();
