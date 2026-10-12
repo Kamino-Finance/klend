@@ -29,8 +29,8 @@ use crate::{
         InterestRateBasis, Reserve,
     },
     utils::{
-        accounts::is_default_array, consts::NO_DELEVERAGING_MARKER, AnyAccountLoader, BigFraction,
-        Fraction, GetPriceResult, IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
+        accounts::is_default_array, consts::NO_DELEVERAGING_MARKER, seeds::pda, AnyAccountLoader,
+        BigFraction, Fraction, GetPriceResult, IterExt, ELEVATION_GROUP_NONE, PROGRAM_VERSION,
     },
     withdraw_ticket::WithdrawTicket,
     xmsg, AllowedRolloverTime, BorrowSize, DepositLiquidityResult, ElevationGroup,
@@ -38,9 +38,9 @@ use crate::{
     LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
     MaxReservesAsCollateralCheck, Obligation, ObligationConfigUpdateSubject, ObligationLiquidity,
     PriceStatusFlags, RedeemCollateralOptions, ReferrerTokenState, RefreshObligationBorrowsResult,
-    RefreshObligationDepositsResult, ReserveConfig, ReserveConfigCustomizations, ReserveStatus,
-    RolloverMode, TicketedWithdrawResult, UpdateConfigMode, UpdateObligationConfigMode,
-    WithdrawResult,
+    RefreshObligationDepositsResult, RepayAndWithdrawRedeemResult, RepayObligationLiquidityResult,
+    ReserveConfig, ReserveConfigCustomizations, ReserveStatus, RolloverMode,
+    TicketedWithdrawResult, UpdateConfigMode, UpdateObligationConfigMode, WithdrawResult,
 };
 
 pub fn refresh_reserve(
@@ -755,7 +755,7 @@ pub fn repay_obligation_liquidity<'info, T>(
     repay_reserve_pk: Pubkey,
     lending_market: &LendingMarket,
     deposit_reserves_iter: impl Iterator<Item = T>,
-) -> Result<u64>
+) -> Result<RepayObligationLiquidityResult>
 where
     T: AnyAccountLoader<'info, Reserve>,
 {
@@ -789,8 +789,6 @@ where
 
     let early_repay_penalty =
         liquidity.calculate_early_repay_penalty(repay_reserve, settle_amount, timestamp)?;
-
-    let repay_amount_with_penalty = repay_amount + early_repay_penalty;
 
     sub_from_withdrawal_accum(
         &mut repay_reserve.config.debt_withdrawal_cap,
@@ -836,7 +834,10 @@ where
 
     refresh_reserve_limit_timestamps(repay_reserve, timestamp);
 
-    Ok(repay_amount_with_penalty)
+    Ok(RepayObligationLiquidityResult {
+        repay_amount,
+        early_repay_penalty,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1968,6 +1969,166 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+pub fn repay_and_withdraw_redeem<'info, T, U>(
+    lending_market: &LendingMarket,
+    repay_reserve: &impl AnyAccountLoader<'info, Reserve>,
+    withdraw_reserve: &impl AnyAccountLoader<'info, Reserve>,
+    obligation: &mut Obligation,
+    clock: &Clock,
+    repay_amount: u64,
+    withdraw_collateral_amount: u64,
+    deposit_reserves_iter: impl Iterator<Item = T> + Clone,
+    borrow_reserves_iter: impl Iterator<Item = T> + Clone,
+    referrer_token_states_iter: impl Iterator<Item = U> + Clone,
+) -> Result<RepayAndWithdrawRedeemResult>
+where
+    T: AnyAccountLoader<'info, Reserve>,
+    U: AnyAccountLoader<'info, ReferrerTokenState>,
+{
+   
+    require_gt!(
+        obligation.deposited_value_sf,
+        0,
+        LendingError::ObligationDepositsEmpty
+    );
+    let initial_ltv = obligation.loan_to_value();
+
+    let repay_reserve_key = repay_reserve.get_pubkey();
+    let withdraw_reserve_key = withdraw_reserve.get_pubkey();
+    let same_reserve = repay_reserve_key == withdraw_reserve_key;
+
+   
+    let RepayObligationLiquidityResult {
+        repay_amount,
+        early_repay_penalty,
+    } = repay_obligation_liquidity(
+        &mut *repay_reserve.get_mut()?,
+        obligation,
+        clock,
+        repay_amount,
+        repay_reserve_key,
+        lending_market,
+        deposit_reserves_iter.clone(),
+    )?;
+
+    let was_full_repay = obligation
+        .find_liquidity_index_in_borrows(repay_reserve_key)
+        .is_none();
+    let repay_in_deposits = obligation
+        .find_collateral_index_in_deposits(repay_reserve_key)
+        .is_some();
+
+   
+    if !was_full_repay || same_reserve || repay_in_deposits {
+        refresh_reserve(
+            &mut *repay_reserve.get_mut()?,
+            clock,
+            None,
+            lending_market.referral_fee_bps,
+            lending_market.reserve_rewards_max_apr_bps,
+        )?;
+    }
+
+   
+    let skipped_referrer_post_repay = (was_full_repay && obligation.has_referrer())
+        .then(|| pda::referrer_token_state(obligation.referrer, repay_reserve_key).0)
+        .unwrap_or_default();
+    refresh_obligation(
+        &crate::ID,
+        obligation,
+        lending_market,
+        clock,
+        deposit_reserves_iter.clone(),
+        borrow_reserves_iter
+            .clone()
+            .filter(move |l| !was_full_repay || l.get_pubkey() != repay_reserve_key),
+        referrer_token_states_iter
+            .clone()
+            .filter(move |l| l.get_pubkey() != skipped_referrer_post_repay),
+    )?;
+
+   
+    let withdraw_obligation_amount = withdraw_obligation_collateral(
+        lending_market,
+        &mut *withdraw_reserve.get_mut()?,
+        obligation,
+        withdraw_collateral_amount,
+        clock.slot,
+        withdraw_reserve_key,
+        LtvMaxWithdrawalCheck::LiquidationThreshold,
+    )?;
+
+   
+    refresh_reserve(
+        &mut *withdraw_reserve.get_mut()?,
+        clock,
+        None,
+        lending_market.referral_fee_bps,
+        lending_market.reserve_rewards_max_apr_bps,
+    )?;
+
+   
+    let withdraw_liquidity_amount = redeem_reserve_collateral(
+        &mut *withdraw_reserve.get_mut()?,
+        withdraw_obligation_amount,
+        clock,
+        RedeemCollateralOptions::REGULAR,
+    )?;
+
+   
+    let obligation_closed =
+        obligation.is_active_deposits_empty() && obligation.is_active_borrows_empty();
+    if !obligation_closed {
+        let was_full_withdrawal = obligation
+            .find_collateral_in_deposits(withdraw_reserve_key)
+            .is_err();
+        let withdraw_in_borrows = obligation
+            .find_liquidity_in_borrows(withdraw_reserve_key)
+            .is_ok();
+
+        if !was_full_withdrawal || withdraw_in_borrows {
+            refresh_reserve(
+                &mut *withdraw_reserve.get_mut()?,
+                clock,
+                None,
+                lending_market.referral_fee_bps,
+                lending_market.reserve_rewards_max_apr_bps,
+            )?;
+        }
+
+        refresh_obligation(
+            &crate::ID,
+            obligation,
+            lending_market,
+            clock,
+            deposit_reserves_iter
+                .filter(move |l| !was_full_withdrawal || l.get_pubkey() != withdraw_reserve_key),
+            borrow_reserves_iter
+                .filter(move |l| !was_full_repay || l.get_pubkey() != repay_reserve_key),
+            referrer_token_states_iter
+                .filter(move |l| l.get_pubkey() != skipped_referrer_post_repay),
+        )?;
+
+        obligation.last_update.mark_stale();
+        let mut withdraw_reserve_mut = withdraw_reserve.get_mut()?;
+        withdraw_reserve_mut.last_update.mark_stale();
+        utils::post_repay_and_withdraw_obligation_enforcements(
+            obligation,
+            &withdraw_reserve_mut,
+            initial_ltv,
+        )?;
+    }
+
+    Ok(RepayAndWithdrawRedeemResult {
+        repay_amount,
+        early_repay_penalty,
+        withdraw_obligation_amount,
+        withdraw_liquidity_amount,
+        obligation_closed,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn liquidate_and_redeem<'info, T>(
     lending_market: &LendingMarket,
     repay_reserve: &dyn AnyAccountLoader<Reserve>,
@@ -1975,7 +2136,7 @@ pub fn liquidate_and_redeem<'info, T>(
     obligation: &mut Obligation,
     clock: &Clock,
     liquidity_amount: u64,
-    min_acceptable_received_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
     max_allowed_ltv_override_pct_opt: Option<u64>,
     deposit_reserves_iter: impl Iterator<Item = T>,
 ) -> Result<LiquidateAndRedeemResult>
@@ -2009,7 +2170,7 @@ where
         withdraw_collateral_amount,
         liquidation_bonus_rate,
         liquidation_reason,
-        min_acceptable_received_liquidity_amount,
+        min_received_liquidity_amount,
         clock,
     )?;
 
@@ -2196,7 +2357,7 @@ pub(crate) fn post_liquidate_redeem(
     withdraw_collateral_amount: u64,
     liquidation_bonus_rate: Fraction,
     liquidation_reason: LiquidationReason,
-    min_acceptable_received_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
     clock: &Clock,
 ) -> Result<Option<(u64, u64)>> {
    
@@ -2232,7 +2393,7 @@ pub(crate) fn post_liquidate_redeem(
             protocol_liquidation_fee
         );
 
-        if net_withdraw_liquidity_amount < min_acceptable_received_liquidity_amount {
+        if net_withdraw_liquidity_amount < min_received_liquidity_amount {
             return err!(LendingError::LiquidationRewardTooSmall);
         }
 
@@ -2243,7 +2404,7 @@ pub(crate) fn post_liquidate_redeem(
             .collateral_exchange_rate()
             .collateral_to_liquidity(withdraw_amount);
 
-        if theoretical_withdraw_liquidity_amount < min_acceptable_received_liquidity_amount {
+        if theoretical_withdraw_liquidity_amount < min_received_liquidity_amount {
             return err!(LendingError::LiquidationRewardTooSmall);
         }
 

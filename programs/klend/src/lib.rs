@@ -267,8 +267,8 @@ pub mod kamino_lending {
     }
 
     #[access_control(emergency_mode_disabled(&ctx.accounts.repay_accounts.lending_market))]
-    pub fn repay_and_withdraw_and_redeem(
-        ctx: Context<RepayAndWithdraw>,
+    pub fn repay_and_withdraw_and_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, RepayAndWithdraw<'info>>,
         repay_amount: u64,
         withdraw_collateral_amount: u64,
     ) -> Result<()> {
@@ -350,13 +350,13 @@ pub mod kamino_lending {
     pub fn liquidate_obligation_and_redeem_reserve_collateral(
         ctx: Context<LiquidateObligationAndRedeemReserveCollateral>,
         liquidity_amount: u64,
-        min_acceptable_received_liquidity_amount: u64,
+        min_received_liquidity_amount: u64,
         max_allowed_ltv_override_percent: u64,
     ) -> Result<()> {
         handler_liquidate_obligation_and_redeem_reserve_collateral::process_v1(
             ctx,
             liquidity_amount,
-            min_acceptable_received_liquidity_amount,
+            min_received_liquidity_amount,
             max_allowed_ltv_override_percent,
         )
     }
@@ -365,13 +365,13 @@ pub mod kamino_lending {
     pub fn liquidate_obligation_and_redeem_reserve_collateral_v2(
         ctx: Context<LiquidateObligationAndRedeemReserveCollateralV2>,
         liquidity_amount: u64,
-        min_acceptable_received_liquidity_amount: u64,
+        min_received_liquidity_amount: u64,
         max_allowed_ltv_override_percent: u64,
     ) -> Result<()> {
         handler_liquidate_obligation_and_redeem_reserve_collateral::process_v2(
             ctx,
             liquidity_amount,
-            min_acceptable_received_liquidity_amount,
+            min_received_liquidity_amount,
             max_allowed_ltv_override_percent,
         )
     }

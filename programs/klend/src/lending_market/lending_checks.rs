@@ -1,9 +1,10 @@
 use anchor_lang::{
     accounts::account_loader::AccountLoader,
     err, error,
-    prelude::{AccountInfo, Context, Pubkey},
+    prelude::{AccountInfo, Context, InterfaceAccount, Pubkey},
     require, require_eq, require_gt, require_gte, Key, Result, ToAccountInfo,
 };
+use anchor_spl::token_interface::{self, TokenAccount};
 
 use crate::{
     fraction::Fraction,
@@ -702,9 +703,26 @@ pub fn post_cancel_withdraw_ticket_balance_checks(
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ReserveAccountingAndBalance {
+
     pub total_available_liquidity_amount: u64,
+
     pub borrowed_amount: Fraction,
+
     pub vault_balance: u64,
+}
+
+
+pub fn capture_reserve_accounting_and_balance(
+    reserve: &Reserve,
+    reserve_liquidity_vault: &InterfaceAccount<TokenAccount>,
+) -> Result<ReserveAccountingAndBalance> {
+    Ok(ReserveAccountingAndBalance {
+        total_available_liquidity_amount: reserve.total_available_liquidity_amount(),
+        borrowed_amount: reserve.liquidity.total_borrow(),
+        vault_balance: token_interface::accessor::amount(
+            &reserve_liquidity_vault.to_account_info(),
+        )?,
+    })
 }
 
 #[derive(Debug, PartialEq, Eq)]

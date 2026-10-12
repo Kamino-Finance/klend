@@ -67,7 +67,7 @@ where
     )?;
     let initial_reserve_available_liquidity = repay_reserve.total_available_liquidity_amount();
 
-    let repay_amount_with_penalty = lending_operations::repay_obligation_liquidity(
+    let repay = lending_operations::repay_obligation_liquidity(
         repay_reserve,
         obligation,
         &clock,
@@ -78,6 +78,7 @@ where
             FatAccountLoader::try_from(a).expect("Remaining account is not a valid deposit reserve")
         }),
     )?;
+    let repay_amount_with_penalty = repay.repay_amount + repay.early_repay_penalty;
 
     xmsg!(
         "pnl: Repaying obligation liquidity {} liquidity_amount {}",
