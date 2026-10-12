@@ -39,7 +39,7 @@ pub fn liquidate(
     user_destination_collateral: Pubkey,
     user_destination_liquidity: Pubkey,
     liquidity_amount: u64,
-    min_acceptable_received_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
     max_allowed_ltv_override_percent: u64,
     collateral_farms: Option<&FarmsAccounts>,
     debt_farms: Option<&FarmsAccounts>,
@@ -89,7 +89,7 @@ pub fn liquidate(
             debt_reserve_farm_state: debt_farms.map(|f| f.reserve_farm_state),
         },
         liquidity_amount,
-        min_acceptable_received_liquidity_amount,
+        min_received_liquidity_amount,
         max_allowed_ltv_override_percent,
         remaining,
     ));
