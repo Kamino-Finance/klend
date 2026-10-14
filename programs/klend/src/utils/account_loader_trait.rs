@@ -33,6 +33,7 @@ impl<'info, T: ZeroCopy + Owner> AnyAccountLoader<'info, T> for AccountLoader<'i
 
 
 
+#[derive(Clone)]
 pub struct FatAccountLoader<'info, T: ZeroCopy + Owner> {
     acc_info: AccountInfo<'info>,
     phantom: PhantomData<&'info T>,

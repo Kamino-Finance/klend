@@ -1935,6 +1935,11 @@ impl ReserveConfig {
     }
 
 
+    pub fn protocol_order_execution_fee_rate(&self) -> Fraction {
+        Fraction::from_percent(self.protocol_order_execution_fee_pct)
+    }
+
+
     pub fn from_customized(
         source: &ReserveConfig,
         customizations: ReserveConfigCustomizations,

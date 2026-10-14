@@ -19,7 +19,6 @@ use crate::{
             check_same_elevation_group, get_elevation_group, get_max_ltv_and_liquidation_threshold,
             post_borrow_obligation_invariants, post_deposit_obligation_invariants,
             post_repay_obligation_invariants, post_withdraw_obligation_invariants,
-            update_elevation_group_debt_trackers_on_repay,
         },
         withdrawal_cap_operations::utils::{add_to_withdrawal_accum, sub_from_withdrawal_accum},
     },
@@ -796,7 +795,7 @@ where
         timestamp,
     )?;
 
-    update_elevation_group_debt_trackers_on_repay(
+    utils::update_elevation_group_debt_trackers_on_repay(
         repay_amount,
         obligation,
         liquidity_index,
@@ -1222,7 +1221,11 @@ fn check_rollover_possible(
    
     let rollover_mode = source_borrow
         .fixed_term_borrow_rollover_config
-        .resolve_rollover_mode(&source_reserve.config, &target_reserve.config)?;
+        .resolve_rollover_mode(
+            &source_reserve.config,
+            &target_reserve.config,
+            u64::try_from(clock.unix_timestamp).unwrap(),
+        )?;
 
    
     match market.resolve_allowed_rollover_time(rollover_mode)? {

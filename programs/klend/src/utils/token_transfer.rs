@@ -323,27 +323,27 @@ pub fn borrow_obligation_liquidity_transfer<'a>(
     Ok(())
 }
 
-pub fn pay_borrowing_fees_transfer<'a>(
+pub fn reserve_fee_transfer<'a>(
     token_program: AccountInfo<'a>,
     liquidity_mint: AccountInfo<'a>,
-    user_liquidity: AccountInfo<'a>,
+    source_liquidity: AccountInfo<'a>,
     fee_collector: AccountInfo<'a>,
-    user_authority: AccountInfo<'a>,
-    fee: u64,
-    decimals: u8,
+    source_authority: AccountInfo<'a>,
+    fee_amount: u64,
+    mint_decimals: u8,
 ) -> Result<()> {
     token_interface::transfer_checked(
         CpiContext::new(
             token_program,
             token_interface::TransferChecked {
-                from: user_liquidity,
+                from: source_liquidity,
                 to: fee_collector,
-                authority: user_authority,
+                authority: source_authority,
                 mint: liquidity_mint,
             },
         ),
-        fee,
-        decimals,
+        fee_amount,
+        mint_decimals,
     )?;
 
     Ok(())
