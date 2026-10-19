@@ -874,10 +874,10 @@ pub enum LendingError {
     TransactionIncludesRestrictedPrograms,
     #[msg("There is no borrow order requesting debt in the given asset")]
     BorrowOrderDebtLiquidityMintMismatch,
-    #[msg("Reserve used for fill exceeds the maximum borrow rate specified by the order")]
-    BorrowOrderMaxBorrowRateExceeded,
-    #[msg("Reserve used for fill defines a debt term shorter than specified by the order")]
-    BorrowOrderMinDebtTermInsufficient,
+    #[msg("Debt reserve's max borrow rate exceeds the owner's accepted maximum")]
+    DebtReserveMaxBorrowRateExceeded,
+    #[msg("Debt reserve's debt term is shorter than the owner's accepted minimum")]
+    DebtReserveMinDebtTermInsufficient,
     #[msg("Borrow order can no longer be filled")]
     BorrowOrderFillTimeLimitExceeded,
     #[msg("Cannot borrow from a reserve that reached its debt maturity timestamp")]

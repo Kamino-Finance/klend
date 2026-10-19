@@ -158,6 +158,15 @@ pub fn process(
             config_items::for_named_field!(&mut market.obligation_order_execution_enabled)
                 .validating(validations::check_bool)
                 .set(&value)?;
+
+           
+           
+            if market.is_obligation_order_execution_enabled()
+                && market.min_obligation_order_execution_value == 0
+            {
+                xmsg!("Cannot enable obligation order execution before configuring min_obligation_order_execution_value");
+                return err!(LendingError::InvalidConfig);
+            }
         }
         UpdateLendingMarketMode::UpdateImmutableFlag => {
             config_items::for_named_field!(&mut market.immutable)
@@ -204,6 +213,11 @@ pub fn process(
         }
         UpdateLendingMarketMode::UpdateMinBorrowOrderFillValue => {
             config_items::for_named_field!(&mut market.min_borrow_order_fill_value)
+                .validating(validations::check_not_zero)
+                .set(&value)?;
+        }
+        UpdateLendingMarketMode::UpdateMinObligationOrderExecutionValue => {
+            config_items::for_named_field!(&mut market.min_obligation_order_execution_value)
                 .validating(validations::check_not_zero)
                 .set(&value)?;
         }

@@ -6,7 +6,6 @@ use anchor_lang::{
 use anchor_spl::{
     token,
     token::Token,
-    token_interface,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
 
@@ -209,18 +208,14 @@ fn process_impl(
         )?;
 
        
-        token_interface::transfer_checked(
-            CpiContext::new(
-                accounts.withdraw_liquidity_token_program.to_account_info(),
-                token_interface::TransferChecked {
-                    from: accounts.user_destination_liquidity.to_account_info(),
-                    to: accounts
-                        .withdraw_reserve_liquidity_fee_receiver
-                        .to_account_info(),
-                    authority: accounts.liquidator.to_account_info(),
-                    mint: accounts.withdraw_reserve_liquidity_mint.to_account_info(),
-                },
-            ),
+        token_transfer::reserve_fee_transfer(
+            accounts.withdraw_liquidity_token_program.to_account_info(),
+            accounts.withdraw_reserve_liquidity_mint.to_account_info(),
+            accounts.user_destination_liquidity.to_account_info(),
+            accounts
+                .withdraw_reserve_liquidity_fee_receiver
+                .to_account_info(),
+            accounts.liquidator.to_account_info(),
             protocol_fee,
             accounts.withdraw_reserve_liquidity_mint.decimals,
         )?;

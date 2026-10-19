@@ -1059,8 +1059,23 @@ impl ObligationLiquidity {
         repay_amount: Fraction,
         current_timestamp: u64,
     ) -> Result<u64> {
+        if repay_amount > self.borrowed_amount() {
+            panic!("caller must cap repay_amount to borrowed_amount");
+        }
+        let penalty =
+            repay_amount * self.calculate_early_repay_penalty_rate(reserve, current_timestamp)?;
+        Ok(penalty.to_ceil())
+    }
+
+
+
+    pub fn calculate_early_repay_penalty_rate(
+        &self,
+        reserve: &Reserve,
+        current_timestamp: u64,
+    ) -> Result<Fraction> {
         let Some(debt_term_seconds) = reserve.config.get_debt_term_seconds() else {
-            return Ok(0);
+            return Ok(Fraction::ZERO);
         };
 
         if self.last_borrowed_at_timestamp == 0 {
@@ -1068,27 +1083,22 @@ impl ObligationLiquidity {
                 "Debt reserve has a debt term of {} seconds, but an Obligation did not track its last borrow timestamp; ignoring it",
                 debt_term_seconds,
             );
-            return Ok(0);
+            return Ok(Fraction::ZERO);
         }
 
-       
         if self.borrowed_amount_sf == 0 {
-            return Ok(0);
-        }
-
-        if repay_amount > self.borrowed_amount() {
-            panic!("caller must cap repay_amount to borrowed_amount");
+            return Ok(Fraction::ZERO);
         }
 
         let seconds_since_last_borrowed =
             current_timestamp.saturating_sub(self.last_borrowed_at_timestamp);
         if seconds_since_last_borrowed >= debt_term_seconds {
-            return Ok(0);
+            return Ok(Fraction::ZERO);
         }
 
         let remaining_secs = debt_term_seconds - seconds_since_last_borrowed;
-        let remaining_interest = self.calculate_interest_for_period(
-            repay_amount,
+        let remaining_interest_rate = self.calculate_interest_for_period(
+            Fraction::ONE,
             Fraction::from_num(remaining_secs),
             reserve,
         )?;
@@ -1097,7 +1107,7 @@ impl ObligationLiquidity {
             .config
             .get_early_repay_penalty_remaining_interest_pct();
 
-        Ok((remaining_interest * penalty_pct).to_ceil::<u64>())
+        Ok(remaining_interest_rate * penalty_pct)
     }
 }
 
@@ -1214,18 +1224,27 @@ impl FixedTermBorrowRolloverConfig {
     }
 
 
+    pub fn reserve_constraint(&self) -> DebtReserveConstraint {
+        DebtReserveConstraint {
+            max_borrow_rate_bps: self.max_borrow_rate_bps,
+            min_debt_term_seconds: self.min_debt_term_seconds,
+        }
+    }
+
+
 
     pub fn resolve_rollover_mode(
         &self,
         source_reserve_config: &ReserveConfig,
         target_reserve_config: &ReserveConfig,
+        timestamp: u64,
     ) -> Result<RolloverMode> {
         if source_reserve_config.get_debt_term_seconds().is_some() {
            
-            self.resolve_rollover_from_fixed_term_mode(target_reserve_config)
+            self.resolve_rollover_from_fixed_term_mode(target_reserve_config, timestamp)
         } else {
            
-            self.check_migration_to_fixed_term_possible(target_reserve_config)?;
+            self.check_migration_to_fixed_term_possible(target_reserve_config, timestamp)?;
             Ok(RolloverMode::FromOpenToFixedTerm)
         }
     }
@@ -1234,6 +1253,7 @@ impl FixedTermBorrowRolloverConfig {
     fn resolve_rollover_from_fixed_term_mode(
         &self,
         target_reserve_config: &ReserveConfig,
+        timestamp: u64,
     ) -> Result<RolloverMode> {
        
         if !self.is_auto_rollover_enabled() {
@@ -1241,49 +1261,28 @@ impl FixedTermBorrowRolloverConfig {
         }
 
        
-        let Some(target_debt_term_seconds) = target_reserve_config.get_debt_term_seconds() else {
+        if target_reserve_config.get_debt_term_seconds().is_none() {
             return if self.open_term_allowed == false as u8 {
                
                 xmsg!("Owner did not allow rollover into open-term reserve");
                 err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch)
             } else {
                
+                self.reserve_constraint()
+                    .check_maturity_satisfying(target_reserve_config, timestamp)?;
                 Ok(RolloverMode::FromFixedToOpenTerm)
                
                
                
                
                
+               
             };
-        };
-
-       
-       
-        let target_borrow_rate_bps = target_reserve_config.max_borrow_rate_bps();
-        if target_borrow_rate_bps > self.max_borrow_rate_bps {
-            xmsg!(
-                "Target reserve borrow rate ({} bps) is higher than the maximum allowed {} bps",
-                target_borrow_rate_bps,
-                self.max_borrow_rate_bps
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
         }
 
        
-        if self.min_debt_term_seconds == 0 {
-            xmsg!("Owner's min_debt_term_seconds is 0 (open-term only), but target is fixed-term");
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
-
-       
-        if target_debt_term_seconds < self.min_debt_term_seconds {
-            xmsg!(
-                "Target reserve debt term ({} seconds) is lower than the minimum allowed {} seconds",
-                target_debt_term_seconds,
-                self.min_debt_term_seconds
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
+        self.reserve_constraint()
+            .check_satisfying(target_reserve_config, timestamp)?;
 
         Ok(RolloverMode::FromFixedToFixedTerm)
     }
@@ -1292,6 +1291,7 @@ impl FixedTermBorrowRolloverConfig {
     fn check_migration_to_fixed_term_possible(
         &self,
         target_reserve_config: &ReserveConfig,
+        now: u64,
     ) -> Result<()> {
        
         if !self.is_migration_to_fixed_enabled() {
@@ -1300,39 +1300,14 @@ impl FixedTermBorrowRolloverConfig {
         }
 
        
-        let Some(target_debt_term_seconds) = target_reserve_config.get_debt_term_seconds() else {
+        if target_reserve_config.get_debt_term_seconds().is_none() {
             xmsg!("Migration target must be a fixed-term reserve");
             return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        };
-
-       
-        let target_borrow_rate_bps = target_reserve_config.max_borrow_rate_bps();
-        if target_borrow_rate_bps > self.max_borrow_rate_bps {
-            xmsg!(
-                "Target reserve borrow rate ({} bps) is higher than the maximum allowed {} bps",
-                target_borrow_rate_bps,
-                self.max_borrow_rate_bps
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
         }
 
        
-       
-       
-        if self.min_debt_term_seconds == 0 {
-            xmsg!("Owner's min_debt_term_seconds is 0 (open-term only), but migration target is fixed-term");
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
-
-       
-        if target_debt_term_seconds < self.min_debt_term_seconds {
-            xmsg!(
-                "Target reserve debt term ({} seconds) is lower than the minimum allowed {} seconds",
-                target_debt_term_seconds,
-                self.min_debt_term_seconds
-            );
-            return err!(LendingError::ObligationBorrowRolloverTargetReserveMismatch);
-        }
+        self.reserve_constraint()
+            .check_satisfying(target_reserve_config, now)?;
 
         Ok(())
     }
@@ -1719,11 +1694,11 @@ pub struct BorrowOrder {
 
 impl BorrowOrder {
 
-    pub fn get_min_debt_term_seconds(&self) -> Option<u64> {
-        if self.min_debt_term_seconds == 0 {
-            return None;
+    pub fn reserve_constraint(&self) -> DebtReserveConstraint {
+        DebtReserveConstraint {
+            max_borrow_rate_bps: self.max_borrow_rate_bps,
+            min_debt_term_seconds: self.min_debt_term_seconds,
         }
-        Some(self.min_debt_term_seconds)
     }
 
 
@@ -1770,5 +1745,86 @@ pub struct BorrowOrderConfig {
     pub min_debt_term_seconds: u64,
     pub fillable_until_timestamp: u64,
     pub enable_auto_rollover_on_filled_borrows: u8,
+}
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct DebtReserveConstraint {
+    pub max_borrow_rate_bps: u32,
+    pub min_debt_term_seconds: u64,
+}
+
+impl DebtReserveConstraint {
+
+    pub fn check_satisfying(&self, reserve_config: &ReserveConfig, timestamp: u64) -> Result<()> {
+       
+        let reserve_max_rate = reserve_config.max_borrow_rate_bps();
+        if reserve_max_rate > self.max_borrow_rate_bps {
+            xmsg!(
+                "Reserve max borrow rate {} bps exceeds the owner's accepted maximum {} bps",
+                reserve_max_rate,
+                self.max_borrow_rate_bps,
+            );
+            return err!(LendingError::DebtReserveMaxBorrowRateExceeded);
+        }
+
+       
+        let min_debt_term_seconds = self.min_debt_term_seconds();
+        let reserve_debt_term_seconds = reserve_config.get_debt_term_seconds();
+        if !is_term_satisfied(min_debt_term_seconds, reserve_debt_term_seconds) {
+            xmsg!(
+                "Reserve debt term of {:?} seconds does not satisfy the owner's minimum {:?}",
+                reserve_debt_term_seconds,
+                min_debt_term_seconds,
+            );
+            return err!(LendingError::DebtReserveMinDebtTermInsufficient);
+        }
+
+       
+        self.check_maturity_satisfying(reserve_config, timestamp)?;
+
+        Ok(())
+    }
+
+
+
+    pub fn check_maturity_satisfying(
+        &self,
+        reserve_config: &ReserveConfig,
+        timestamp: u64,
+    ) -> Result<()> {
+        let min_debt_term_seconds = self.min_debt_term_seconds();
+        let seconds_until_maturity = reserve_config
+            .get_debt_maturity_timestamp()
+            .map(|maturity_timstamp| maturity_timstamp.saturating_sub(timestamp));
+        if !is_term_satisfied(min_debt_term_seconds, seconds_until_maturity) {
+            xmsg!(
+                "Reserve debt maturity timestamp leaves only {:?} seconds, which does not satisfy the owner's minimum {:?}",
+                seconds_until_maturity,
+                min_debt_term_seconds,
+            );
+            return err!(LendingError::DebtReserveMinDebtTermInsufficient);
+        }
+
+        Ok(())
+    }
+
+    fn min_debt_term_seconds(&self) -> Option<u64> {
+        if self.min_debt_term_seconds == 0 {
+            return None;
+        }
+        Some(self.min_debt_term_seconds)
+    }
+}
+
+
+
+fn is_term_satisfied(min_requested_seconds: Option<u64>, max_offered_seconds: Option<u64>) -> bool {
+    match (min_requested_seconds, max_offered_seconds) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(_), None) => true,
+        (Some(min_requested), Some(max_offered)) => min_requested <= max_offered,
+    }
 }
 

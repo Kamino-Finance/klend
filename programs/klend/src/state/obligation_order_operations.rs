@@ -22,10 +22,10 @@ const VALID_DEBT_COLL_PRICE_RATIO_RANGE: RangeInclusive<Fraction> =
 
 
 
-const VALID_USER_LTV_RANGE: Range<Fraction> = fraction!(0.01)..fraction!(1.0);
+const VALID_CONDITION_LTV_RANGE: Range<Fraction> = fraction!(0.01)..fraction!(1.0);
 
 
-const VALID_DIFF_TO_LIQUIDATION_LTV_RANGE: Range<Fraction> = VALID_USER_LTV_RANGE;
+const VALID_DIFF_TO_LIQUIDATION_LTV_RANGE: Range<Fraction> = VALID_CONDITION_LTV_RANGE;
 
 
 const EXECUTION_BONUS_SANITY_LIMIT: Fraction = fraction!(0.1);
@@ -123,7 +123,7 @@ impl Display for ConditionHit {
             Some(normalized_distance_from_threshold) => write!(
                 f,
                 "distance from threshold = {}",
-                normalized_distance_from_threshold
+                normalized_distance_from_threshold.to_display()
             ),
         }
     }
@@ -310,12 +310,12 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
             }
         }
         Ok(ConditionType::UserLtvAbove | ConditionType::UserLtvBelow) => {
-            if !VALID_USER_LTV_RANGE.contains(&order.condition_threshold()) {
+            if !VALID_CONDITION_LTV_RANGE.contains(&order.condition_threshold()) {
                 xmsg!(
                     "Invalid LTV threshold {}; should be in range [{}; {})",
                     order.condition_threshold().to_display(),
-                    VALID_USER_LTV_RANGE.start.to_display(),
-                    VALID_USER_LTV_RANGE.end.to_display(),
+                    VALID_CONDITION_LTV_RANGE.start.to_display(),
+                    VALID_CONDITION_LTV_RANGE.end.to_display(),
                 );
                 return err!(LendingError::InvalidOrderConfiguration);
             }
@@ -351,8 +351,8 @@ fn validate_order(order: ObligationOrder) -> Result<()> {
                 xmsg!(
                     "Invalid difference to liquidation LTV {}; should be in range [{}; {})",
                     order.condition_threshold().to_display(),
-                    VALID_USER_LTV_RANGE.start.to_display(),
-                    VALID_USER_LTV_RANGE.end.to_display(),
+                    VALID_DIFF_TO_LIQUIDATION_LTV_RANGE.start.to_display(),
+                    VALID_DIFF_TO_LIQUIDATION_LTV_RANGE.end.to_display(),
                 );
                 return err!(LendingError::InvalidOrderConfiguration);
             }
