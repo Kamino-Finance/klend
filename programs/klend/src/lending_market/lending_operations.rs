@@ -1,4 +1,9 @@
-use std::{cell::RefMut, cmp::min, mem::size_of, ops::Add};
+use std::{
+    cell::RefMut,
+    cmp::min,
+    mem::size_of,
+    ops::{Add, Deref},
+};
 
 use anchor_lang::{err, prelude::*, require, solana_program::clock::Slot, Result};
 use solana_program::clock::{self, Clock};
@@ -23,6 +28,10 @@ use crate::{
         withdrawal_cap_operations::utils::{add_to_withdrawal_accum, sub_from_withdrawal_accum},
     },
     liquidation_operations, obligation_order_operations,
+    obligation_order_operations::{
+        calculate_order_execution_bonus_rate, DeleverageExecution, OpportunityType, OrderExecution,
+        OrderOpportunity,
+    },
     state::{
         AccrualDuration, CalculateBorrowResult, CalculateLiquidationResult, CalculateRepayResult,
         InterestRateBasis, Reserve,
@@ -33,13 +42,14 @@ use crate::{
     },
     withdraw_ticket::WithdrawTicket,
     xmsg, AllowedRolloverTime, BorrowSize, DepositLiquidityResult, ElevationGroup,
-    FixedTermBorrowRolloverConfig, FixedTermRolloverResult, LendingError, LendingMarket,
-    LiquidateAndRedeemResult, LiquidateObligationResult, LiquidationReason, LtvMaxWithdrawalCheck,
-    MaxReservesAsCollateralCheck, Obligation, ObligationConfigUpdateSubject, ObligationLiquidity,
-    PriceStatusFlags, RedeemCollateralOptions, ReferrerTokenState, RefreshObligationBorrowsResult,
-    RefreshObligationDepositsResult, RepayAndWithdrawRedeemResult, RepayObligationLiquidityResult,
-    ReserveConfig, ReserveConfigCustomizations, ReserveStatus, RolloverMode,
-    TicketedWithdrawResult, UpdateConfigMode, UpdateObligationConfigMode, WithdrawResult,
+    ExecuteDeleverageOrderResult, ExecuteObligationOrderResult, FixedTermBorrowRolloverConfig,
+    FixedTermRolloverResult, LendingError, LendingMarket, LiquidateAndRedeemResult,
+    LiquidateObligationResult, LtvMaxWithdrawalCheck, MaxReservesAsCollateralCheck, Obligation,
+    ObligationConfigUpdateSubject, ObligationLiquidity, PriceStatusFlags, RedeemCollateralOptions,
+    ReferrerTokenState, RefreshObligationBorrowsResult, RefreshObligationDepositsResult,
+    RepayAndWithdrawRedeemResult, RepayObligationLiquidityResult, ReserveConfig,
+    ReserveConfigCustomizations, ReserveStatus, RolloverMode, TicketedWithdrawResult,
+    UpdateConfigMode, UpdateObligationConfigMode, WithdrawResult,
 };
 
 pub fn refresh_reserve(
@@ -2172,7 +2182,6 @@ where
         withdraw_amount,
         withdraw_collateral_amount,
         liquidation_bonus_rate,
-        liquidation_reason,
         min_received_liquidity_amount,
         clock,
     )?;
@@ -2308,32 +2317,19 @@ where
         refresh_reserve_limit_timestamps(&mut repay_reserve_ref_mut, current_timestamp);
     }
 
-    if obligation.has_debt() {
-       
-        if let LiquidationReason::ObligationOrder(obligation_order_index) = liquidation_reason {
-           
-            let order = &mut obligation.obligation_orders[obligation_order_index];
-            order.consume(repay_amount);
-        }
-    }
-
     let mut withdraw_reserve_ref_mut = withdraw_reserve.get_mut()?;
-    let withdraw_collateral_amount = {
-        refresh_reserve(
-            &mut withdraw_reserve_ref_mut,
-            clock,
-            None,
-            lending_market.referral_fee_bps,
-            lending_market.reserve_rewards_max_apr_bps,
-        )?;
-        let redeem_collateral_options = RedeemCollateralOptions::resolve(liquidation_reason);
-        let max_redeemable_collateral = if redeem_collateral_options.use_withdraw_queue {
-            withdraw_reserve_ref_mut.total_redeemable_collateral_amount()
-        } else {
-            withdraw_reserve_ref_mut.freely_redeemable_collateral_amount()
-        };
-        min(withdraw_amount, max_redeemable_collateral)
-    };
+    refresh_reserve(
+        &mut withdraw_reserve_ref_mut,
+        clock,
+        None,
+        lending_market.referral_fee_bps,
+        lending_market.reserve_rewards_max_apr_bps,
+    )?;
+    let withdraw_collateral_amount = min(
+        withdraw_amount,
+        withdraw_reserve_ref_mut.total_redeemable_collateral_amount(),
+    );
+
     if is_full_withdrawal {
         utils::update_elevation_group_debt_trackers_on_full_withdraw(
             previous_borrowed_amount_against_this_collateral_in_elevation_group,
@@ -2352,6 +2348,266 @@ where
     })
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#[allow(clippy::too_many_arguments)]
+pub fn execute_obligation_order<'info, T, U>(
+    lending_market: &LendingMarket,
+    collateral_reserve: &impl AnyAccountLoader<'info, Reserve>,
+    debt_reserve: &impl AnyAccountLoader<'info, Reserve>,
+    obligation: &mut Obligation,
+    clock: &Clock,
+    order_index: usize,
+    expected_opportunity_type: OpportunityType,
+    max_given_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
+    deposit_reserves_iter: impl Iterator<Item = T> + Clone,
+    borrow_reserves_iter: impl Iterator<Item = T> + Clone,
+    referrer_token_states_iter: impl Iterator<Item = U> + Clone,
+) -> Result<ExecuteObligationOrderResult>
+where
+    T: AnyAccountLoader<'info, Reserve>,
+    U: AnyAccountLoader<'info, ReferrerTokenState>,
+{
+   
+    if !lending_market.is_obligation_order_execution_enabled() {
+        return err!(LendingError::ObligationOrderExecutionDisabled);
+    }
+    utils::assert_order_execution_inputs_fresh(
+        collateral_reserve.get()?.deref(),
+        debt_reserve.get()?.deref(),
+        obligation,
+        clock.slot,
+    )?;
+    if obligation.deposited_value().is_zero() {
+        xmsg!("Cannot execute obligation order without any deposit");
+        return err!(LendingError::ObligationDepositsEmpty);
+    }
+
+   
+    let order = obligation
+        .obligation_orders
+        .get(order_index)
+        .ok_or_else(|| error!(LendingError::OrderIndexOutOfBounds))?;
+
+   
+    order.check_expected_opportunity_type(expected_opportunity_type)?;
+
+   
+    obligation_order_operations::validate_order(order)?;
+
+   
+    order.check_reserve_requirements(
+        debt_reserve.get()?.deref(),
+        collateral_reserve.get()?.deref(),
+        u64::try_from(clock.unix_timestamp).unwrap(),
+    )?;
+
+   
+    let condition_hit = order.condition().evaluate(
+        collateral_reserve.get()?.deref(),
+        debt_reserve.get()?.deref(),
+        obligation,
+    )?;
+
+   
+    let early_repay_penalty_rate = match order.opportunity() {
+        OrderOpportunity::Deleverage(_) => obligation
+            .find_liquidity_in_borrows(debt_reserve.get_pubkey())?
+            .0
+            .calculate_early_repay_penalty_rate(
+                debt_reserve.get()?.deref(),
+                u64::try_from(clock.unix_timestamp).unwrap(),
+            )?,
+    };
+
+   
+    let execution_bonus_rate = calculate_order_execution_bonus_rate(
+        order,
+        &condition_hit,
+        obligation.no_bf_loan_to_value(),
+        early_repay_penalty_rate,
+    );
+
+    xmsg!(
+        "Executing obligation order {}; condition {} hit with {}; opportunity {}; bonus rate {}; early repay penalty rate {}",
+        order_index,
+        order.condition(),
+        condition_hit,
+        order.opportunity(),
+        execution_bonus_rate.to_display(),
+        early_repay_penalty_rate.to_display(),
+    );
+
+   
+    let execution = order.opportunity().resolve(
+        collateral_reserve.get()?.deref(),
+        collateral_reserve.get_pubkey(),
+        debt_reserve.get_pubkey(),
+        obligation,
+        max_given_liquidity_amount,
+        min_received_liquidity_amount,
+        execution_bonus_rate,
+        early_repay_penalty_rate,
+    )?;
+
+   
+    match execution {
+        OrderExecution::Deleverage(amounts) => execute_deleverage_order(
+            lending_market,
+            collateral_reserve,
+            debt_reserve,
+            obligation,
+            clock,
+            order_index,
+            amounts,
+            deposit_reserves_iter,
+            borrow_reserves_iter,
+            referrer_token_states_iter,
+        )
+        .map(ExecuteObligationOrderResult::Deleverage),
+    }
+}
+
+fn consume_order_and_check_min_execution(
+    obligation: &mut Obligation,
+    order_index: usize,
+    executed_debt_amount: u64,
+    consumed_entire_order: bool,
+    cleared_borrow_or_deposit: bool,
+    lending_market: &LendingMarket,
+    debt_reserve: &Reserve,
+) -> Result<()> {
+   
+    if !obligation.has_debt() {
+        return Ok(());
+    }
+
+   
+    let order = &mut obligation.obligation_orders[order_index];
+    let remaining_ordered_debt_amount = if consumed_entire_order {
+        order.consume_fully()
+    } else {
+        order.consume(executed_debt_amount)
+    };
+
+   
+    obligation_order_operations::check_obligation_order_min_execution_value(
+        cleared_borrow_or_deposit,
+        lending_market,
+        debt_reserve,
+        executed_debt_amount,
+        remaining_ordered_debt_amount,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_deleverage_order<'info, T, U>(
+    lending_market: &LendingMarket,
+    collateral_reserve: &impl AnyAccountLoader<'info, Reserve>,
+    debt_reserve: &impl AnyAccountLoader<'info, Reserve>,
+    obligation: &mut Obligation,
+    clock: &Clock,
+    order_index: usize,
+    amounts: DeleverageExecution,
+    deposit_reserves_iter: impl Iterator<Item = T> + Clone,
+    borrow_reserves_iter: impl Iterator<Item = T> + Clone,
+    referrer_token_states_iter: impl Iterator<Item = U> + Clone,
+) -> Result<ExecuteDeleverageOrderResult>
+where
+    T: AnyAccountLoader<'info, Reserve>,
+    U: AnyAccountLoader<'info, ReferrerTokenState>,
+{
+   
+    let DeleverageExecution {
+        repay_amount,
+        withdraw_collateral_amount,
+        protocol_fee,
+        consumed_entire_order,
+    } = amounts;
+
+   
+    let RepayAndWithdrawRedeemResult {
+        repay_amount: actual_repay_amount,
+        early_repay_penalty,
+        withdraw_obligation_amount: actual_withdraw_collateral_amount,
+        withdraw_liquidity_amount,
+        obligation_closed,
+    } = repay_and_withdraw_redeem(
+        lending_market,
+        debt_reserve,
+        collateral_reserve,
+        obligation,
+        clock,
+        repay_amount,
+        withdraw_collateral_amount,
+        deposit_reserves_iter,
+        borrow_reserves_iter,
+        referrer_token_states_iter,
+    )?;
+
+   
+    require_eq!(repay_amount, actual_repay_amount);
+    require_eq!(
+        withdraw_collateral_amount,
+        actual_withdraw_collateral_amount
+    );
+
+   
+    let cleared_borrow_or_deposit = obligation
+        .find_liquidity_index_in_borrows(debt_reserve.get_pubkey())
+        .is_none()
+        || obligation
+            .find_collateral_index_in_deposits(collateral_reserve.get_pubkey())
+            .is_none();
+
+   
+    consume_order_and_check_min_execution(
+        obligation,
+        order_index,
+        repay_amount,
+        consumed_entire_order,
+        cleared_borrow_or_deposit,
+        lending_market,
+        debt_reserve.get()?.deref(),
+    )?;
+
+    xmsg!(
+        "pnl: executor repaid {} and withdrew {} (of which {} is the protocol fee)",
+        repay_amount,
+        withdraw_liquidity_amount,
+        protocol_fee,
+    );
+
+    Ok(ExecuteDeleverageOrderResult {
+        repay_amount,
+        early_repay_penalty,
+        withdraw_collateral_amount,
+        withdraw_liquidity_amount,
+        protocol_fee,
+        obligation_closed,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn post_liquidate_redeem(
     withdraw_reserve: &mut Reserve,
@@ -2359,7 +2615,6 @@ pub(crate) fn post_liquidate_redeem(
     withdraw_amount: u64,
     withdraw_collateral_amount: u64,
     liquidation_bonus_rate: Fraction,
-    liquidation_reason: LiquidationReason,
     min_received_liquidity_amount: u64,
     clock: &Clock,
 ) -> Result<Option<(u64, u64)>> {
@@ -2369,24 +2624,12 @@ pub(crate) fn post_liquidate_redeem(
             withdraw_reserve,
             withdraw_collateral_amount,
             clock,
-            RedeemCollateralOptions::resolve(liquidation_reason),
+            RedeemCollateralOptions::FOR_LIQUIDATION,
         )?;
-        let protocol_liquidation_fee_pct = match liquidation_reason {
-            LiquidationReason::LtvExceeded
-            | LiquidationReason::IndividualDeleveraging
-            | LiquidationReason::MarketWideDeleveraging
-            | LiquidationReason::ReserveDebtMaturityReached
-            | LiquidationReason::ObligationBorrowDebtTermReached(_) => {
-                withdraw_reserve.config.protocol_liquidation_fee_pct
-            }
-            LiquidationReason::ObligationOrder(_) => {
-                withdraw_reserve.config.protocol_order_execution_fee_pct
-            }
-        };
         let protocol_liquidation_fee = liquidation_operations::calculate_protocol_liquidation_fee(
             withdraw_liquidity_amount,
             liquidation_bonus_rate,
-            protocol_liquidation_fee_pct,
+            withdraw_reserve.config.protocol_liquidation_fee_pct,
         );
         let net_withdraw_liquidity_amount = withdraw_liquidity_amount - protocol_liquidation_fee;
         xmsg!(
@@ -4381,6 +4624,46 @@ pub mod utils {
             return err!(LendingError::ObligationBorrowsZero);
         }
 
+        Ok(())
+    }
+
+
+    pub fn assert_order_execution_inputs_fresh(
+        collateral_reserve: &Reserve,
+        debt_reserve: &Reserve,
+        obligation: &Obligation,
+        slot: Slot,
+    ) -> Result<()> {
+        if collateral_reserve
+            .last_update
+            .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+        {
+            xmsg!(
+                "Collateral reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+                collateral_reserve.last_update.get_price_status().0
+            );
+            return err!(LendingError::ReserveStale);
+        }
+        if debt_reserve
+            .last_update
+            .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+        {
+            xmsg!(
+                "Debt reserve is stale and must be refreshed in the current slot, price status: {:08b}",
+                debt_reserve.last_update.get_price_status().0
+            );
+            return err!(LendingError::ReserveStale);
+        }
+        if obligation
+            .last_update
+            .is_stale(slot, PriceStatusFlags::ALL_CHECKS)?
+        {
+            xmsg!(
+                "Obligation is stale and must be refreshed in the current slot, price status: {:08b}",
+                obligation.last_update.get_price_status().0
+            );
+            return err!(LendingError::ObligationStale);
+        }
         Ok(())
     }
 
