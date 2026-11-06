@@ -19,8 +19,8 @@ use crate::{
         constraints, consts::COMPUTE_BUDGET_PROGRAM_ID, seeds::BASE_SEED_REFERRER_TOKEN_STATE,
         FatAccountLoader, PROGRAM_VERSION,
     },
-    xmsg, FixedTermRolloverResult, LendingAction, LendingError, Obligation, ReferrerTokenState,
-    Reserve, ReserveStatus,
+    xmsg, ExecuteObligationOrderResult, FixedTermRolloverResult, LendingAction, LendingError,
+    Obligation, ReferrerTokenState, Reserve, ReserveStatus,
 };
 
 pub fn check_reserve_emergency_mode(reserve: &Reserve) -> Result<()> {
@@ -94,6 +94,53 @@ pub fn rollover_fixed_term_borrow_checks(accounts: &RolloverAccounts) -> Result<
         )?;
        
     }
+
+    Ok(())
+}
+
+pub fn execute_obligation_order_checks(accounts: &ExecuteObligationOrderAccounts) -> Result<()> {
+    let debt_reserve = &accounts.debt_reserve.load()?;
+    let collateral_reserve = &accounts.collateral_reserve.load()?;
+
+    if debt_reserve.liquidity.supply_vault == accounts.executor_debt_liquidity_ta.key() {
+        xmsg!("Debt reserve liquidity supply cannot be used as the executor debt account");
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if collateral_reserve.liquidity.supply_vault == accounts.executor_debt_liquidity_ta.key() {
+        xmsg!("Collateral reserve liquidity supply cannot be used as the executor debt account");
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if collateral_reserve.collateral.supply_vault == accounts.executor_collateral_ctoken_ta.key() {
+        xmsg!("Collateral reserve cToken supply cannot be used as the executor cToken account");
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if collateral_reserve.liquidity.supply_vault == accounts.executor_collateral_liquidity_ta.key()
+    {
+        xmsg!(
+            "Collateral reserve liquidity supply cannot be used as the executor liquidity destination"
+        );
+        return err!(LendingError::InvalidAccountInput);
+    }
+    if accounts.debt_reserve.key() == accounts.collateral_reserve.key() {
+        xmsg!("Cannot execute order against the same debt and collateral reserve");
+        return err!(LendingError::InvalidAccountInput);
+    }
+
+   
+    check_reserve_version(debt_reserve)?;
+    check_reserve_version(collateral_reserve)?;
+
+    check_reserve_emergency_mode(debt_reserve)?;
+    check_reserve_emergency_mode(collateral_reserve)?;
+
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
+        &accounts.debt_reserve_liquidity_mint.to_account_info(),
+        &accounts.executor_debt_liquidity_ta.to_account_info(),
+    )?;
+    constraints::token_2022::check_only_supported_liquidity_token_extensions(
+        &accounts.collateral_reserve_liquidity_mint.to_account_info(),
+        &accounts.executor_collateral_liquidity_ta.to_account_info(),
+    )?;
 
     Ok(())
 }
@@ -836,6 +883,35 @@ pub fn post_liquidate_repay_amount_check(max_repay: u64, actual_repay: u64) -> R
     Ok(())
 }
 
+pub fn execute_obligation_order_slippage_check(
+    execution_result: &ExecuteObligationOrderResult,
+    max_given_liquidity_amount: u64,
+    min_received_liquidity_amount: u64,
+) -> Result<()> {
+    let given_liquidity_amount = execution_result.executor_given_liquidity();
+    let received_liquidity_amount = execution_result.executor_received_liquidity();
+
+    if given_liquidity_amount > max_given_liquidity_amount {
+        xmsg!(
+            "Order executor's maximum given liquidity {} exceeded: {}",
+            max_given_liquidity_amount,
+            given_liquidity_amount,
+        );
+        return err!(LendingError::OrderExecutionSlippageExceeded);
+    }
+
+    if received_liquidity_amount < min_received_liquidity_amount {
+        xmsg!(
+            "Order executor's minimum received liquidity {} not met: {}",
+            min_received_liquidity_amount,
+            received_liquidity_amount,
+        );
+        return err!(LendingError::OrderExecutionSlippageExceeded);
+    }
+
+    Ok(())
+}
+
 pub fn validate_referrer_token_state(
     program_id: &Pubkey,
     referrer_token_state: &ReferrerTokenState,
@@ -921,10 +997,20 @@ pub fn obligation_ownership_transfer_precondition_checks(
     Ok(())
 }
 
+
+
+
+
+
+
 pub fn obligation_has_no_active_orders_check(obligation: &Obligation) -> Result<()> {
     require!(
         obligation.active_borrow_orders().next().is_none(),
         LendingError::ObligationHasActiveBorrowOrders,
+    );
+    require!(
+        obligation.active_obligation_orders().next().is_none(),
+        LendingError::ObligationHasActiveObligationOrders,
     );
     Ok(())
 }

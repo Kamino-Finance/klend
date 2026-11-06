@@ -5,22 +5,16 @@
 
 
 
-use std::{
-    cmp::{max, min, Ordering},
-    ops::RangeInclusive,
-};
+use std::cmp::{max, min, Ordering};
 
 use anchor_lang::{err, Result};
 
 use crate::{
     fraction::FractionExtra,
-    obligation_order_operations::{
-        find_applicable_obligation_order, ConditionHit, OpportunityType,
-    },
     utils::{fraction::fraction, secs, Fraction, DUST_LAMPORT_THRESHOLD, ELEVATION_GROUP_NONE},
     xmsg, CalculateLiquidationResult, LendingError, LendingMarket, LiquidationCheckInputs,
     LiquidationParams, LiquidationReason, Obligation, ObligationCollateral, ObligationLiquidity,
-    ObligationOrder, Reserve, ReserveConfig,
+    Reserve, ReserveConfig,
 };
 
 
@@ -32,17 +26,6 @@ pub fn max_liquidatable_borrowed_amount(
     liquidation_reason: LiquidationReason,
 ) -> Fraction {
     match liquidation_reason {
-       
-        LiquidationReason::ObligationOrder(obligation_order_index) => {
-            let obligation_order = &obligation.obligation_orders[obligation_order_index];
-            let order_size_amount = match obligation_order.opportunity_type() {
-                OpportunityType::DeleverageSingleDebtAmount => {
-                    obligation_order.opportunity_parameter()
-                }
-                OpportunityType::DeleverageAllDebt => Fraction::MAX,
-            };
-            order_size_amount.min(liquidity.borrowed_amount())
-        }
        
         LiquidationReason::ReserveDebtMaturityReached => liquidity.borrowed_amount(),
        
@@ -132,8 +115,8 @@ pub fn calculate_liquidation(
     let debt_amount_to_liquidate =
         Fraction::from_num(debt_amount_to_liquidate).min(borrowed_amount);
 
-    let is_below_min_full_liquidation_value_threshold = !matches!(liquidation_reason, LiquidationReason::ObligationOrder(_))
-        && borrowed_value < lending_market.min_full_liquidation_value_threshold;
+    let is_below_min_full_liquidation_value_threshold =
+        borrowed_value < lending_market.min_full_liquidation_value_threshold;
 
    
     let debt_liquidation_amount_f = if is_below_min_full_liquidation_value_threshold {
@@ -210,7 +193,6 @@ pub fn get_liquidation_params(
         .or_else(|| check_market_wide_autodeleverage_obligation(&inputs))
         .or_else(|| check_reserve_debt_maturity_reached(&inputs))
         .or_else(|| check_borrow_reserve_debt_term_reached(&inputs))
-        .or_else(|| check_obligation_order_execution(&inputs))
         .ok_or_else(|| {
             xmsg!(
                 "Obligation is healthy and cannot be liquidated, LTV: {}",
@@ -229,7 +211,6 @@ pub fn get_liquidation_params(
     if matches!(
         params.liquidation_reason,
         LiquidationReason::LtvExceeded
-            | LiquidationReason::ObligationOrder(..)
             | LiquidationReason::ReserveDebtMaturityReached
             | LiquidationReason::ObligationBorrowDebtTermReached(..)
     ) && !is_collateral_reserve_lowest_liquidation_ltv
@@ -642,49 +623,6 @@ fn check_borrow_reserve_debt_term_reached(
     })
 }
 
-
-fn check_obligation_order_execution(
-    &LiquidationCheckInputs {
-        lending_market,
-        collateral_reserve,
-        debt_reserve,
-        obligation,
-        ..
-    }: &LiquidationCheckInputs,
-) -> Option<LiquidationParams> {
-    let (order_index, condition_hit) = find_applicable_obligation_order(
-        collateral_reserve,
-        debt_reserve,
-        obligation,
-        lending_market.is_price_triggered_liquidation_disabled(),
-    )?;
-    let order = &obligation.obligation_orders[order_index];
-    if !lending_market.is_obligation_order_execution_enabled() {
-        xmsg!(
-            "Obligation's order {}. condition {} is hit with {}, but the feature is disabled",
-            order_index,
-            order.condition_to_display(),
-            condition_hit
-        );
-        return None;
-    }
-    xmsg!(
-        "Obligation's order {}. condition {} is hit with {}, enabling the liquidator to {}",
-        order_index,
-        order.condition_to_display(),
-        condition_hit,
-        order.opportunity_to_display()
-    );
-    Some(LiquidationParams {
-        liquidation_bonus_rate: calculate_order_execution_bonus_rate(
-            order,
-            &condition_hit,
-            obligation.no_bf_loan_to_value(),
-        ),
-        liquidation_reason: LiquidationReason::ObligationOrder(order_index),
-    })
-}
-
 pub(crate) fn calculate_autodeleverage_bonus_rate_from_coll_and_debt_reserves(
     lending_market: &LendingMarket,
     collateral_reserve: &Reserve,
@@ -875,60 +813,6 @@ pub(crate) fn calculate_autodeleverage_bonus_rate(
     } else {
         liquidation_bonus_rate
     }
-}
-
-
-
-
-
-
-
-
-
-
-
-pub(crate) fn calculate_order_execution_bonus_rate(
-    order: &ObligationOrder,
-    condition_hit: &ConditionHit,
-    user_no_bf_ltv: Fraction,
-) -> Fraction {
-    let theoretic_bonus_rate = match condition_hit.normalized_distance_from_threshold {
-        Some(normalized_distance_from_threshold) => interpolate_bonus_rate(
-            normalized_distance_from_threshold,
-            order.execution_bonus_rate_range(),
-        ),
-        None => get_constant_bonus_rate(order),
-    };
-   
-   
-    let diff_to_bad_debt = Fraction::ONE.saturating_sub(user_no_bf_ltv);
-    if theoretic_bonus_rate > diff_to_bad_debt {
-        xmsg!("At user_no_bf_ltv = {user_no_bf_ltv}, the calculated order execution bonus {theoretic_bonus_rate} is capped at {diff_to_bad_debt}", );
-        diff_to_bad_debt
-    } else {
-        theoretic_bonus_rate
-    }
-}
-
-fn interpolate_bonus_rate(
-    normalized_distance_from_threshold: Fraction,
-    bonus_rate_range: RangeInclusive<Fraction>,
-) -> Fraction {
-    bonus_rate_range.start()
-        + normalized_distance_from_threshold * (bonus_rate_range.end() - bonus_rate_range.start())
-}
-
-fn get_constant_bonus_rate(order: &ObligationOrder) -> Fraction {
-    let range = order.execution_bonus_rate_range();
-    if range.end() != range.start() {
-        panic!(
-            "The order validation should not have allowed non-constant bonus range when condition is {}; got: [{}; {}]",
-            order.condition_to_display(),
-            range.start(),
-            range.end()
-        );
-    }
-    *range.start()
 }
 
 

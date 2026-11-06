@@ -14,11 +14,13 @@ use strum::EnumIter;
 use strum::EnumString;
 
 use crate::{
-    obligation_order_operations::{ConditionType, OpportunityType},
+    obligation_order_operations::{
+        ConditionType, OpportunityType, OrderCondition, OrderOpportunity, OrderSize,
+    },
     state::{LastUpdate, LtvMaxWithdrawalCheck, Reserve},
     utils::{
-        accounts::default_array, BigFraction, Fraction, FractionExtra, IterExt,
-        ELEVATION_GROUP_NONE, OBLIGATION_SIZE, SECONDS_PER_DAY, U256,
+        accounts::default_array, BigFraction, Fraction, FractionExtra, ELEVATION_GROUP_NONE,
+        OBLIGATION_SIZE, SECONDS_PER_DAY, U256,
     },
     xmsg, BigFractionBytes, LendingError, ReserveConfig,
 };
@@ -247,6 +249,10 @@ impl Obligation {
     pub fn loan_to_value(&self) -> Fraction {
         Fraction::from_bits(self.borrow_factor_adjusted_debt_value_sf)
             / Fraction::from_bits(self.deposited_value_sf)
+    }
+
+    pub fn deposited_value(&self) -> Fraction {
+        Fraction::from_bits(self.deposited_value_sf)
     }
 
     pub fn no_bf_loan_to_value(&self) -> Fraction {
@@ -523,6 +529,13 @@ impl Obligation {
     }
 
 
+    pub fn active_obligation_orders(&self) -> impl Iterator<Item = &ObligationOrder> {
+        self.obligation_orders
+            .iter()
+            .filter(|order| order.is_active())
+    }
+
+
 
     pub fn clear_expired_borrow_orders(&mut self, timestamp: u64) {
         for borrow_order in
@@ -618,24 +631,6 @@ impl Obligation {
 
     pub fn has_obsolete_reserves(&self) -> bool {
         self.num_of_obsolete_borrow_reserves > 0 || self.num_of_obsolete_deposit_reserves > 0
-    }
-
-
-
-
-
-
-    pub fn single_debt(&self) -> Option<&ObligationLiquidity> {
-        self.active_borrows().only_element()
-    }
-
-
-
-
-
-
-    pub fn single_collateral(&self) -> Option<&ObligationCollateral> {
-        self.active_deposits().only_element()
     }
 
 
@@ -819,6 +814,11 @@ impl ObligationCollateral {
 
     pub fn is_active(&self) -> bool {
         self.deposit_reserve != Pubkey::default()
+    }
+
+
+    pub fn market_value(&self) -> Fraction {
+        Fraction::from_bits(self.market_value_sf)
     }
 }
 
@@ -1440,9 +1440,6 @@ pub struct ObligationOrder {
 
 
 
-
-
-
     pub opportunity_parameter_sf: u128,
 
 
@@ -1452,7 +1449,9 @@ pub struct ObligationOrder {
 
 
 
+
     pub min_execution_bonus_bps: u16,
+
 
 
 
@@ -1484,13 +1483,44 @@ pub struct ObligationOrder {
     pub opportunity_type: u8,
 
 
+    pub padding1: [u8; 2],
 
 
-    pub padding1: [u8; 10],
+
+
+    pub max_borrow_rate_bps: u32,
 
 
 
-    pub padding2: [u128; 5],
+
+
+
+
+
+
+
+
+
+
+    pub min_debt_term_seconds: u32,
+
+
+
+
+
+
+    pub debt_mint_address: Pubkey,
+
+
+
+
+
+
+    pub collateral_mint_address: Pubkey,
+
+
+
+    pub padding2: [u128; 1],
 }
 
 impl ObligationOrder {
@@ -1516,6 +1546,81 @@ impl ObligationOrder {
 
 
 
+    pub fn condition(&self) -> OrderCondition {
+        let threshold = self.condition_threshold();
+        match self.condition_type() {
+            ConditionType::Never => OrderCondition::Never,
+            ConditionType::UserLtvAbove => OrderCondition::UserLtvAbove(threshold),
+            ConditionType::UserLtvBelow => OrderCondition::UserLtvBelow(threshold),
+            ConditionType::DebtCollPriceRatioAbove => {
+                OrderCondition::DebtCollPriceRatioAbove(threshold)
+            }
+            ConditionType::DebtCollPriceRatioBelow => {
+                OrderCondition::DebtCollPriceRatioBelow(threshold)
+            }
+            ConditionType::Always => OrderCondition::Always,
+            ConditionType::LiquidationLtvCloserThan => {
+                OrderCondition::LiquidationLtvCloserThan(threshold)
+            }
+        }
+    }
+
+
+
+    pub fn opportunity(&self) -> OrderOpportunity {
+        let parameter = self.opportunity_parameter();
+        match self.opportunity_type() {
+            OpportunityType::DeleverageDebtAmount => {
+                OrderOpportunity::Deleverage(OrderSize::DebtAmount(parameter))
+            }
+        }
+    }
+
+
+
+
+
+
+
+    pub fn check_expected_opportunity_type(
+        &self,
+        expected_opportunity_type: OpportunityType,
+    ) -> Result<()> {
+        if self.opportunity_type() != expected_opportunity_type {
+            xmsg!(
+                "Order's opportunity type {:?} does not match the expected {:?}",
+                self.opportunity_type(),
+                expected_opportunity_type
+            );
+            return err!(LendingError::ObligationOrderOpportunityTypeMismatch);
+        }
+        Ok(())
+    }
+
+
+    pub fn check_reserve_requirements(
+        &self,
+        debt_reserve: &Reserve,
+        collateral_reserve: &Reserve,
+        timestamp: u64,
+    ) -> Result<()> {
+       
+        if !Self::reserve_mint_accepted(self.collateral_mint_address, collateral_reserve) {
+            return err!(LendingError::ObligationOrderCollateralMintMismatch);
+        }
+       
+        if !Self::reserve_mint_accepted(self.debt_mint_address, debt_reserve) {
+            return err!(LendingError::ObligationOrderDebtMintMismatch);
+        }
+       
+        if let Some(reserve_constraint) = self.reserve_constraint() {
+            reserve_constraint.check_satisfying(&debt_reserve.config, timestamp)?;
+        }
+        Ok(())
+    }
+
+
+
 
 
 
@@ -1537,48 +1642,38 @@ impl ObligationOrder {
     }
 
 
-    pub fn consume(&mut self, debt_repay_amount: u64) {
+
+
+
+    pub fn consume(&mut self, debt_amount: u64) -> Option<Fraction> {
+        self.consume_fraction(Fraction::from_num(debt_amount))
+    }
+
+
+
+
+    pub fn consume_fully(&mut self) -> Option<Fraction> {
+        self.consume_fraction(Fraction::MAX)
+    }
+
+    fn consume_fraction(&mut self, debt_amount: Fraction) -> Option<Fraction> {
         match self.opportunity_type() {
-            OpportunityType::DeleverageSingleDebtAmount => {
-                self.use_deleverage_single_debt_amount_opportunity(debt_repay_amount);
-            }
-            OpportunityType::DeleverageAllDebt => {
-                xmsg!("An opportunity to liquidate all debt was used by liquidator repaying amount {} (order unaffected)", debt_repay_amount);
+            OpportunityType::DeleverageDebtAmount => {
+                Some(self.use_debt_amount_opportunity("repay", debt_amount))
             }
         }
     }
 
 
-    pub fn condition_to_display(&self) -> impl Display {
-        match self.condition_type() {
-            ConditionType::Never => "<inactive>".to_string(),
-            ConditionType::UserLtvAbove => format!("LTV > {}", self.condition_threshold()),
-            ConditionType::UserLtvBelow => format!("LTV < {}", self.condition_threshold()),
-            ConditionType::DebtCollPriceRatioAbove => format!(
-                "ratio of (debt token price / collateral token price) > {}",
-                self.condition_threshold()
-            ),
-            ConditionType::DebtCollPriceRatioBelow => format!(
-                "ratio of (debt token price / collateral token price) < {}",
-                self.condition_threshold()
-            ),
-            ConditionType::Always => "<unconditional>".to_string(),
-            ConditionType::LiquidationLtvCloserThan => format!(
-                "LTV closer than {} to liquidation",
-                self.condition_threshold()
-            ),
-        }
-    }
 
-
-    pub fn opportunity_to_display(&self) -> impl Display {
-        match self.opportunity_type() {
-            OpportunityType::DeleverageSingleDebtAmount => format!(
-                "repay amount {} of single debt",
-                self.opportunity_parameter()
-            ),
-            OpportunityType::DeleverageAllDebt => "repay all debt".to_string(),
+    fn reserve_constraint(&self) -> Option<DebtReserveConstraint> {
+        if self.max_borrow_rate_bps == 0 {
+            return None;
         }
+        Some(DebtReserveConstraint {
+            max_borrow_rate_bps: self.max_borrow_rate_bps,
+            min_debt_term_seconds: u64::from(self.min_debt_term_seconds),
+        })
     }
 
 
@@ -1588,19 +1683,38 @@ impl ObligationOrder {
 
 
 
-    fn use_deleverage_single_debt_amount_opportunity(&mut self, debt_repay_amount: u64) {
-        let liquidatable_debt_amount = self.opportunity_parameter();
-        let updated_liquidatable_debt_amount =
-            liquidatable_debt_amount.saturating_sub(Fraction::from_num(debt_repay_amount));
 
-        if updated_liquidatable_debt_amount.is_zero() {
-            xmsg!("An opportunity to liquidate {} of single debt was fully used by liquidator repaying amount {} (order cleared)", liquidatable_debt_amount, debt_repay_amount);
+
+
+    fn use_debt_amount_opportunity(
+        &mut self,
+        description: &str,
+        debt_amount: Fraction,
+    ) -> Fraction {
+        let size = self.opportunity_parameter();
+        let updated_size = size.saturating_sub(debt_amount);
+
+        if updated_size.is_zero() {
+            xmsg!(
+                "An opportunity to {} {} of debt token {} was fully used by executor - order cleared",
+                description,
+                size.to_display(),
+                self.debt_mint_address
+            );
             *self = ObligationOrder::default();
-            return;
+        } else {
+            xmsg!(
+                "An opportunity to {} {} of debt token {} was partially used by executor (amount {}) - {} left on the order",
+                description,
+                size.to_display(),
+                self.debt_mint_address,
+                debt_amount.to_display(),
+                updated_size
+            );
+            self.opportunity_parameter_sf = updated_size.to_bits();
         }
 
-        xmsg!("An opportunity to liquidate {} of single debt was partially used by liquidator repaying amount {} ({} left on the order)", liquidatable_debt_amount, debt_repay_amount, updated_liquidatable_debt_amount);
-        self.opportunity_parameter_sf = updated_liquidatable_debt_amount.to_bits();
+        updated_size
     }
 
 
@@ -1608,7 +1722,18 @@ impl ObligationOrder {
     pub fn is_active(&self) -> bool {
         self.condition_type != 0
     }
+
+
+    fn reserve_mint_accepted(chosen_mint: Pubkey, reserve: &Reserve) -> bool {
+        chosen_mint == Pubkey::default() || chosen_mint == reserve.liquidity.mint_pubkey
+    }
 }
+
+
+
+
+
+
 
 
 

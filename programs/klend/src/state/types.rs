@@ -126,7 +126,6 @@ pub struct CalculateLiquidationResult {
 pub enum LiquidationReason {
 
 
-
     LtvExceeded,
 
 
@@ -134,13 +133,6 @@ pub enum LiquidationReason {
 
 
     MarketWideDeleveraging,
-
-
-
-
-
-
-    ObligationOrder(usize),
 
 
     ReserveDebtMaturityReached,
@@ -198,6 +190,45 @@ pub struct LiquidateAndRedeemResult {
     pub total_withdraw_liquidity_amount: Option<(u64, u64)>,
 
     pub liquidation_reason: LiquidationReason,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExecuteObligationOrderResult {
+    Deleverage(ExecuteDeleverageOrderResult),
+}
+
+impl ExecuteObligationOrderResult {
+
+    pub fn executor_given_liquidity(&self) -> u64 {
+        match self {
+            Self::Deleverage(result) => result.repay_amount + result.early_repay_penalty,
+        }
+    }
+
+
+    pub fn executor_received_liquidity(&self) -> u64 {
+        match self {
+            Self::Deleverage(result) => result.withdraw_liquidity_amount - result.protocol_fee,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecuteDeleverageOrderResult {
+
+    pub repay_amount: u64,
+
+    pub early_repay_penalty: u64,
+
+
+    pub withdraw_collateral_amount: u64,
+
+    pub withdraw_liquidity_amount: u64,
+
+    pub protocol_fee: u64,
+
+    pub obligation_closed: bool,
 }
 
 pub struct LiquidationCheckInputs<'l> {
@@ -265,31 +296,10 @@ impl RedeemCollateralOptions {
     };
 
 
-
-    pub const FOR_PROTOCOL_ENFORCED_LIQUIDATION: Self = Self {
+    pub const FOR_LIQUIDATION: Self = Self {
         add_amount_to_withdrawal_caps: false,
         use_withdraw_queue: true,
     };
-
-
-
-    pub const FOR_USER_REQUESTED_LIQUIDATION: Self = Self {
-        add_amount_to_withdrawal_caps: true,
-        use_withdraw_queue: false,
-    };
-
-    pub fn resolve(liquidation_reason: LiquidationReason) -> Self {
-        match liquidation_reason {
-            LiquidationReason::LtvExceeded
-            | LiquidationReason::IndividualDeleveraging
-            | LiquidationReason::MarketWideDeleveraging
-            | LiquidationReason::ReserveDebtMaturityReached
-            | LiquidationReason::ObligationBorrowDebtTermReached(_) => {
-                Self::FOR_PROTOCOL_ENFORCED_LIQUIDATION
-            }
-            LiquidationReason::ObligationOrder(_) => Self::FOR_USER_REQUESTED_LIQUIDATION,
-        }
-    }
 }
 
 #[derive(Debug)]

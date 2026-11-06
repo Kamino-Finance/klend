@@ -151,7 +151,6 @@ pub struct LendingMarket {
 
 
 
-
     #[cfg_attr(feature = "serde", serde(with = "serde_bool_u8"))]
     pub price_triggered_liquidation_disabled: u8,
 

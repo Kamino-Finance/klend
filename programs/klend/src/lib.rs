@@ -376,6 +376,51 @@ pub mod kamino_lending {
         )
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #[access_control(emergency_mode_disabled(&ctx.accounts.order_execution_accounts.lending_market))]
+    pub fn execute_obligation_order<'info>(
+        ctx: Context<'_, '_, '_, 'info, ExecuteObligationOrder<'info>>,
+        order_index: u8,
+        expected_opportunity_type: u8,
+        max_given_liquidity_amount: u64,
+        min_received_liquidity_amount: u64,
+    ) -> Result<()> {
+        handler_execute_obligation_order::process(
+            ctx,
+            order_index,
+            expected_opportunity_type,
+            max_given_liquidity_amount,
+            min_received_liquidity_amount,
+        )
+    }
+
     #[access_control(emergency_mode_disabled(&ctx.accounts.lending_market))]
     pub fn flash_repay_reserve_liquidity(
         ctx: Context<FlashRepayReserveLiquidity>,
@@ -439,8 +484,14 @@ pub mod kamino_lending {
         ctx: Context<SetObligationOrder>,
         index: u8,
         order: ObligationOrder,
+        min_expected_current_opportunity_parameter_sf: u128,
     ) -> Result<()> {
-        handler_set_obligation_order::process(ctx, index, order)
+        handler_set_obligation_order::process(
+            ctx,
+            index,
+            order,
+            min_expected_current_opportunity_parameter_sf,
+        )
     }
 
     #[deprecated(
@@ -984,6 +1035,26 @@ pub enum LendingError {
     ReserveRewardsDisabled,
     #[msg("Transaction includes a nonce instruction, which is not allowed for admin operations")]
     TransactionIncludesNonceInstruction,
+    #[msg("Execution of obligation orders is disabled")]
+    ObligationOrderExecutionDisabled,
+    #[msg("Obligation order at the given index is inactive or its condition is not currently met")]
+    ObligationOrderConditionNotMet,
+    #[msg("Order execution breaches the executor's slippage bounds: liquidity given exceeds the max, or received is below the min")]
+    OrderExecutionSlippageExceeded,
+    #[msg("The given debt reserve's mint does not match the order's debt mint")]
+    ObligationOrderDebtMintMismatch,
+    #[msg("Executed obligation order amount has value below the market-configured minimum")]
+    ObligationOrderExecutionValueTooSmall,
+    #[msg(
+        "Obligation order's remaining amount would have value below the market-configured minimum"
+    )]
+    ObligationOrderRemainingValueTooSmall,
+    #[msg("The given collateral reserve's mint does not match the order's collateral mint")]
+    ObligationOrderCollateralMintMismatch,
+    #[msg("The order's opportunity type does not match the one expected by the executor")]
+    ObligationOrderOpportunityTypeMismatch,
+    #[msg("Obligation has active obligation orders")]
+    ObligationHasActiveObligationOrders,
 }
 
 pub type LendingResult<T = ()> = std::result::Result<T, LendingError>;
