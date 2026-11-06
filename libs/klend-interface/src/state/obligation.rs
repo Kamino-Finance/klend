@@ -231,8 +231,12 @@ pub struct ObligationOrder {
     pub max_execution_bonus_bps: u16,
     pub condition_type: u8,
     pub opportunity_type: u8,
-    pub padding1: [u8; 10],
-    pub padding2: [PodU128; 5],
+    pub padding1: [u8; 2],
+    pub max_borrow_rate_bps: u32,
+    pub min_debt_term_seconds: u32,
+    pub debt_mint_address: Pubkey,
+    pub collateral_mint_address: Pubkey,
+    pub padding2: [PodU128; 1],
 }
 
 /// Owner-defined, permissionlessly-executed borrow order.

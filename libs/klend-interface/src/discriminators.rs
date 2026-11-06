@@ -238,6 +238,7 @@ disc!(SET_BORROW_ORDER, "set_borrow_order");
 disc!(SET_BORROW_ORDER_V2, "set_borrow_order_v2");
 disc!(FILL_BORROW_ORDER, "fill_borrow_order");
 disc!(FILL_BORROW_ORDER_V2, "fill_borrow_order_v2");
+disc!(EXECUTE_OBLIGATION_ORDER, "execute_obligation_order");
 
 // Referrer
 disc!(INIT_REFERRER_TOKEN_STATE, "init_referrer_token_state");
@@ -312,6 +313,7 @@ pub enum KlendInstruction {
     SetBorrowOrderV2,
     FillBorrowOrder,
     FillBorrowOrderV2,
+    ExecuteObligationOrder,
     InitReferrerTokenState,
     InitUserMetadata,
     WithdrawReferrerFees,
@@ -397,6 +399,7 @@ pub fn identify_instruction(data: &[u8]) -> Option<KlendInstruction> {
         d if d == SET_BORROW_ORDER_V2 => Some(KlendInstruction::SetBorrowOrderV2),
         d if d == FILL_BORROW_ORDER => Some(KlendInstruction::FillBorrowOrder),
         d if d == FILL_BORROW_ORDER_V2 => Some(KlendInstruction::FillBorrowOrderV2),
+        d if d == EXECUTE_OBLIGATION_ORDER => Some(KlendInstruction::ExecuteObligationOrder),
         d if d == INIT_REFERRER_TOKEN_STATE => Some(KlendInstruction::InitReferrerTokenState),
         d if d == INIT_USER_METADATA => Some(KlendInstruction::InitUserMetadata),
         d if d == WITHDRAW_REFERRER_FEES => Some(KlendInstruction::WithdrawReferrerFees),
@@ -511,6 +514,7 @@ mod tests {
         check_disc!("set_borrow_order_v2", SET_BORROW_ORDER_V2);
         check_disc!("fill_borrow_order", FILL_BORROW_ORDER);
         check_disc!("fill_borrow_order_v2", FILL_BORROW_ORDER_V2);
+        check_disc!("execute_obligation_order", EXECUTE_OBLIGATION_ORDER);
         check_disc!("init_referrer_token_state", INIT_REFERRER_TOKEN_STATE);
         check_disc!("init_user_metadata", INIT_USER_METADATA);
         check_disc!("withdraw_referrer_fees", WITHDRAW_REFERRER_FEES);
