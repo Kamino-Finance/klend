@@ -7,6 +7,7 @@ mod utils;
 
 use anchor_lang::prelude::*;
 use types::{Price, TimestampedPrice};
+pub use utils::MAX_TEN_POW_EXPONENT;
 
 use self::{
     checks::get_validated_price, pyth::get_pyth_price_and_twap, scope::get_scope_price_and_twap,

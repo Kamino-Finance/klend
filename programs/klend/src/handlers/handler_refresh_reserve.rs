@@ -22,11 +22,7 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
 
     let price_res = if reserve.config.is_emergency_mode() {
         None
-    } else if lending_operations::is_price_refresh_needed(
-        reserve,
-        lending_market,
-        clock.unix_timestamp,
-    ) {
+    } else {
         reserve.config.token_info.validate_token_info_config(
             ctx.accounts.pyth_oracle.as_ref(),
             ctx.accounts.switchboard_price_oracle.as_ref(),
@@ -42,8 +38,6 @@ pub fn process(ctx: Context<RefreshReserve>) -> Result<()> {
             ctx.accounts.scope_prices.as_ref(),
             clock,
         )?
-    } else {
-        None
     };
 
     lending_operations::refresh_reserve(

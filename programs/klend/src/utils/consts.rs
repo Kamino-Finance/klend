@@ -34,6 +34,16 @@ pub const FULL_BPS: u16 = 10_000;
 
 
 
+
+pub const MAX_DELEVERAGING_BPS_PER_DAY: u64 = 10_000_000_000;
+
+
+
+
+pub const MAX_DEBT_TERM_SECONDS: u64 = 100 * SECONDS_PER_YEAR;
+
+
+
 pub const UNINITIALIZED_VERSION: u8 = 0;
 
 

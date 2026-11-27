@@ -817,6 +817,7 @@ pub(crate) fn calculate_autodeleverage_bonus_rate(
 
 
 
+
 pub fn calculate_protocol_liquidation_fee(
     amount_liquidated: u64,
     liquidation_bonus_rate: Fraction,
@@ -839,7 +840,6 @@ pub fn calculate_protocol_liquidation_fee(
     let bonus = amount_liquidated - (amount_liquidated / bonus_multiplier);
 
     let protocol_fee = bonus * protocol_fee_rate;
-    let protocol_fee: u64 = protocol_fee.to_ceil();
-
-    max(protocol_fee, 1)
+   
+    protocol_fee.to_ceil()
 }

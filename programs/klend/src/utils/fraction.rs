@@ -104,13 +104,15 @@ pub trait FractionExtra {
 impl FractionExtra for Fraction {
     #[inline]
     fn to_percent<Dst: FromFixed>(&self) -> Option<Dst> {
-        self.checked_mul(fraction!(100))?.round().checked_to_num()
+        self.checked_mul(fraction!(100))?
+            .checked_round()?
+            .checked_to_num()
     }
 
     #[inline]
     fn to_bps<Dst: FromFixed>(&self) -> Option<Dst> {
         self.checked_mul(fraction!(10_000))?
-            .round()
+            .checked_round()?
             .checked_to_num()
     }
 
@@ -466,5 +468,10 @@ fn panicking_shl(number: U256, bit_count: u32) -> U256 {
     }
     result
 }
+
+
+
+
+
 
 

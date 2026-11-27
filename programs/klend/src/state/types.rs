@@ -185,9 +185,7 @@ pub struct LiquidateAndRedeemResult {
 
     pub withdraw_amount: u64,
 
-    pub withdraw_collateral_amount: u64,
-
-    pub total_withdraw_liquidity_amount: Option<(u64, u64)>,
+    pub redeem: PostLiquidateRedeemResult,
 
     pub liquidation_reason: LiquidationReason,
 }
@@ -229,6 +227,24 @@ pub struct ExecuteDeleverageOrderResult {
     pub protocol_fee: u64,
 
     pub obligation_closed: bool,
+}
+
+
+
+
+
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PostLiquidateRedeemResult {
+
+    pub protocol_fee_collateral: u64,
+
+    pub liquidator_collateral: u64,
+
+    pub liquidator_redeemed_collateral: u64,
+
+    pub liquidator_redeemed_liquidity: u64,
 }
 
 pub struct LiquidationCheckInputs<'l> {

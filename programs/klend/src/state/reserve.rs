@@ -488,6 +488,34 @@ impl Reserve {
         Fraction::from(self.config.borrow_limit).saturating_sub(self.liquidity.total_borrow())
     }
 
+
+
+
+
+
+
+    pub fn add_debt_against_this_reserve_in_elevation_group(
+        &mut self,
+        elevation_group_index: usize,
+        amount: u64,
+    ) -> Result<u64> {
+        let debt_limit = self
+            .config
+            .borrow_limit_against_this_collateral_in_elevation_group[elevation_group_index];
+        let new_amount = self.borrowed_amounts_against_this_reserve_in_elevation_groups
+            [elevation_group_index]
+            .checked_add(amount)
+            .ok_or_else(|| error!(LendingError::ElevationGroupBorrowLimitExceeded))?;
+        require_gte!(
+            debt_limit,
+            new_amount,
+            LendingError::ElevationGroupBorrowLimitExceeded
+        );
+        self.borrowed_amounts_against_this_reserve_in_elevation_groups[elevation_group_index] =
+            new_amount;
+        Ok(new_amount)
+    }
+
     pub fn add_farm(&mut self, farm_state: &Pubkey, mode: ReserveFarmKind) {
         match mode {
             ReserveFarmKind::Collateral => self.farm_collateral = *farm_state,
@@ -1302,6 +1330,25 @@ impl ReserveLiquidity {
     }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+    pub fn add_liquidation_protocol_fee(&mut self, fee_amount: Fraction) -> LendingResult<()> {
+        let accumulated_protocol_fees_f = Fraction::from_bits(self.accumulated_protocol_fees_sf);
+        self.accumulated_protocol_fees_sf = (accumulated_protocol_fees_f + fee_amount).to_bits();
+        Ok(())
+    }
+
+
     pub fn utilization_rate(&self) -> Fraction {
         let total_supply = self.total_supply();
         if total_supply == Fraction::ZERO {
@@ -1401,10 +1448,31 @@ impl ReserveLiquidity {
 
 
 
+
+
+
+
+
+
+
+
+
     pub fn forgive_debt(&mut self, liquidity_amount: Fraction) {
         let amt = Fraction::from_bits(self.borrowed_amount_sf);
-        let new_amt = amt - liquidity_amount;
+        let new_amt = amt.saturating_sub(liquidity_amount);
         self.borrowed_amount_sf = new_amt.to_bits();
+
+       
+        let mut remaining = Fraction::from(self.total_available_amount) + new_amt;
+        for fees_sf in [
+            &mut self.accumulated_referrer_fees_sf,
+            &mut self.pending_referrer_fees_sf,    
+            &mut self.accumulated_protocol_fees_sf,
+        ] {
+            let fees = min(Fraction::from_bits(*fees_sf), remaining);
+            remaining -= fees;
+            *fees_sf = fees.to_bits();
+        }
     }
 
     pub fn get_market_price(&self) -> Fraction {

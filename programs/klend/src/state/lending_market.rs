@@ -62,9 +62,12 @@ pub struct LendingMarket {
     pub borrow_disabled: u8,
 
 
-
-
-    pub price_refresh_trigger_to_max_age_pct: u8,
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_deserializing, skip_serializing, default)
+    )]
+    #[derivative(Debug = "ignore")]
+    pub reserved2: [u8; 1],
 
 
     pub liquidation_max_debt_close_factor_pct: u8,
@@ -333,7 +336,7 @@ impl Default for LendingMarket {
             reserved0: default_array(),
             reserved1: default_array(),
             referral_fee_bps: 0,
-            price_refresh_trigger_to_max_age_pct: 0,
+            reserved2: default_array(),
             elevation_groups: [ElevationGroup::default(); 32],
             min_value_skip_liquidation_ltv_checks: 0,
             min_value_skip_liquidation_bf_checks: 0,

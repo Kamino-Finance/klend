@@ -875,8 +875,8 @@ pub enum LendingError {
     InvalidTokenAccount,
     #[msg("Can't deposit into this reserve outside elevation group")]
     DepositDisabledOutsideElevationGroup,
-    #[msg("Cannot calculate referral amount due to slots mismatch")]
-    CannotCalculateReferralAmountDueToSlotsMismatch,
+    #[msg("[DEPRECATED] Cannot calculate referral amount due to slots mismatch")]
+    DeprecatedCannotCalculateReferralAmountDueToSlotsMismatch,
     #[msg("Obligation owners must match")]
     ObligationOwnersMustMatch,
     #[msg("Obligations must match")]
