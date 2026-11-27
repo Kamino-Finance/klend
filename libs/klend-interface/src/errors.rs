@@ -199,7 +199,7 @@ define_lending_errors! {
     UnsupportedTokenExtension = 108 => "Mint has a token (2022) extension that is not supported",
     InvalidTokenAccount = 109 => "Can't have an spl token mint with a t22 account",
     DepositDisabledOutsideElevationGroup = 110 => "Can't deposit into this reserve outside elevation group",
-    CannotCalculateReferralAmountDueToSlotsMismatch = 111 => "Cannot calculate referral amount due to slots mismatch",
+    DeprecatedCannotCalculateReferralAmountDueToSlotsMismatch = 111 => "[DEPRECATED] Cannot calculate referral amount due to slots mismatch",
     ObligationOwnersMustMatch = 112 => "Obligation owners must match",
     ObligationsMustMatch = 113 => "Obligations must match",
     LendingMarketsMustMatch = 114 => "Lending markets must match",

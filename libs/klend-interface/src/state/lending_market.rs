@@ -22,7 +22,7 @@ pub struct LendingMarket {
     pub emergency_mode: u8,
     pub autodeleverage_enabled: u8,
     pub borrow_disabled: u8,
-    pub price_refresh_trigger_to_max_age_pct: u8,
+    pub reserved2: [u8; 1],
     pub liquidation_max_debt_close_factor_pct: u8,
     pub insolvency_risk_unhealthy_ltv_pct: u8,
     pub min_full_liquidation_value_threshold: u64,
