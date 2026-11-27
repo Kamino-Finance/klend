@@ -3,7 +3,9 @@ use anchor_lang::{prelude::*, solana_program::clock};
 use crate::{
     utils::{
         prices::{
-            types::TimestampedPriceWithTwap, utils::price_to_fraction, GetPriceResult, Price,
+            types::TimestampedPriceWithTwap,
+            utils::{price_to_fraction, MAX_TEN_POW_EXPONENT},
+            GetPriceResult, Price,
         },
         Fraction, FULL_BPS,
     },
@@ -147,10 +149,26 @@ fn check_twap_in_tolerance(price: Fraction, twap: Fraction, token_info: &TokenIn
 }
 
 fn check_price_heuristics(token_price: Fraction, heuristic: &PriceHeuristic) -> Result<()> {
+    if heuristic.lower == 0 && heuristic.upper == 0 {
+        return Ok(());
+    }
+
+    let Some(exp) = u32::try_from(heuristic.exp)
+        .ok()
+        .filter(|exp| *exp <= MAX_TEN_POW_EXPONENT)
+    else {
+        xmsg!(
+            "Heuristic exponent {} is greater than the supported maximum of {}",
+            heuristic.exp,
+            MAX_TEN_POW_EXPONENT
+        );
+        return err!(LendingError::InvalidOracleConfig);
+    };
+
     if heuristic.lower > 0 {
         let lower_heuristic = Price {
             value: heuristic.lower,
-            exp: heuristic.exp.try_into().unwrap(),
+            exp,
         };
 
         let lower_heuristic = price_to_fraction(lower_heuristic);
@@ -163,7 +181,7 @@ fn check_price_heuristics(token_price: Fraction, heuristic: &PriceHeuristic) -> 
     if heuristic.upper > 0 {
         let upper_heuristic = Price {
             value: heuristic.upper,
-            exp: heuristic.exp.try_into().unwrap(),
+            exp,
         };
 
         let upper_heuristic = price_to_fraction(upper_heuristic);
@@ -175,5 +193,9 @@ fn check_price_heuristics(token_price: Fraction, heuristic: &PriceHeuristic) -> 
 
     Ok(())
 }
+
+
+
+
 
 

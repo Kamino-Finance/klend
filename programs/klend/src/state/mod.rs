@@ -232,7 +232,7 @@ pub enum UpdateLendingMarketMode {
     UpdateElevationGroup = 9,
     UpdateReferralFeeBps = 10,
     DeprecatedUpdateMultiplierPoints = 11,
-    UpdatePriceRefreshTriggerToMaxAgePct = 12,
+    DeprecatedUpdatePriceRefreshTriggerToMaxAgePct = 12,
     UpdateAutodeleverageEnabled = 13,
     UpdateBorrowingDisabled = 14,
     UpdateMinNetValueObligationPostAction = 15,
@@ -303,6 +303,7 @@ pub mod serde_iter {
                 UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints
                     | UpdateLendingMarketMode::DeprecatedUpdateGlobalUnhealthyBorrow
                     | UpdateLendingMarketMode::DeprecatedUpdateReserveRewardsMaxAprPct
+                    | UpdateLendingMarketMode::DeprecatedUpdatePriceRefreshTriggerToMaxAgePct
             )
         }
 

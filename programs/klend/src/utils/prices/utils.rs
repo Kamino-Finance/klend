@@ -4,6 +4,9 @@ use crate::{
 };
 
 
+pub const MAX_TEN_POW_EXPONENT: u32 = 36;
+
+
 
 
 

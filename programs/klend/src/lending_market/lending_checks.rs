@@ -461,7 +461,11 @@ pub fn refresh_obligation_farms_for_reserve_checks(
     }
 
     let reserve = &accounts.reserve.load()?;
-    check_reserve_status_and_version(reserve)?;
+   
+   
+   
+   
+    check_reserve_status(reserve)?;
 
     Ok(())
 }

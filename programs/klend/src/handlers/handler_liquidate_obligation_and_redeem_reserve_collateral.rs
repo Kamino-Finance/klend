@@ -19,7 +19,7 @@ use crate::{
         permissioning::{check_permissions_and_strip, PermissionedOp},
         seeds, token_transfer, FatAccountLoader,
     },
-    xmsg, LendingAction, LiquidateAndRedeemResult, ReserveFarmKind,
+    xmsg, LendingAction, LiquidateAndRedeemResult, PostLiquidateRedeemResult, ReserveFarmKind,
 };
 
 
@@ -151,9 +151,13 @@ fn process_impl(
 
     let LiquidateAndRedeemResult {
         repay_amount,
-        withdraw_collateral_amount,
-        withdraw_amount,
-        total_withdraw_liquidity_amount,
+        redeem:
+            PostLiquidateRedeemResult {
+                protocol_fee_collateral,
+                liquidator_collateral,
+                liquidator_redeemed_collateral,
+                liquidator_redeemed_liquidity,
+            },
         ..
     } = lending_operations::liquidate_and_redeem(
         lending_market,
@@ -179,18 +183,37 @@ fn process_impl(
         accounts.repay_reserve_liquidity_mint.decimals,
     )?;
 
-    token_transfer::withdraw_obligation_collateral_transfer(
-        accounts.collateral_token_program.to_account_info(),
-        accounts.user_destination_collateral.to_account_info(),
-        accounts
-            .withdraw_reserve_collateral_supply
-            .to_account_info(),
-        accounts.lending_market_authority.to_account_info(),
-        authority_signer_seeds,
-        withdraw_amount,
-    )?;
+   
+   
+    if protocol_fee_collateral != 0 {
+        token_transfer::burn_reserve_collateral_fee(
+            accounts.collateral_token_program.to_account_info(),
+            accounts.withdraw_reserve_collateral_mint.to_account_info(),
+            accounts
+                .withdraw_reserve_collateral_supply
+                .to_account_info(),
+            accounts.lending_market_authority.to_account_info(),
+            authority_signer_seeds,
+            protocol_fee_collateral,
+        )?;
+    }
 
-    if let Some((withdraw_liquidity_amount, protocol_fee)) = total_withdraw_liquidity_amount {
+   
+    if liquidator_collateral != 0 {
+        token_transfer::withdraw_obligation_collateral_transfer(
+            accounts.collateral_token_program.to_account_info(),
+            accounts.user_destination_collateral.to_account_info(),
+            accounts
+                .withdraw_reserve_collateral_supply
+                .to_account_info(),
+            accounts.lending_market_authority.to_account_info(),
+            authority_signer_seeds,
+            liquidator_collateral,
+        )?;
+    }
+
+   
+    if liquidator_redeemed_collateral != 0 {
         token_transfer::redeem_reserve_collateral_transfer(
             accounts.collateral_token_program.to_account_info(),
             accounts.withdraw_liquidity_token_program.to_account_info(),
@@ -202,23 +225,15 @@ fn process_impl(
             accounts.user_destination_liquidity.to_account_info(),
             accounts.lending_market_authority.to_account_info(),
             authority_signer_seeds,
-            withdraw_collateral_amount,
-            withdraw_liquidity_amount,
+            liquidator_redeemed_collateral,
+            liquidator_redeemed_liquidity,
             accounts.withdraw_reserve_liquidity_mint.decimals,
         )?;
+    }
 
-       
-        token_transfer::reserve_fee_transfer(
-            accounts.withdraw_liquidity_token_program.to_account_info(),
-            accounts.withdraw_reserve_liquidity_mint.to_account_info(),
-            accounts.user_destination_liquidity.to_account_info(),
-            accounts
-                .withdraw_reserve_liquidity_fee_receiver
-                .to_account_info(),
-            accounts.liquidator.to_account_info(),
-            protocol_fee,
-            accounts.withdraw_reserve_liquidity_mint.decimals,
-        )?;
+   
+   
+    if liquidator_redeemed_collateral != 0 {
         let withdraw_reserve = &accounts.withdraw_reserve.load()?;
 
         let withdraw_action = if accounts
@@ -230,9 +245,9 @@ fn process_impl(
                 .to_account_info()
                 .key
         {
-            LendingAction::net_of(repay_amount, withdraw_liquidity_amount)
+            LendingAction::net_of(repay_amount, liquidator_redeemed_liquidity)
         } else {
-            LendingAction::Subtractive(withdraw_liquidity_amount)
+            LendingAction::Subtractive(liquidator_redeemed_liquidity)
         };
 
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
@@ -254,7 +269,7 @@ fn process_impl(
             .repay_reserve_liquidity_supply
             .to_account_info()
             .key
-        || total_withdraw_liquidity_amount.is_none()
+        || liquidator_redeemed_collateral == 0
     {
         lending_checks::post_transfer_vault_balance_liquidity_reserve_checks(
             token::accessor::amount(&accounts.repay_reserve_liquidity_supply.to_account_info())
@@ -323,10 +338,13 @@ pub struct LiquidateObligationAndRedeemReserveCollateral<'info> {
         address = withdraw_reserve.load()?.liquidity.supply_vault
     )]
     pub withdraw_reserve_liquidity_supply: Box<InterfaceAccount<'info, TokenAccount>>,
-    #[account(mut,
-        address = withdraw_reserve.load()?.liquidity.fee_vault,
-    )]
-    pub withdraw_reserve_liquidity_fee_receiver: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// CHECK: Deprecated and unused - the liquidation protocol fee now accrues to the withdraw
+
+
+
+
+
+    pub withdraw_reserve_liquidity_fee_receiver: Option<AccountInfo<'info>>,
 
     #[account(mut)]
     pub user_source_liquidity: Box<InterfaceAccount<'info, TokenAccount>>,

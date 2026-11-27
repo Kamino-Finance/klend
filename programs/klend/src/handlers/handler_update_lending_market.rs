@@ -98,10 +98,8 @@ pub fn process(
                 .validating(validations::check_valid_bps)
                 .set(&value)?;
         }
-        UpdateLendingMarketMode::UpdatePriceRefreshTriggerToMaxAgePct => {
-            config_items::for_named_field!(&mut market.price_refresh_trigger_to_max_age_pct)
-                .validating(validations::check_valid_pct)
-                .set(&value)?;
+        UpdateLendingMarketMode::DeprecatedUpdatePriceRefreshTriggerToMaxAgePct => {
+            panic!("Deprecated field")
         }
         UpdateLendingMarketMode::UpdateAutodeleverageEnabled => {
             config_items::for_named_field!(&mut market.autodeleverage_enabled)
@@ -129,10 +127,13 @@ pub fn process(
         UpdateLendingMarketMode::UpdatePaddingFields => {
             xmsg!("Prv reserved0 Value is {:?}", market.reserved0);
             xmsg!("Prv reserved1 Value is {:?}", market.reserved1);
+            xmsg!("Prv reserved2 Value is {:?}", market.reserved2);
             market.reserved0 = [0; 8];
             market.reserved1 = [0; 8];
+            market.reserved2 = [0; 1];
             xmsg!("New reserved0 Value is {:?}", market.reserved0);
             xmsg!("New reserved1 Value is {:?}", market.reserved1);
+            xmsg!("New reserved2 Value is {:?}", market.reserved2);
         }
         UpdateLendingMarketMode::DeprecatedUpdateMultiplierPoints => {
             panic!("Deprecated field")

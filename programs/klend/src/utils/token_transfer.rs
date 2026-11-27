@@ -158,6 +158,28 @@ pub fn withdraw_obligation_collateral_transfer<'a>(
     Ok(())
 }
 
+
+
+
+
+pub fn burn_reserve_collateral_fee<'a>(
+    collateral_token_program: AccountInfo<'a>,
+    reserve_collateral_mint: AccountInfo<'a>,
+    reserve_collateral_supply: AccountInfo<'a>,
+    lending_market_authority: AccountInfo<'a>,
+    authority_signer_seeds: &[&[u8]],
+    collateral_amount: u64,
+) -> Result<()> {
+    spltoken::burn_with_signer(
+        reserve_collateral_mint,
+        reserve_collateral_supply,
+        lending_market_authority,
+        collateral_token_program,
+        collateral_amount,
+        &[authority_signer_seeds],
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn redeem_reserve_collateral_transfer<'a>(
     collateral_token_program: AccountInfo<'a>,

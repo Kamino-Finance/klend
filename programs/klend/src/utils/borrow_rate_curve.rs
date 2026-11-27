@@ -7,6 +7,9 @@
 
 
 
+
+use std::cmp::min;
+
 use anchor_lang::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -88,6 +91,14 @@ impl CurvePoint {
             borrow_rate_bps,
         }
     }
+
+    pub fn utilization_rate(&self) -> Fraction {
+        Fraction::from_bps(self.utilization_rate_bps)
+    }
+
+    pub fn borrow_rate(&self) -> Fraction {
+        Fraction::from_bps(self.borrow_rate_bps)
+    }
 }
 
 impl CurveSegment {
@@ -124,19 +135,25 @@ impl CurveSegment {
        
        
 
-        let start_utilization_rate = Fraction::from_bps(self.start_point.utilization_rate_bps);
-
         let coef = utilization_rate
-            .checked_sub(start_utilization_rate)
+            .checked_sub(self.start_point.utilization_rate())
             .ok_or_else(|| error!(LendingError::InvalidUtilizationRate))?;
 
         let nom = coef * u128::from(self.slope_nom);
 
         let base_rate = nom / u128::from(self.slope_denom);
 
-        let offset = Fraction::from_bps(self.start_point.borrow_rate_bps);
+        let rate = base_rate + self.start_point.borrow_rate();
 
-        Ok(base_rate + offset)
+       
+       
+        Ok(min(rate, self.end_borrow_rate()))
+    }
+
+    fn end_borrow_rate(&self) -> Fraction {
+        let end_borrow_rate_bps =
+            u64::from(self.start_point.borrow_rate_bps) + u64::from(self.slope_nom);
+        Fraction::from_bps(end_borrow_rate_bps)
     }
 }
 
@@ -319,6 +336,13 @@ impl BorrowRateCurve {
         segment.get_borrow_rate(utilization_rate)
     }
 }
+
+
+
+
+
+
+
 
 
 
